@@ -443,26 +443,87 @@ async function deleteRoom(id){if(!requireMaster())return; if(!confirm('Excluir e
 
 function fieldTypeLabel(type){return ({text:'Texto curto',number:'Número',textarea:'Texto longo',select:'Seleção',checkbox:'Sim / não',url:'URL'})[type]||type;}
 function slugifyField(label){return normalizeFieldKey(label);}
+
+function renderCharacterFieldConfigGroup(items){
+  return items.map((f,index)=>{
+    const locked=f.field_key==='name';
+    return `<div class="fieldConfigCard" data-config-id="${f.id}">
+      <div class="fieldConfigCardHead">
+        <div class="fieldIdentity">
+          <span class="fieldOrder">${index+1}</span>
+          <div>
+            <b>${escapeHtml(f.label)}</b>
+            <small>${escapeHtml(fieldTypeLabel(f.field_type))}${locked?' · campo essencial':''}</small>
+          </div>
+        </div>
+        <label class="configSwitch"><input type="checkbox" data-field-enabled ${locked||f.enabled?'checked':''} ${locked?'disabled':''}><span></span><b>Ativo</b></label>
+      </div>
+      <div class="fieldConfigLabel">
+        <span>Nome exibido na ficha</span>
+        <input data-field-label value="${escapeHtml(f.label)}" ${locked?'readonly':''}>
+      </div>
+      <div class="fieldPermissionGrid">
+        <label class="permissionOption ${f.player_visible?'selected':''}">
+          <input type="checkbox" data-field-visible ${f.player_visible?'checked':''}>
+          <span class="permissionIcon">◉</span>
+          <span><b>Jogador vê</b><small>Mostra este campo para o jogador.</small></span>
+        </label>
+        <label class="permissionOption ${f.player_editable&&f.player_visible?'selected':''}">
+          <input type="checkbox" data-field-editable ${f.player_editable?'checked':''} ${!f.player_visible?'disabled':''}>
+          <span class="permissionIcon">✎</span>
+          <span><b>Jogador edita</b><small>Permite preencher e alterar o campo.</small></span>
+        </label>
+        <label class="permissionOption ${f.required?'selected':''}">
+          <input type="checkbox" data-field-required ${f.required?'checked':''} ${locked?'disabled':''}>
+          <span class="permissionIcon">!</span>
+          <span><b>Obrigatório</b><small>Exige preenchimento antes de salvar.</small></span>
+        </label>
+      </div>
+    </div>`;
+  }).join('');
+}
 async function openCharacterFieldConfig(){
   if(!requireMaster())return;
   const fields=[...(state.characterFields||[])].sort((a,b)=>Number(a.sort_order)-Number(b.sort_order));
-  const rows=fields.map((f,index)=>`<div class="fieldConfigRow" data-config-id="${f.id}">
-    <div class="fieldConfigMain"><span class="fieldGrip">⋮⋮</span><div><b>${escapeHtml(f.label)}</b><small>${escapeHtml(fieldTypeLabel(f.field_type))} · ${escapeHtml(f.data_key)}</small></div></div>
-    <div class="fieldConfigChecks"><label><input type="checkbox" data-field-enabled ${f.enabled?'checked':''}> Ativo</label><label><input type="checkbox" data-field-visible ${f.player_visible?'checked':''}> Jogador vê</label><label><input type="checkbox" data-field-editable ${f.player_editable?'checked':''} ${f.player_visible?'':'disabled'}> Jogador edita</label><label><input type="checkbox" data-field-required ${f.required?'checked':''}> Obrigatório</label></div>
-    <div class="fieldConfigEdit"><input data-field-label value="${escapeHtml(f.label)}"><select data-field-type disabled><option>${escapeHtml(fieldTypeLabel(f.field_type))}</option></select></div>
-  </div>`).join('');
+  const basic=fields.filter(f=>!String(f.field_key).startsWith('custom_'));
+  const custom=fields.filter(f=>String(f.field_key).startsWith('custom_'));
+  const basicRows=renderCharacterFieldConfigGroup(basic);
+  const customRows=renderCharacterFieldConfigGroup(custom);
   showModal(`<div class="modalHeader"><div><div class="eyebrow">CONFIGURAÇÃO DA CAMPANHA</div><h3>Campos da ficha</h3></div><button class="closeButton" data-close>×</button></div>
-    <p class="modalHint">Você decide quais informações existem na ficha e o que os jogadores podem preencher. O RPG HUB não obriga D&D, Ordem Paranormal ou qualquer outro sistema.</p>
-    <div class="fieldConfigList">${rows||'<div class="emptyPanel">Nenhum campo configurado.</div>'}</div>
-    <div class="configAddPanel"><div><b>Adicionar campo personalizado</b><small>Crie campos próprios da sua campanha, como Fama, Sanidade, Profissão, Estresse, Poderes ou qualquer outro.</small></div><button id="addCharacterField" class="softButton">+ Adicionar campo</button></div>
+    <p class="modalHint">Você escolhe o que existe na ficha e o nível de acesso dos jogadores. O sistema não exige D&D, Ordem Paranormal ou qualquer outro conjunto de regras.</p>
+    <div class="fieldConfigLegend">
+      <div><span class="legendDot active"></span><b>Ativo</b><small>O campo aparece na ficha.</small></div>
+      <div><span class="legendDot"></span><b>Jogador vê</b><small>O jogador consegue visualizar.</small></div>
+      <div><span class="legendDot"></span><b>Jogador edita</b><small>O jogador consegue preencher.</small></div>
+      <div><span class="legendDot"></span><b>Obrigatório</b><small>Precisa ser preenchido.</small></div>
+    </div>
+    <div class="fieldConfigSection"><div class="fieldConfigSectionHead"><div><span class="eyebrow">BASE DA FICHA</span><h4>Campos disponíveis</h4></div><span class="fieldConfigCount">${basic.length}</span></div><div class="fieldConfigList">${basicRows||'<div class="emptyPanel">Nenhum campo base.</div>'}</div></div>
+    ${custom.length?`<div class="fieldConfigSection customFieldSection"><div class="fieldConfigSectionHead"><div><span class="eyebrow">PERSONALIZADOS</span><h4>Campos criados pelo mestre</h4></div><span class="fieldConfigCount">${custom.length}</span></div><div class="fieldConfigList">${customRows}</div></div>`:''}
+    <div class="configAddPanel"><div><b>Quer criar algo diferente?</b><small>Adicione campos como Sanidade, Fama, Profissão, Estresse, Poderes, Reputação ou qualquer outra informação.</small></div><button id="addCharacterField" class="softButton">+ Criar campo</button></div>
     <div class="modalActions"><button class="softButton" data-close>Cancelar</button><button id="saveCharacterFields" class="primarySmall">Salvar configuração</button></div>`);
-  document.querySelectorAll('[data-field-visible]').forEach(cb=>cb.addEventListener('change',()=>{const row=cb.closest('.fieldConfigRow');const edit=row.querySelector('[data-field-editable]');if(edit){edit.disabled=!cb.checked;if(!cb.checked)edit.checked=false;}}));
+  document.querySelectorAll('[data-field-visible]').forEach(cb=>cb.addEventListener('change',()=>{
+    const row=cb.closest('.fieldConfigCard');
+    const edit=row.querySelector('[data-field-editable]');
+    if(edit){edit.disabled=!cb.checked;if(!cb.checked)edit.checked=false;}
+    cb.closest('.permissionOption')?.classList.toggle('selected',cb.checked);
+    edit?.closest('.permissionOption')?.classList.toggle('selected',!!edit.checked&&!edit.disabled);
+  }));
+  document.querySelectorAll('[data-field-editable]').forEach(cb=>cb.addEventListener('change',()=>cb.closest('.permissionOption')?.classList.toggle('selected',cb.checked&&!cb.disabled)));
+  document.querySelectorAll('[data-field-required]').forEach(cb=>cb.addEventListener('change',()=>cb.closest('.permissionOption')?.classList.toggle('selected',cb.checked)));
+  document.querySelectorAll('[data-field-enabled]').forEach(cb=>cb.addEventListener('change',()=>cb.closest('.configSwitch')?.classList.toggle('checked',cb.checked)));
   $('addCharacterField').onclick=()=>openAddCharacterFieldModal();
   $('saveCharacterFields').onclick=async()=>{
     try{
-      const updates=[...document.querySelectorAll('.fieldConfigRow')].map((row,index)=>{const id=row.dataset.configId;const f=fields.find(x=>String(x.id)===String(id));const visible=row.querySelector('[data-field-visible]').checked;const locked=f.field_key==='name';return {id,label:row.querySelector('[data-field-label]').value.trim()||f.label,enabled:locked?true:row.querySelector('[data-field-enabled]').checked,player_visible:locked?true:visible,player_editable:locked?true:visible&&row.querySelector('[data-field-editable]').checked,required:locked?true:row.querySelector('[data-field-required]').checked,sort_order:index*10};});
+      const updates=[...document.querySelectorAll('.fieldConfigCard')].map((row,index)=>{
+        const id=row.dataset.configId;
+        const f=fields.find(x=>String(x.id)===String(id));
+        const visible=row.querySelector('[data-field-visible]').checked;
+        const locked=f.field_key==='name';
+        return {id,label:row.querySelector('[data-field-label]').value.trim()||f.label,enabled:locked?true:row.querySelector('[data-field-enabled]').checked,player_visible:locked?true:visible,player_editable:locked?true:visible&&row.querySelector('[data-field-editable]').checked,required:locked?true:row.querySelector('[data-field-required]').checked,sort_order:index*10};
+      });
       for(const u of updates){const {error}=await sb.from('character_field_definitions').update({label:u.label,enabled:u.enabled,player_visible:u.player_visible,player_editable:u.player_editable,required:u.required,sort_order:u.sort_order}).eq('id',u.id);if(error)throw error;}
-      const {data,error}=await sb.from('character_field_definitions').select('*').eq('campaign_id',state.campaign.id).order('sort_order');if(error)throw error;state.characterFields=data||[];closeModal();renderAll();toast('Configuração da ficha salva');
+      const {data,error}=await sb.from('character_field_definitions').select('*').eq('campaign_id',state.campaign.id).order('sort_order');if(error)throw error;
+      state.characterFields=data||[];closeModal();renderAll();toast('Configuração da ficha salva');
     }catch(e){toast(e.message||'Não foi possível salvar a configuração.','error');}
   };
 }
