@@ -544,13 +544,89 @@ function audioKindLabel(kind){return ({music:'Música',ambient:'Ambiente',effect
 function audioLayerMarkup(){
   const layers=[...state.audioLayers.values()];
   if(!layers.length)return '<div class="audioEmpty">Nenhuma camada tocando agora.<small>Ambiente, música e efeitos podem tocar juntos.</small></div>';
-  return layers.map(layer=>`<div class="audioLayerRow" data-layer-id="${layer.layerId}"><div class="audioLayerIcon ${escapeHtml(layer.kind||'other')}">${layer.kind==='effect'?'✦':layer.kind==='ambient'?'♧':layer.kind==='voice'?'◉':'♫'}</div><div class="audioLayerInfo"><b>${escapeHtml(layer.name||'Áudio')}</b><small>${escapeHtml(audioKindLabel(layer.kind))}${layer.loop?' · loop':''}</small></div><input class="audioLayerVolume" type="range" min="0" max="1" step="0.05" value="${Number(layer.volume??0.75)}"><button class="audioLayerStop" type="button">■</button></div>`).join('');
+  return layers.map(layer=>`<div class="audioLayerRow" data-layer-id="${layer.layerId}">
+    <div class="audioLayerIcon ${escapeHtml(layer.kind||'other')}">${layer.kind==='effect'?'✦':layer.kind==='ambient'?'♧':layer.kind==='voice'?'◉':'♫'}</div>
+    <div class="audioLayerInfo"><b>${escapeHtml(layer.name||'Áudio')}</b><small>${escapeHtml(audioKindLabel(layer.kind))}${layer.loop?' · loop':''}</small></div>
+    <input class="audioLayerVolume" type="range" min="0" max="1" step="0.05" value="${Number(layer.volume??0.75)}">
+    ${layer.asset_id?'<button class="audioLayerEdit" type="button" title="Editar áudio">✎</button>':''}
+    <button class="audioLayerStop" type="button" title="Parar camada">■</button>
+  </div>`).join('');
 }
+
 function audioPanel(){
   if(!canEdit())return `<div class="audioCard audioPlayerCard"><div class="audioCardTop"><div><div class="eyebrow">SOM DA SESSÃO</div><h3>Áudio sincronizado</h3><p>O mestre controla música, ambientes e efeitos desta mesa.</p></div></div><button id="enableAudioBtn" class="primarySmall">${state.audioEnabled?'Áudio ativo':'Ativar áudio'}</button><div class="activeAudioLayers">${audioLayerMarkup()}</div></div>`;
   return `<div class="audioCard audioMixerCard"><div class="audioCardTop"><div><div class="eyebrow">PAINEL DO MESTRE</div><h3>Mixer da mesa</h3><p>Use várias camadas ao mesmo tempo: floresta + música + efeitos, por exemplo.</p></div><span class="audioLayerCount">${state.audioLayers.size} ativa${state.audioLayers.size===1?'':'s'}</span></div><div class="activeAudioLayers">${audioLayerMarkup()}</div><div class="audioForm"><div class="audioFieldRow"><label>Nome do áudio<input id="audioName" maxlength="120" placeholder="Ex.: Floresta à noite"></label><label>Tipo<select id="audioKind"><option value="ambient">Ambiente · contínuo</option><option value="music">Música · loop</option><option value="effect">Efeito · uma vez</option><option value="voice">Voz · uma vez</option><option value="other">Outro</option></select></label></div><input id="audioUrl" placeholder="https://.../audio.mp3"><div class="audioUploadHint">Até <strong>50 MB</strong> no projeto atual. Arquivos grandes usam upload resumível automaticamente.</div><input id="audioFile" type="file" accept="audio/*,.mp3,.wav,.ogg,.oga,.m4a,.aac,.flac,.webm"><div class="audioActions"><label class="audioVolumeField">Volume<input id="audioVolume" type="range" min="0" max="1" step="0.05" value="0.75"></label><label class="audioSaveToggle"><input id="audioSaveLibrary" type="checkbox" checked> Salvar na biblioteca</label><button id="playAudioBtn" class="primarySmall">▶ Tocar camada</button></div></div><div class="audioQuickActions"><button id="openAudioLibraryBtn" class="softButton">Biblioteca & playlists</button><button id="stopAllAudioBtn" class="softButton dangerAudioButton">■ Parar tudo</button></div></div>`;
 }
-async function saveAudioAsset(asset){if(!asset.name)asset.name=audioKindLabel(asset.kind);const {data,error}=await sb.from('audio_assets').insert({campaign_id:state.campaign.id,name:asset.name,kind:asset.kind,url:asset.url,loop:asset.loop,default_volume:asset.volume,created_by:state.user.id}).select().single();if(error)throw error;state.audioAssets=[...state.audioAssets,data];return data;}
+function getAudioStoragePath(asset){
+  if(asset?.storage_path)return asset.storage_path;
+  const marker='/storage/v1/object/public/rpg-media/';
+  const url=String(asset?.url||'');
+  const i=url.indexOf(marker);
+  if(i<0)return null;
+  try{return decodeURIComponent(url.slice(i+marker.length));}catch(e){return url.slice(i+marker.length);}
+}
+async function deleteAudioStorageFile(asset){
+  const path=getAudioStoragePath(asset);
+  if(!path)return;
+  const {error}=await sb.storage.from('rpg-media').remove([path]);
+  if(error)throw error;
+}
+async function saveAudioAsset(asset){
+  if(!asset.name)asset.name=audioKindLabel(asset.kind);
+  const {data,error}=await sb.from('audio_assets').insert({
+    campaign_id:state.campaign.id,name:asset.name,kind:asset.kind,url:asset.url,loop:asset.loop,
+    default_volume:asset.volume,created_by:state.user.id,storage_path:asset.storagePath||null
+  }).select().single();
+  if(error)throw error;
+  state.audioAssets=[...state.audioAssets,data];
+  return data;
+}
+async function openEditAudioAssetModal(id){
+  if(!canEdit())return;
+  const asset=state.audioAssets.find(x=>x.id===id);if(!asset)return;
+  showModal(`<div class="modalHeader"><div><div class="eyebrow">BIBLIOTECA DE ÁUDIO</div><h3>Editar áudio</h3></div><button class="closeButton" data-close>×</button></div>
+    <div class="formGrid">
+      <label>Nome<input id="editAudioName" maxlength="120" value="${escapeHtml(asset.name)}"></label>
+      <label>Tipo<select id="editAudioKind">${['ambient','music','effect','voice','other'].map(k=>`<option value="${k}" ${k===asset.kind?'selected':''}>${escapeHtml(audioKindLabel(k))}</option>`).join('')}</select></label>
+    </div>
+    <label>URL do áudio<input id="editAudioUrl" value="${escapeHtml(asset.url)}"></label>
+    <label>Novo arquivo <span class="optional">(opcional — substitui o arquivo atual)</span><input id="editAudioFile" type="file" accept="audio/*,.mp3,.wav,.ogg,.oga,.m4a,.aac,.flac,.webm"></label>
+    <div class="configToggleGrid"><label><input id="editAudioLoop" type="checkbox" ${asset.loop?'checked':''}> Reproduzir em loop</label><label>Volume padrão<input id="editAudioVolume" type="range" min="0" max="1" step="0.05" value="${Number(asset.default_volume??0.75)}"></label></div>
+    <p class="modalHint">Substituir o arquivo mantém o mesmo áudio nas playlists e atualiza o arquivo armazenado.</p>
+    <div class="modalActions"><button class="softButton" data-close>Cancelar</button><button id="saveEditedAudio" class="primarySmall">Salvar alterações</button></div>`);
+  $('saveEditedAudio').onclick=async()=>{
+    try{
+      const name=$('editAudioName').value.trim();if(!name){toast('Informe o nome do áudio.','error');return;}
+      let url=$('editAudioUrl').value.trim(),storagePath=asset.storage_path||getAudioStoragePath(asset)||null;
+      const file=$('editAudioFile').files[0];
+      if(file){url=await uploadMedia(file,'audio');storagePath=uploadMedia.lastPath||null;}
+      if(!url)throw new Error('Informe uma URL ou selecione um arquivo.');
+      const oldPath=getAudioStoragePath(asset);
+      const payload={name,kind:$('editAudioKind').value,url,loop:$('editAudioLoop').checked,default_volume:Number($('editAudioVolume').value)||0.75,storage_path:storagePath};
+      const {data,error}=await sb.from('audio_assets').update(payload).eq('id',id).select().single();
+      if(error)throw error;
+      if(file&&oldPath&&oldPath!==storagePath){try{await sb.storage.from('rpg-media').remove([oldPath]);}catch(e){console.warn('Arquivo anterior não pôde ser removido',e);}}
+      for(const [layerId,layer] of state.audioLayers.entries()){if(layer.asset_id===id)await stopAudioLayer(layerId,{broadcast:true});}
+      state.audioAssets=state.audioAssets.map(x=>x.id===id?data:x);
+      closeModal();openAudioLibraryModal();toast('Áudio atualizado');
+    }catch(e){toast(e.message||'Não foi possível editar o áudio.','error');}
+  };
+}
+async function deleteAudioAsset(id){
+  if(!canEdit())return;
+  const asset=state.audioAssets.find(x=>x.id===id);if(!asset)return;
+  const usedIn=state.audioPlaylists.filter(p=>state.audioPlaylistItems.some(i=>i.playlist_id===p.id&&i.audio_asset_id===id));
+  if(!confirm(`Excluir "${asset.name}" definitivamente? Isso também remove o áudio de ${usedIn.length} playlist(s) e apaga o arquivo armazenado quando ele foi enviado para o RPG HUB.`))return;
+  try{
+    await deleteAudioStorageFile(asset).catch(e=>{if(getAudioStoragePath(asset))throw e;});
+    for(const [layerId,layer] of state.audioLayers.entries()){if(layer.asset_id===id)await stopAudioLayer(layerId,{broadcast:true});}
+    const {error}=await sb.from('audio_assets').delete().eq('id',id);if(error)throw error;
+    state.audioPlaylistItems=state.audioPlaylistItems.filter(i=>i.audio_asset_id!==id);
+    state.audioAssets=state.audioAssets.filter(x=>x.id!==id);
+    closeModal();renderDice();openAudioLibraryModal();toast('Áudio excluído definitivamente');
+  }catch(e){toast(e.message||'Não foi possível excluir o áudio.','error');}
+}
+
 function audioPlayerId(){return 'layer_'+Date.now()+'_'+Math.random().toString(36).slice(2,8);}
 async function ensureAudioContext(){
   if(!state.audioContext){const Ctx=window.AudioContext||window.webkitAudioContext;if(!Ctx)throw new Error('Seu navegador não oferece o mixer de áudio necessário.');state.audioContext=new Ctx();}
@@ -587,14 +663,45 @@ async function playPlaylist(id){if(!canEdit())return;const items=state.audioPlay
 function openAudioLibraryModal(){
   if(!canEdit())return;
   const assets=[...state.audioAssets],playlists=[...state.audioPlaylists];
-  const assetRows=assets.map(a=>`<label class="audioLibraryRow"><input type="checkbox" data-audio-select="${a.id}"><span class="audioLibraryIcon ${escapeHtml(a.kind)}">${a.kind==='effect'?'✦':a.kind==='ambient'?'♧':'♫'}</span><span class="audioLibraryInfo"><b>${escapeHtml(a.name)}</b><small>${escapeHtml(audioKindLabel(a.kind))}</small></span><button type="button" class="miniAudioPlay" data-audio-one="${a.id}">▶</button></label>`).join('')||'<div class="audioEmpty">A biblioteca ainda está vazia.</div>';
-  const playlistRows=playlists.map(p=>`<div class="playlistRow"><div><b>${escapeHtml(p.name)}</b><small>${escapeHtml(p.description||'')}</small><span>${state.audioPlaylistItems.filter(i=>i.playlist_id===p.id).length} áudio(s)</span></div><div class="playlistActions"><button class="softButton" data-play-playlist="${p.id}">▶ Tocar tudo</button><button class="dangerGhost" data-delete-playlist="${p.id}">Excluir</button></div></div>`).join('')||'<div class="audioEmpty">Nenhuma playlist salva.</div>';
-  showModal(`<div class="modalHeader"><div><div class="eyebrow">BIBLIOTECA DA CAMPANHA</div><h3>Áudios & playlists</h3></div><button class="closeButton" data-close>×</button></div><div class="audioLibrarySection"><div class="librarySectionHead"><div><b>Biblioteca de áudios</b><small>Selecione os arquivos que quer agrupar.</small></div><span>${assets.length} item(s)</span></div><div class="audioLibraryList">${assetRows}</div></div><div class="playlistCreateBox"><label>Nome da playlist<input id="playlistName" maxlength="100" placeholder="Ex.: Floresta · Exploração"></label><label>Descrição <span class="optional">(opcional)</span><input id="playlistDesc" maxlength="240" placeholder="Ambientação de exploração"></label><button id="createPlaylistBtn" class="primarySmall">Salvar playlist com selecionados</button></div><div class="audioLibrarySection"><div class="librarySectionHead"><div><b>Playlists salvas</b><small>Tocar uma playlist ativa todas as camadas selecionadas.</small></div><span>${playlists.length} playlist(s)</span></div><div class="playlistList">${playlistRows}</div></div>`);
+  const assetRows=assets.map(a=>`<div class="audioLibraryRow">
+    <div class="audioLibraryIcon ${escapeHtml(a.kind)}">${a.kind==='effect'?'✦':a.kind==='ambient'?'♧':a.kind==='voice'?'◉':'♫'}</div>
+    <div class="audioLibraryInfo"><b>${escapeHtml(a.name)}</b><small>${escapeHtml(audioKindLabel(a.kind))}${a.loop?' · loop':''}</small></div>
+    <button type="button" class="miniAudioPlay" data-audio-one="${a.id}" title="Tocar">▶</button>
+    <button type="button" class="miniAudioEdit" data-audio-edit="${a.id}" title="Editar">✎</button>
+    <button type="button" class="miniAudioDelete" data-audio-delete="${a.id}" title="Excluir">×</button>
+  </div>`).join('')||'<div class="audioEmpty">A biblioteca ainda está vazia.</div>';
+  const playlistRows=playlists.map(p=>`<div class="playlistRow"><div><b>${escapeHtml(p.name)}</b><small>${escapeHtml(p.description||'')}</small><span>${state.audioPlaylistItems.filter(i=>i.playlist_id===p.id).length} áudio(s)</span></div><div class="playlistActions"><button class="softButton" data-play-playlist="${p.id}">▶ Tocar tudo</button><button class="softButton" data-edit-playlist="${p.id}">Gerenciar</button><button class="dangerGhost" data-delete-playlist="${p.id}">Excluir</button></div></div>`).join('')||'<div class="audioEmpty">Nenhuma playlist salva.</div>';
+  showModal(`<div class="modalHeader"><div><div class="eyebrow">BIBLIOTECA DA CAMPANHA</div><h3>Áudios & playlists</h3></div><button class="closeButton" data-close>×</button></div>
+    <div class="audioLibrarySection"><div class="librarySectionHead"><div><b>Biblioteca de áudios</b><small>Edite, substitua ou exclua arquivos enviados. Excluir também remove o áudio das playlists.</small></div><span>${assets.length} item(s)</span></div><div class="audioLibraryList">${assetRows}</div></div>
+    <div class="playlistCreateBox"><label>Nome da playlist<input id="playlistName" maxlength="100" placeholder="Ex.: Floresta · Exploração"></label><label>Descrição <span class="optional">(opcional)</span><input id="playlistDesc" maxlength="240" placeholder="Ambientação de exploração"></label><button id="createPlaylistBtn" class="primarySmall">Salvar playlist com selecionados</button></div>
+    <div class="audioLibrarySection"><div class="librarySectionHead"><div><b>Playlists salvas</b><small>Gerencie quais arquivos fazem parte de cada conjunto.</small></div><span>${playlists.length} playlist(s)</span></div><div class="playlistList">${playlistRows}</div></div>`);
   document.querySelectorAll('[data-audio-one]').forEach(b=>b.onclick=async e=>{e.preventDefault();const asset=state.audioAssets.find(x=>x.id===b.dataset.audioOne);if(asset)await playAudioLayer({url:asset.url,name:asset.name,kind:asset.kind,loop:asset.loop,volume:asset.default_volume,asset_id:asset.id});});
+  document.querySelectorAll('[data-audio-edit]').forEach(b=>b.onclick=()=>openEditAudioAssetModal(b.dataset.audioEdit));
+  document.querySelectorAll('[data-audio-delete]').forEach(b=>b.onclick=()=>deleteAudioAsset(b.dataset.audioDelete));
   document.querySelectorAll('[data-play-playlist]').forEach(b=>b.onclick=()=>{closeModal();playPlaylist(b.dataset.playPlaylist);});
+  document.querySelectorAll('[data-edit-playlist]').forEach(b=>b.onclick=()=>openEditAudioPlaylistModal(b.dataset.editPlaylist));
   document.querySelectorAll('[data-delete-playlist]').forEach(b=>b.onclick=()=>deleteAudioPlaylist(b.dataset.deletePlaylist));
   $('createPlaylistBtn').onclick=async()=>{try{const name=$('playlistName').value.trim();if(!name){toast('Dê um nome para a playlist.','error');return;}const selected=[...document.querySelectorAll('[data-audio-select]:checked')].map(x=>x.dataset.audioSelect);if(!selected.length){toast('Selecione pelo menos um áudio.','error');return;}const {data:playlist,error}=await sb.from('audio_playlists').insert({campaign_id:state.campaign.id,name,description:$('playlistDesc').value.trim()||null,created_by:state.user.id}).select().single();if(error)throw error;const rows=selected.map((id,index)=>({playlist_id:playlist.id,audio_asset_id:id,sort_order:index}));const {data:items,error:itemError}=await sb.from('audio_playlist_items').insert(rows).select();if(itemError)throw itemError;state.audioPlaylists=[...state.audioPlaylists,playlist];state.audioPlaylistItems=[...state.audioPlaylistItems,...(items||[])];closeModal();toast('Playlist criada');renderDice();openAudioLibraryModal();}catch(e){toast(e.message||'Não foi possível criar a playlist.','error');}};
 }
+async function openEditAudioPlaylistModal(id){
+  if(!canEdit())return;
+  const p=state.audioPlaylists.find(x=>x.id===id);if(!p)return;
+  const items=state.audioPlaylistItems.filter(i=>i.playlist_id===id).sort((a,b)=>Number(a.sort_order)-Number(b.sort_order));
+  const rows=items.map((item,index)=>{const asset=state.audioAssets.find(a=>a.id===item.audio_asset_id);return asset?`<div class="playlistManageRow"><span class="playlistOrder">${index+1}</span><div class="audioLibraryIcon ${escapeHtml(asset.kind)}">${asset.kind==='effect'?'✦':asset.kind==='ambient'?'♧':'♫'}</div><div class="audioLibraryInfo"><b>${escapeHtml(asset.name)}</b><small>${escapeHtml(audioKindLabel(asset.kind))}</small></div><button class="miniAudioPlay" data-audio-manage-play="${asset.id}">▶</button><button class="miniAudioDelete" data-playlist-remove="${item.id}" title="Remover da playlist">×</button></div>`:''}).join('');
+  const available=state.audioAssets.filter(a=>!items.some(i=>i.audio_asset_id===a.id));
+  showModal(`<div class="modalHeader"><div><div class="eyebrow">PLAYLIST</div><h3>${escapeHtml(p.name)}</h3></div><button class="closeButton" data-close>×</button></div>
+    <label>Nome da playlist<input id="editPlaylistName" maxlength="100" value="${escapeHtml(p.name)}"></label>
+    <label>Descrição <span class="optional">(opcional)</span><input id="editPlaylistDesc" maxlength="240" value="${escapeHtml(p.description||'')}"></label>
+    <div class="playlistManageList">${rows||'<div class="audioEmpty">Esta playlist ainda não possui áudios.</div>'}</div>
+    <label>Adicionar áudio<select id="playlistAddAsset"><option value="">Selecione um áudio</option>${available.map(a=>`<option value="${a.id}">${escapeHtml(a.name)}</option>`).join('')}</select></label>
+    <button id="addPlaylistAsset" class="softButton">+ Adicionar à playlist</button>
+    <div class="modalActions"><button class="softButton" data-close>Cancelar</button><button id="savePlaylistChanges" class="primarySmall">Salvar playlist</button></div>`);
+  document.querySelectorAll('[data-audio-manage-play]').forEach(b=>b.onclick=async()=>{const asset=state.audioAssets.find(x=>x.id===b.dataset.audioManagePlay);if(asset)await playAudioLayer({url:asset.url,name:asset.name,kind:asset.kind,loop:asset.loop,volume:asset.default_volume,asset_id:asset.id});});
+  document.querySelectorAll('[data-playlist-remove]').forEach(b=>b.onclick=async()=>{const item=state.audioPlaylistItems.find(x=>x.id===b.dataset.playlistRemove);if(!item)return;const {error}=await sb.from('audio_playlist_items').delete().eq('id',item.id);if(error){toast(error.message,'error');return;}state.audioPlaylistItems=state.audioPlaylistItems.filter(x=>x.id!==item.id);closeModal();openEditAudioPlaylistModal(id);toast('Áudio removido da playlist');});
+  $('addPlaylistAsset').onclick=async()=>{const aid=$('playlistAddAsset').value;if(!aid){toast('Selecione um áudio.','error');return;}const order=state.audioPlaylistItems.filter(i=>i.playlist_id===id).length;const {data,error}=await sb.from('audio_playlist_items').insert({playlist_id:id,audio_asset_id:aid,sort_order:order}).select().single();if(error){toast(error.message,'error');return;}state.audioPlaylistItems.push(data);closeModal();openEditAudioPlaylistModal(id);toast('Áudio adicionado à playlist');};
+  $('savePlaylistChanges').onclick=async()=>{try{const name=$('editPlaylistName').value.trim();if(!name){toast('Informe um nome.','error');return;}const {data,error}=await sb.from('audio_playlists').update({name,description:$('editPlaylistDesc').value.trim()||null}).eq('id',id).select().single();if(error)throw error;state.audioPlaylists=state.audioPlaylists.map(x=>x.id===id?data:x);closeModal();openAudioLibraryModal();toast('Playlist atualizada');}catch(e){toast(e.message||'Não foi possível atualizar a playlist.','error');}};
+}
+
 async function deleteAudioPlaylist(id){if(!canEdit())return;const p=state.audioPlaylists.find(x=>x.id===id);if(!p)return;if(!confirm('Excluir a playlist "'+p.name+'"? Os áudios da biblioteca serão mantidos.'))return;const {error}=await sb.from('audio_playlists').delete().eq('id',id);if(error){toast(error.message,'error');return;}state.audioPlaylistItems=state.audioPlaylistItems.filter(i=>i.playlist_id!==id);state.audioPlaylists=state.audioPlaylists.filter(x=>x.id!==id);closeModal();renderDice();openAudioLibraryModal();toast('Playlist excluída');}
 function openNoCampaignState(){
   showModal(`<div class="modalHeader"><div><div class="eyebrow">PRIMEIRO PASSO</div><h3>Você ainda não participa de uma campanha</h3></div></div>
@@ -1220,9 +1327,9 @@ function safeUploadExtension(file){const ext=(file.name.split('.').pop()||'bin')
 async function uploadMedia(file,prefix){
   if(!file)throw new Error('Nenhum arquivo selecionado.');
   if(file.size>MAX_AUDIO_UPLOAD_BYTES)throw new Error('O projeto atual aceita até 50 MB por arquivo no plano Supabase atual. Para 90 MB, o limite global do projeto precisa ser aumentado.');
-  const ext=safeUploadExtension(file);const path=`${state.user.id}/${prefix}-${Date.now()}-${Math.random().toString(36).slice(2,8)}.${ext}`;
+  const ext=safeUploadExtension(file);const path=`${state.user.id}/${prefix}-${Date.now()}-${Math.random().toString(36).slice(2,8)}.${ext}`;uploadMedia.lastPath=path;
   const {data:{session}}=await sb.auth.getSession();if(!session?.access_token)throw new Error('Sua sessão expirou. Faça login novamente.');
-  if(file.size<=6*1024*1024){const {error}=await sb.storage.from('rpg-media').upload(path,file,{cacheControl:'3600',upsert:false,contentType:file.type||'application/octet-stream'});if(error)throw error;return sb.storage.from('rpg-media').getPublicUrl(path).data.publicUrl;}
+  if(file.size<=6*1024*1024){const {error}=await sb.storage.from('rpg-media').upload(path,file,{cacheControl:'3600',upsert:false,contentType:file.type||'application/octet-stream'});if(error)throw error;uploadMedia.lastPath=path;return sb.storage.from('rpg-media').getPublicUrl(path).data.publicUrl;}
   const projectRef='ymexyrqgqpktxzajgsdi';const endpoint=`https://${projectRef}.storage.supabase.co/storage/v1/upload/resumable`;
   const encode=value=>btoa(unescape(encodeURIComponent(value)));const meta=[`bucketName ${encode('rpg-media')}`,`objectName ${encode(path)}`,`contentType ${encode(file.type||'application/octet-stream')}`,`cacheControl ${encode('3600')}`].join(',');
   const create=await fetch(endpoint,{method:'POST',headers:{Authorization:`Bearer ${session.access_token}`,'x-upsert':'false','Tus-Resumable':'1.0.0','Upload-Length':String(file.size),'Upload-Metadata':meta}});if(!create.ok)throw new Error((await create.text())||'Não foi possível iniciar o upload.');
@@ -1311,9 +1418,10 @@ $('saveBtn').onclick=()=>{setSave('Conexão ativa · alterações salvas automat
 
 function wireAudioControls(){
   $('enableAudioBtn')?.addEventListener('click',async()=>{try{state.audioEnabled=true;const ctx=new (window.AudioContext||window.webkitAudioContext)();if(ctx.state==='suspended')await ctx.resume();renderDice();toast('Áudio ativado');}catch(e){toast('Não foi possível ativar o áudio.','error');}});
-  $('playAudioBtn')?.addEventListener('click',async()=>{try{let url=$('audioUrl').value.trim();const file=$('audioFile').files[0];const kind=$('audioKind').value;let name=$('audioName').value.trim();if(file)url=await uploadMedia(file,'audio');if(!url)throw new Error('Cole uma URL ou selecione um arquivo.');if(!name)name=file?.name||audioKindLabel(kind);const volume=Number($('audioVolume').value)||0.75;const loop=['music','ambient'].includes(kind);let asset=null;if($('audioSaveLibrary')?.checked)asset=await saveAudioAsset({name,kind,url,volume,loop});await playAudioLayer({action:'play-layer',url,name,kind,loop,volume,asset_id:asset?.id||null});$('audioUrl').value='';$('audioFile').value='';$('audioName').value='';toast(asset?'Áudio salvo na biblioteca e tocando':'Camada tocando');}catch(e){toast(e.message||'Não foi possível tocar o áudio.','error');}});
+  $('playAudioBtn')?.addEventListener('click',async()=>{try{let url=$('audioUrl').value.trim();const file=$('audioFile').files[0];const kind=$('audioKind').value;let name=$('audioName').value.trim();let storagePath=null;if(file){url=await uploadMedia(file,'audio');storagePath=uploadMedia.lastPath||null;}if(!url)throw new Error('Cole uma URL ou selecione um arquivo.');if(!name)name=file?.name||audioKindLabel(kind);const volume=Number($('audioVolume').value)||0.75;const loop=['music','ambient'].includes(kind);let asset=null;if($('audioSaveLibrary')?.checked)asset=await saveAudioAsset({name,kind,url,volume,loop,storagePath});await playAudioLayer({action:'play-layer',url,name,kind,loop,volume,asset_id:asset?.id||null});$('audioUrl').value='';$('audioFile').value='';$('audioName').value='';toast(asset?'Áudio salvo na biblioteca e tocando':'Camada tocando');}catch(e){toast(e.message||'Não foi possível tocar o áudio.','error');}});
   $('stopAllAudioBtn')?.addEventListener('click',async()=>{await stopAllAudioLayers();toast('Todas as camadas foram interrompidas');});
   $('openAudioLibraryBtn')?.addEventListener('click',openAudioLibraryModal);
+  document.querySelectorAll('.audioLayerEdit').forEach(b=>b.onclick=()=>{const layer=b.closest('.audioLayerRow');const assetId=state.audioLayers.get(layer.dataset.layerId)?.asset_id;if(assetId)openEditAudioAssetModal(assetId);});
   document.querySelectorAll('.audioLayerStop').forEach(b=>b.onclick=()=>stopAudioLayer(b.closest('.audioLayerRow').dataset.layerId));
   document.querySelectorAll('.audioLayerVolume').forEach(b=>b.onchange=()=>setAudioLayerVolume(b.closest('.audioLayerRow').dataset.layerId,b.value));
 }
