@@ -401,6 +401,25 @@
     button.setAttribute('aria-label', 'Áudio da campanha sincronizado automaticamente');
   }
 
+
+  function hookSessionAudioSync() {
+    if (typeof activateSession !== 'function' || activateSession.__rpgAudioEnhanced) return;
+    const baseActivateSession = activateSession;
+    const enhancedActivateSession = async function (id) {
+      const result = await baseActivateSession(id);
+      if (!canEdit()) {
+        setTimeout(function () {
+          initPlayerAudioSync();
+          syncPlayerAudioNow(false);
+        }, 100);
+      }
+      return result;
+    };
+    enhancedActivateSession.__rpgAudioEnhanced = true;
+    enhancedActivateSession.__base = baseActivateSession;
+    window.activateSession = enhancedActivateSession;
+  }
+
   function initPlayerAudioSync() {
     if (!state || canEdit()) return;
 
@@ -436,6 +455,7 @@
       campaignSelect.addEventListener('change', function () {
         setTimeout(subscribeTableRealtime, 500);
         setTimeout(enhanceCharacterCards, 700);
+        setTimeout(hookSessionAudioSync, 500);
         setTimeout(initPlayerAudioSync, 900);
       });
     }
@@ -443,6 +463,7 @@
     enhanceCharacterCards();
     setTimeout(enhanceCharacterCards, 500);
     setTimeout(enhanceCharacterCards, 1200);
+    hookSessionAudioSync();
     setTimeout(initPlayerAudioSync, 100);
     setTimeout(makePlayerAudioUiActive, 700);
   }
