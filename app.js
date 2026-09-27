@@ -280,7 +280,54 @@ async function broadcastRoomRotate(payload){if(!state.campaignChannel||!canEdit(
 
 function receiveRoll(payload){ state.rolls=[payload,...state.rolls].slice(0,30); renderDiceResult(payload); if(state.view!=='dice') $('rollResult').classList.add('rollPulse'); setTimeout(()=>$('rollResult')?.classList.remove('rollPulse'),280); }
 
-function renderAll(){renderShell();renderTable();renderCharacters();renderWorld();renderSessions();renderNpcs();renderDice();renderChronicle();renderView();}
+function renderMasterDashboard(){
+  if(!canEdit()){
+    return;
+  }
+  const status=$('masterDashboardSessionStatus');
+  const active=currentSession();
+  if(status) status.textContent=active ? 'Sessão #'+active.session_number+' · '+(active.status||'').toUpperCase() : 'Nenhuma sessão ativa';
+
+  const audio=$('masterDashboardAudio');
+  if(audio) audio.innerHTML=audioPanel(active);
+
+  const history=$('masterDashboardRollHistory');
+  if(history){
+    const rows=state.rolls.map(r=>{
+      const roller=r.roller_display_name||profileFor(r.roller_user_id)?.display_name||'Jogador';
+      const character=state.characters.find(c=>c.id===r.character_id);
+      const session=state.sessions.find(s=>s.id===r.session_id);
+      const values=Array.isArray(r.base_results)?r.base_results.join(' · '):'—';
+      const modifier=Number(r.rule_results?.modifier||0);
+      const modifierText=modifier?' '+(modifier>0?'+':'')+modifier:'';
+      const sessionText=session?'Sessão #'+session.session_number:'Sem sessão';
+      return '<article class="masterDashboardRoll"><div class="masterDashboardRollMain"><div class="masterDashboardRollTop"><b>'+escapeHtml(roller)+'</b><strong>'+escapeHtml(r.final_result)+'</strong></div><small>'+escapeHtml(character?.name||'Sem personagem')+' · '+escapeHtml(sessionText)+'</small><span>'+escapeHtml(r.notation||'Rolagem')+' · dados: '+escapeHtml(values)+escapeHtml(modifierText)+'</span><em>'+escapeHtml(fmtDate(r.created_at))+'</em></div></article>';
+    }).join('');
+    history.innerHTML=rows||'<div class="masterDashboardEmpty">Nenhuma rolagem registrada nesta campanha.</div>';
+  }
+
+  const characters=$('masterDashboardCharacters');
+  if(characters){
+    characters.innerHTML=state.characters.map(c=>{
+      const p=profileFor(c.player_id);
+      const avatar=c.avatar_url||p?.avatar_url;
+      return '<article class="masterCharacterMini"><div class="masterCharacterAvatar">'+(avatar?'<img src="'+escapeHtml(avatar)+'" alt="">':'♙')+'</div><div class="masterCharacterInfo"><b>'+escapeHtml(c.name)+'</b><small>'+escapeHtml(c.class_name||'Classe não definida')+' · '+escapeHtml(p?.display_name||(c.player_id===state.user.id?'Você':'Jogador'))+'</small><span>HP '+escapeHtml(c.hp_current??'—')+'/'+escapeHtml(c.hp_max??'—')+' · DEF '+escapeHtml(c.armor_class??'—')+'</span></div><button class="softButton" data-master-open-character="'+escapeHtml(c.id)+'">Abrir ficha</button></article>';
+    }).join('')||'<div class="masterDashboardEmpty">Nenhuma ficha cadastrada ainda.</div>';
+
+    characters.querySelectorAll('[data-master-open-character]').forEach(btn=>{
+      btn.addEventListener('click',()=>openCharacterModal(btn.dataset.masterOpenCharacter));
+    });
+  }
+
+  const openAll=$('openMasterCharactersBtn');
+  if(openAll){
+    openAll.onclick=()=>{state.view='characters';renderView();};
+  }
+
+  setTimeout(wireAudioControls,0);
+}
+
+function renderAll(){renderShell();renderTable();renderCharacters();renderWorld();renderSessions();renderNpcs();renderDice();renderMasterDashboard();renderChronicle();renderView();}
 function renderShell(){
   $('campaignRole').textContent=isMaster()?'Conta mestre · '+(isCampaignMaster()?'Mestre da campanha':state.role==='co_master'?'Co-mestre':'membro'):'Conta jogador · '+(state.role==='player'?'Jogador':state.role); const mobileUserName=$('mobileUserName');if(mobileUserName)mobileUserName.textContent=state.profile?.display_name||'Usuário'; $('masterBadge').classList.toggle('hidden',!isCampaignMaster()); const accountTypeLabel=$('accountTypeLabel'); if(accountTypeLabel)accountTypeLabel.textContent=isMaster()?'Mestre':'Jogador';
   $('workspaceTitle').textContent=state.campaign?.name||'RPG HUB'; $('workspaceSubtitle').textContent=state.campaign?.description||'Campanha persistente'; $('boardLocationName').textContent=currentLocation()?.name||'Sem local'; $('userName').textContent=state.profile?.display_name||state.user?.email?.split('@')[0]||'Aventureiro';
@@ -299,12 +346,12 @@ function renderShell(){
   $('mobileNewCampaignBtn')?.classList.toggle('hidden',!canCreateCampaign());
   $('chronicleNav')?.classList.toggle('hidden',!canEdit());
   $('mobileChronicleNav')?.classList.toggle('hidden',!canEdit());
-  $('rollHistoryNav')?.classList.toggle('hidden',!canEdit());
-  $('mobileRollHistoryNav')?.classList.toggle('hidden',!canEdit());
-  $('viewRollhistory')?.classList.toggle('hidden',!canEdit());
+  $('masterDashboardNav')?.classList.toggle('hidden',!canEdit());
+  $('mobileMasterDashboardNav')?.classList.toggle('hidden',!canEdit());
+  $('viewMasterdashboard')?.classList.toggle('hidden',!canEdit());
   $('mobileJoinCampaignBtn')?.classList.remove('hidden');
 }
-function renderView(){ if((state.view==='chronicle'||state.view==='rollhistory')&&!canEdit())state.view='table'; document.querySelectorAll('.view').forEach(v=>v.classList.remove('active')); $(`view${state.view.charAt(0).toUpperCase()+state.view.slice(1)}`)?.classList.add('active'); document.querySelectorAll('#sideNav button, #mobileBottomNav button').forEach(b=>b.classList.toggle('active',b.dataset.view===state.view)); }
+function renderView(){ if((state.view==='chronicle'||state.view==='masterdashboard')&&!canEdit())state.view='table'; document.querySelectorAll('.view').forEach(v=>v.classList.remove('active')); $(`view${state.view.charAt(0).toUpperCase()+state.view.slice(1)}`)?.classList.add('active'); document.querySelectorAll('#sideNav button, #mobileBottomNav button').forEach(b=>b.classList.toggle('active',b.dataset.view===state.view)); }
 
 function entityAvatarUrl(entity){
   if(!entity)return null;
@@ -816,11 +863,10 @@ function renderNpcs(){
   document.querySelectorAll('[data-edit-npc]').forEach(b=>b.onclick=()=>openNpcModal(b.dataset.editNpc));document.querySelectorAll('[data-add-npc]').forEach(b=>b.onclick=()=>addNpcToBoard(b.dataset.addNpc));
 }
 function renderDice(){
-  const history=$('rollHistory');
-  const historyPanel=history?.closest('.diceHistoryPanel');
-  if(historyPanel) historyPanel.hidden=!canEdit();
+  const active=currentSession();
+  const history=$('masterDashboardRollHistory');
   if(history && canEdit()){
-    const rows=state.rolls.map(r=>{
+    history.innerHTML=state.rolls.map(r=>{
       const roller=r.roller_display_name||profileFor(r.roller_user_id)?.display_name||'Jogador';
       const character=state.characters.find(c=>c.id===r.character_id);
       const session=state.sessions.find(s=>s.id===r.session_id);
@@ -828,13 +874,13 @@ function renderDice(){
       const modifier=Number(r.rule_results?.modifier||0);
       const modifierText=modifier?' '+(modifier>0?'+':'')+modifier:'';
       const sessionText=session?'Sessão #'+session.session_number:'Sem sessão';
-      return '<article class="rollLog masterRollLog"><div class="rollLogIdentity"><b>'+escapeHtml(roller)+'</b><small>'+escapeHtml(character?.name||'Sem personagem')+' · '+escapeHtml(sessionText)+'</small><span>'+escapeHtml(r.notation||'Rolagem')+' · dados: '+escapeHtml(values)+escapeHtml(modifierText)+'</span><em>'+escapeHtml(fmtDate(r.created_at))+'</em></div><strong>'+escapeHtml(r.final_result)+'</strong></article>';
-    }).join('') || '<div class="emptyPanel">Nenhuma rolagem registrada.</div>';
-    history.innerHTML=rows;
-  }else if(history){
-    history.innerHTML='';
+      return '<article class="masterDashboardRoll"><div class="masterDashboardRollMain"><div class="masterDashboardRollTop"><b>'+escapeHtml(roller)+'</b><strong>'+escapeHtml(r.final_result)+'</strong></div><small>'+escapeHtml(character?.name||'Sem personagem')+' · '+escapeHtml(sessionText)+'</small><span>'+escapeHtml(r.notation||'Rolagem')+' · dados: '+escapeHtml(values)+escapeHtml(modifierText)+'</span><em>'+escapeHtml(fmtDate(r.created_at))+'</em></div></article>';
+    }).join('')||'<div class="masterDashboardEmpty">Nenhuma rolagem registrada nesta campanha.</div>';
   }
-  const active=currentSession(); $('sessionAudioCard').innerHTML=audioPanel(active);
+  const activeAudio=$('masterDashboardAudio');
+  if(activeAudio && canEdit()) activeAudio.innerHTML=audioPanel(active);
+  const playerAudio=$('sessionAudioCard');
+  if(playerAudio) playerAudio.innerHTML=canEdit()?'':audioPanel(active);
   setTimeout(wireAudioControls,0);
 }
 function renderDiceResult(payload){
@@ -1866,7 +1912,7 @@ async function profileModal(){
 async function ensureActiveAudioHandlers(){ const active=currentSession(); if(!active)return; if(!$('enableAudioBtn'))return; $('enableAudioBtn').onclick=async()=>{try{state.audioEnabled=true;const ctx=new (window.AudioContext||window.webkitAudioContext)();if(ctx.state==='suspended')await ctx.resume();const osc=ctx.createOscillator();osc.connect(ctx.destination);osc.start();osc.stop(ctx.currentTime+0.01);renderDice();toast('Áudio ativado para esta mesa');}catch(e){toast('Não foi possível ativar o áudio.','error');}}; }
 
 // Navigation
-document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>{if((b.dataset.view==='rollhistory'||b.dataset.view==='chronicle')&&!canEdit()){state.view='table';renderView();return;}state.view=b.dataset.view;renderView();if(state.view==='dice'||state.view==='rollhistory'){renderDice();setTimeout(wireAudioControls,0);}});
+document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>{if((b.dataset.view==='masterdashboard'||b.dataset.view==='chronicle')&&!canEdit()){state.view='table';renderView();return;}state.view=b.dataset.view;renderView();if(state.view==='dice'){renderDice();setTimeout(wireAudioControls,0);}if(state.view==='masterdashboard'){renderMasterDashboard();}});
 $('mobileProfileBtn')?.addEventListener('click',()=>profileModal());
 $('campaignSelect').onchange=async e=>{const next=state.campaigns.find(c=>c.id===e.target.value);if(!next)return;state.campaign=next;state.floor=null;state.selected=null;await loadCampaignData();};
 let accountMenuOpen=false;
