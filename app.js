@@ -187,7 +187,13 @@ function renderDice(){
   const active=currentSession(); $('sessionAudioCard').innerHTML=audioPanel(active);
   setTimeout(wireAudioControls,0);
 }
-function renderDiceResult(payload){ if(!payload)return;$('bigRoll').textContent=payload.final_result;$('rollBreakdown').innerHTML=`<b>${escapeHtml(payload.notation)}</b> · base: [${(payload.base_results||[]).join(', ')}] · ${escapeHtml(payload.rule_results?.label||'normal')}`;$('rollResult').innerHTML=`<span>${escapeHtml(payload.notation)}</span><b>${payload.final_result}</b>`; }
+function renderDiceResult(payload){
+  if(!payload)return;
+  const results=(payload.base_results||[]).map((n,i)=>`<span class="dieResultChip"><small>dado ${i+1}</small><b>${n}</b></span>`).join("");
+  $("bigRoll").textContent=payload.final_result;
+  $("rollBreakdown").innerHTML=`<div class="rollBreakdownHead"><b>${escapeHtml(payload.notation)}</b><span>${escapeHtml(payload.rule_results?.label||"Normal")}</span></div><div class="dieResults">${results||"<span class="muted">Sem resultados individuais.</span>"}</div><div class="rollSummary">Total <strong>${payload.final_result}</strong>${Number(payload.rule_results?.modifier||0)?`<small>modificador ${payload.rule_results.modifier>0?"+":""}${payload.rule_results.modifier}</small>`:""}</div>`;
+  $("rollResult").innerHTML=`<span>${escapeHtml(payload.notation)}</span><b>${payload.final_result}</b>`;
+}
 function audioPanel(){ if(!canEdit()){return `<div class="audioCard"><div class="eyebrow">SOM DA SESSÃO</div><h3>Áudio sincronizado pelo mestre</h3><p>Ative o áudio para receber músicas e efeitos durante a sessão.</p><button id="enableAudioBtn" class="primarySmall">${state.audioEnabled?'Áudio ativo':'Ativar áudio'}</button></div>`; } return `<div class="audioCard"><div class="eyebrow">PAINEL DO MESTRE</div><h3>Música & efeitos</h3><p>Envie um arquivo ou cole uma URL. Música fica em loop; efeitos tocam uma vez. Play/stop é transmitido em tempo real.</p><div class="audioForm"><input id="audioUrl" placeholder="https://.../audio.mp3"><input id="audioFile" type="file" accept="audio/*"><select id="audioKind"><option value="music">Música · loop</option><option value="effect">Efeito sonoro · uma vez</option></select><div class="audioActions"><input id="audioVolume" type="range" min="0" max="1" step="0.05" value="0.75"><button id="playAudioBtn" class="primarySmall">▶ Tocar</button><button id="stopAudioBtn" class="softButton">■ Parar</button></div></div></div>`; }
 
 function openNoCampaignState(){
@@ -324,8 +330,19 @@ $('structureBtn').onclick=()=>{state.tool=state.tool==='draw'?'move':'draw';$('s
 $('moveBtn').onclick=()=>{state.tool='move';$('moveBtn').classList.add('chosen');$('structureBtn').classList.remove('chosen');$('board').classList.remove('drawing');};
 $('zoomIn').onclick=()=>{state.zoom=Math.min(140,state.zoom+10);applyZoom();}; $('zoomOut').onclick=()=>{state.zoom=Math.max(70,state.zoom-10);applyZoom();};
 $('newCharacterBtn').onclick=()=>openCharacterModal(); $('newNpcBtn').onclick=()=>openNpcModal(); $('newSessionBtn').onclick=()=>openSessionModal();
-$('rollBtn').onclick=async()=>{try{await performRoll($('diceNotation').value,$('diceRule').value);renderDice();}catch(e){toast(e.message,'error');}};
-document.querySelectorAll('[data-quick-die]').forEach(b=>b.onclick=async()=>{try{$('diceNotation').value='1d'+b.dataset.quickDie;$('diceRule').value='normal';state.view='dice';renderView();await performRoll($('diceNotation').value,'normal');renderDice();}catch(e){toast(e.message,'error');}});
+function getDiceBuilderNotation(){
+  const count=Math.min(50,Math.max(1,Number($("diceCount").value)||1));
+  const sides=Math.min(1000,Math.max(2,Number($("diceSides").value)||20));
+  const modifier=Number($("diceModifier").value)||0;
+  return String(count)+"d"+String(sides)+(modifier>0?"+":"")+(modifier||"");
+}
+function syncDiceBuilder(){const el=$("diceNotationPreview");if(el)el.textContent=getDiceBuilderNotation();}
+function setDiceBuilderPreset(notation){const m=/^(\d+)d(\d+)([+-]\d+)?$/i.exec(notation);if(!m)return;$("diceCount").value=m[1];$("diceSides").value=m[2];$("diceModifier").value=m[3]||0;$("diceRule").value="normal";syncDiceBuilder();}
+document.querySelectorAll("#diceCount,#diceSides,#diceModifier").forEach(el=>el.addEventListener("input",syncDiceBuilder));
+document.querySelectorAll("[data-dice-preset]").forEach(b=>b.onclick=async()=>{try{setDiceBuilderPreset(b.dataset.dicePreset);state.view="dice";renderView();await performRoll(getDiceBuilderNotation(),"normal");renderDice();}catch(e){toast(e.message,"error");}});
+$("diceRule").addEventListener("change",syncDiceBuilder);
+$("rollBtn").onclick=async()=>{try{const notation=getDiceBuilderNotation();await performRoll(notation,$("diceRule").value);renderDice();}catch(e){toast(e.message,"error");}};
+document.querySelectorAll("[data-quick-die]").forEach(b=>b.onclick=async()=>{try{setDiceBuilderPreset("1d"+b.dataset.quickDie);state.view="dice";renderView();await performRoll(getDiceBuilderNotation(),"normal");renderDice();}catch(e){toast(e.message,"error");}});
 $('saveBtn').onclick=()=>{setSave('Conexão ativa · alterações salvas automaticamente');toast('Tudo que foi alterado já foi para o Supabase.');};
 
 function wireAudioControls(){
