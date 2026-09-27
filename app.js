@@ -130,6 +130,7 @@ async function subscribeRealtime(){
     const channel=sb.channel(`rpg-hub-session-${sid}`,{config:{private:true}});
     channel.on('broadcast',{event:'dice_roll'},({payload})=>{if(payload?.user_id!==state.user.id)receiveRoll(payload);});
     channel.on('broadcast',{event:'audio'},({payload})=>{if(payload?.user_id!==state.user.id)receiveAudio(payload);});
+    channel.on('broadcast',{event:'audio_sync_request'},({payload})=>{if(canEdit()&&payload?.user_id!==state.user.id)syncActiveAudioToPlayer(payload.user_id);});
     channel.on('broadcast',{event:'entity_move'},({payload})=>{if(payload?.user_id!==state.user.id)receiveEntityMove(payload);});
     channel.on('broadcast',{event:'room_move'},({payload})=>{if(payload?.user_id!==state.user.id)receiveRoomMove(payload);});
     channel.on('broadcast',{event:'room_resize'},({payload})=>{if(payload?.user_id!==state.user.id)receiveRoomResize(payload);});
@@ -698,13 +699,10 @@ async function deleteAudioAsset(id){
 function audioPlayerId(){return 'layer_'+Date.now()+'_'+Math.random().toString(36).slice(2,8);}
 async function unlockAudio(){
   state.audioEnabled=true;
-  try{
-    const silent=new Audio('data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAESsAAABAAgAZGF0YQAAAAA=');
-    silent.muted=true;
-    await silent.play().catch(()=>{});
-    silent.pause();silent.src='';
-  }catch(e){console.warn('Audio unlock failed',e);}
+  try{const silent=new Audio('data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAESsAAABAAgAZGF0YQAAAAA=');silent.muted=true;await silent.play().catch(()=>{});silent.pause();silent.src='';}catch(e){console.warn('Audio unlock failed',e);}
+  try{await requestAudioSync();}catch(e){console.warn('Audio sync request failed',e);}
 }
+
 function audioPlayerId(){return 'layer_'+Date.now()+'_'+Math.random().toString(36).slice(2,8);}
 async function playAudioLayer(payload,opts={}){
   const broadcast=opts.broadcast!==false;
@@ -712,6 +710,7 @@ async function playAudioLayer(payload,opts={}){
   if(payload.action==='stop-layer'){await stopAudioLayer(payload.layer_id,{broadcast});return;}
   if(!payload.url)throw new Error('Este áudio não possui uma URL válida.');
   state.audioEnabled=true;
+  if(payload.target_user_id&&payload.target_user_id!==state.user.id)return;
   const layerId=payload.layer_id||audioPlayerId();
   const old=state.audioPlayers.get(layerId);
   if(old){try{old.pause();old.currentTime=0;}catch(e){}state.audioPlayers.delete(layerId);state.audioLayers.delete(layerId);}
@@ -723,7 +722,7 @@ async function playAudioLayer(payload,opts={}){
   state.audioPlayers.set(layerId,audio);
   state.audioLayers.set(layerId,layer);
   audio.onended=()=>{if(!audio.loop){state.audioPlayers.delete(layerId);state.audioLayers.delete(layerId);renderDice();}};
-  try{await audio.play();}
+  try{if(Number.isFinite(Number(payload.current_time)))audio.addEventListener('loadedmetadata',()=>{try{audio.currentTime=Number(payload.current_time)}catch(e){}},{once:true});await audio.play();if(Number.isFinite(Number(payload.current_time))&&audio.readyState>=1){try{audio.currentTime=Number(payload.current_time)}catch(e){}}}
   catch(e){state.audioPlayers.delete(layerId);state.audioLayers.delete(layerId);console.warn('Audio playback failed',payload.url,e);throw new Error('Não foi possível reproduzir este áudio. Clique em “Ativar áudio” ou verifique o link/arquivo.');}
   renderDice();
   if(broadcast&&canEdit())await broadcastAudio({...payload,action:'play-layer',layer_id:layerId});
@@ -1415,6 +1414,14 @@ async function uploadMedia(file,prefix){
 }
 async function playLocalAudio(payload){if(payload.action==='stop'||payload.action==='stop-all'){await stopAllAudioLayers({broadcast:false});return;}if(payload.action==='stop-layer'){await stopAudioLayer(payload.layer_id,{broadcast:false});return;}if(payload.action==='set-volume'){await setAudioLayerVolume(payload.layer_id,payload.volume,{broadcast:false});return;}if(payload.action==='play-layer')await playAudioLayer(payload,{broadcast:false});}
 function receiveAudio(payload){return playLocalAudio(payload);}
+async function syncActiveAudioToPlayer(targetUserId){
+  if(!canEdit()||!state.audioChannel)return;
+  for(const layer of state.audioLayers.values()){
+    if(!layer.audio||!layer.url||!layer.loop)continue;
+    await state.audioChannel.send({type:'broadcast',event:'audio',payload:{action:'play-layer',layer_id:'sync_'+layer.layerId,url:layer.url,name:layer.name,kind:layer.kind,loop:true,volume:layer.volume,asset_id:layer.asset_id||null,current_time:Number(layer.audio.currentTime||0),target_user_id:targetUserId,user_id:state.user.id}});
+  }
+}
+async function requestAudioSync(){if(!state.audioChannel)return;await state.audioChannel.send({type:'broadcast',event:'audio_sync_request',payload:{user_id:state.user.id}});}
 async function broadcastAudio(payload){if(!state.audioChannel)return;await state.audioChannel.send({type:'broadcast',event:'audio',payload:{...payload,user_id:state.user.id}});}
 async function performRoll(notation,rule='normal'){
   const parsed=/^(\d+)d(\d+)([+-]\d+)?$/i.exec(notation.trim());if(!parsed)throw new Error('Use uma notação como 1d20 ou 2d6+3.');
