@@ -643,7 +643,7 @@ async function saveCampaignChronicle(){
   const save=$('saveChronicle');
   try{
     save?.setAttribute('disabled','disabled');if(save)save.textContent='Salvando…';
-    const payload={campaign_id:state.campaign.id,content:field.value,updated_by:state.user.id};
+    const payload={campaign_id:state.campaign.id,content:field.value,updated_by:state.user.id,updated_at:new Date().toISOString()};
     const result=state.campaignChronicle?.campaign_id===state.campaign.id
       ?await sb.from('campaign_chronicles').update({content:payload.content,updated_by:payload.updated_by}).eq('campaign_id',state.campaign.id).select('*').single()
       :await sb.from('campaign_chronicles').insert(payload).select('*').single();
