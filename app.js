@@ -934,6 +934,7 @@ async function restoreCampaignAudioState(){
   }));
 }
 async function unlockAudio(){
+  const wasEnabled=state.audioEnabled;
   state.audioEnabled=true;
   try{
     const silent=new Audio('data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAESsAAABAAgAZGF0YQAAAAA=');
@@ -942,7 +943,7 @@ async function unlockAudio(){
     silent.pause();
     silent.src='';
   }catch(e){console.warn('Audio unlock failed',e);}
-  await restoreCampaignAudioState();
+  if(!canEdit()&&!wasEnabled)await restoreCampaignAudioState();
   renderDice();
 }
 
@@ -1842,15 +1843,15 @@ document.querySelectorAll("[data-quick-die]").forEach(b=>b.onclick=async()=>{try
 $('saveBtn').onclick=()=>{setSave('Conexão ativa · alterações salvas automaticamente');toast('Tudo que foi alterado já foi para o Supabase.');};
 
 function wireAudioControls(){
-  $('enablePlayerAudioBtn')?.addEventListener('click',async()=>{try{await unlockAudio();toast('Sons da mesa ativados');}catch(e){toast('Não foi possível ativar os sons.','error');}});
+  $('enablePlayerAudioBtn')?.onclick=async()=>{try{await unlockAudio();toast('Sons da campanha ativados');}catch(e){toast('Não foi possível ativar os sons.','error');}};
 
-  $('enableAudioBtn')?.addEventListener('click',async()=>{try{await unlockAudio();renderDice();toast('Áudio ativado');}catch(e){toast(e.message||'Não foi possível ativar o áudio.','error');}});
+  $('enableAudioBtn')?.onclick=async()=>{try{await unlockAudio();renderDice();toast('Áudio ativado para a campanha');}catch(e){toast(e.message||'Não foi possível ativar o áudio.','error');}};
   $('playAudioBtn')?.addEventListener('click',async()=>{try{let url=$('audioUrl').value.trim();const file=$('audioFile').files[0];const kind=$('audioKind').value;let name=$('audioName').value.trim();let storagePath=null;if(file){url=await uploadMedia(file,'audio');storagePath=uploadMedia.lastPath||null;}if(!url)throw new Error('Cole uma URL ou selecione um arquivo.');if(!name)name=file?.name||audioKindLabel(kind);const volume=Number($('audioVolume').value)||0.75;const loop=['music','ambient'].includes(kind);let asset=null;if($('audioSaveLibrary')?.checked)asset=await saveAudioAsset({name,kind,url,volume,loop,storagePath});await unlockAudio();await playAudioLayer({action:'play-layer',url,name,kind,loop,volume,asset_id:asset?.id||null});$('audioUrl').value='';$('audioFile').value='';$('audioName').value='';toast(asset?'Áudio salvo e tocando':'Áudio tocando');}catch(e){toast(e.message||'Não foi possível tocar o áudio.','error');}});
   $('stopAllAudioBtn')?.addEventListener('click',async()=>{await stopAllAudioLayers();toast('Todas as camadas foram interrompidas');});
   $('openAudioLibraryBtn')?.addEventListener('click',openAudioLibraryModal);
   document.querySelectorAll('.audioLayerEdit').forEach(b=>b.onclick=()=>{const row=b.closest('.audioLayerRow');const layer=state.audioLayers.get(row.dataset.layerId);if(layer?.asset_id)openEditAudioAssetModal(layer.asset_id);});
   document.querySelectorAll('.audioLayerStop').forEach(b=>b.onclick=()=>stopAudioLayer(b.closest('.audioLayerRow').dataset.layerId));
-  document.querySelectorAll('.audioLayerVolume').forEach(b=>b.oninput=()=>setAudioLayerVolume(b.closest('.audioLayerRow').dataset.layerId,b.value,{broadcast:false}));
+  document.querySelectorAll('.audioLayerVolume').forEach(b=>b.oninput=()=>setAudioLayerVolume(b.closest('.audioLayerRow').dataset.layerId,b.value,{broadcast:true}));
 }
 $('modalBackdrop').addEventListener('click',e=>{if(e.target===$('modalBackdrop'))closeModal();});document.addEventListener('click',e=>{if(e.target.closest('[data-close]'))closeModal();});
 
