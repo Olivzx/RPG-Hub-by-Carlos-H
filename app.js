@@ -353,7 +353,7 @@ function openNoCampaignState(){
   $('openProfileFromEmpty').onclick=()=>{closeModal();profileModal();};
 }
 
-async async function seedCharacterFieldsForCampaign(campaignId){
+async function seedCharacterFieldsForCampaign(campaignId){
   const defaults=[
     ['name','Nome do personagem','text','name',true,0],
     ['class_name','Classe / função','text','class_name',false,10],
