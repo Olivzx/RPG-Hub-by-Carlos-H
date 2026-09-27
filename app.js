@@ -673,6 +673,7 @@ function openRoomModal(id,floorId){
       const result=room?await sb.from('rooms').update(payload).eq('id',room.id).select().single():await sb.from('rooms').insert({...payload,sort_order:state.rooms.filter(x=>x.floor_id===selectedFloor).length}).select().single();
       if(result.error)throw result.error;
       if(room)state.rooms=state.rooms.map(x=>x.id===room.id?result.data:x);else state.rooms.push(result.data);
+      if(room && Number(room.rotation||0)!==Number(result.data.rotation||0))await broadcastRoomRotate({room_id:result.data.id,rotation:Number(result.data.rotation||0)});
       state.floor=result.data.floor_id;state.location=state.locations.find(l=>state.floors.find(f=>f.id===result.data.floor_id)?.location_id===l.id)||state.location;state.selected={type:'room',id:result.data.id};closeModal();renderAll();setSave('Cômodo salvo');toast(room?'Cômodo atualizado':'Cômodo criado');
     }catch(e){toast(e.message||'Não foi possível salvar o cômodo.','error');}
   };
