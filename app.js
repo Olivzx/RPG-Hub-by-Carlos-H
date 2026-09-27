@@ -1044,7 +1044,10 @@ function fieldInputHtml(field,character,isMasterEditor){
     return `<label class="dynamicField">${escapeHtml(field.label)} ${req}<input id="${id}" data-field-id="${field.id}" data-data-key="${escapeHtml(field.data_key)}" data-type="url" value="${escapeHtml(value)}" placeholder="https://.../imagem.webp" ${disabled} ${required}><input id="${id}_file" class="dynamicFile" type="file" accept="image/*" ${disabled}><small>URL ou envio de arquivo</small></label>`;
   }
   if(field.field_type==='textarea'){
-    return `<label class="dynamicField">${escapeHtml(field.label)} ${req}<textarea id="${id}" data-field-id="${field.id}" data-data-key="${escapeHtml(field.data_key)}" data-type="textarea" rows="6" ${disabled} ${required}>${escapeHtml(value)}</textarea>${disabled?'<small>Somente o mestre</small>':''}</label>`;
+    const isItems=field.data_key==='sheet_data.current_items';
+    const placeholder=isItems?'Ex.: Espada longa x1\\nPoção de cura x2\\nTocha x3':'Digite as informações deste campo';
+    const hint=disabled?'Somente o mestre':isItems?'Cadastre um item por linha, com quantidade quando fizer sentido.':'Campo da ficha';
+    return '<label class="dynamicField">'+escapeHtml(field.label)+' '+req+'<textarea id="'+id+'" data-field-id="'+field.id+'" data-data-key="'+escapeHtml(field.data_key)+'" data-type="textarea" rows="'+(isItems?7:6)+'" placeholder="'+escapeHtml(placeholder)+'" '+disabled+' '+required+'>'+escapeHtml(value)+'</textarea><small>'+hint+'</small></label>';
   }
   if(field.field_type==='number'){
     return `<label class="dynamicField">${escapeHtml(field.label)} ${req}<input id="${id}" data-field-id="${field.id}" data-data-key="${escapeHtml(field.data_key)}" data-type="number" type="number" value="${escapeHtml(value)}" ${disabled} ${required}>${disabled?'<small>Somente o mestre</small>':''}</label>`;
@@ -1130,7 +1133,7 @@ async function openCharacterModal(id){
   };
 }
 
-async function fieldTypeLabel(type){return ({text:'Texto curto',number:'Número',textarea:'Texto longo',select:'Seleção',checkbox:'Sim / não',url:'URL'})[type]||type;}
+function fieldTypeLabel(type){return ({text:'Texto curto',number:'Número',textarea:'Texto longo',select:'Seleção',checkbox:'Sim / não',url:'URL'})[type]||type;}
 function slugifyField(label){return normalizeFieldKey(label);}
 
 function renderCharacterFieldConfigGroup(items){
