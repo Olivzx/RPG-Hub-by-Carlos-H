@@ -254,3 +254,62 @@
   .selectionMoveFloor button{width:100%}
   .rotationPresets{overflow-x:auto;flex-wrap:nowrap;padding-bottom:2px}
 }
+
+
+/* ===== Acessibilidade e organização do painel de áudio ===== */
+.diceLayout{
+  grid-template-columns:minmax(0,1fr);
+  gap:16px;
+  align-items:start;
+}
+.diceLayout>div:last-child{
+  display:grid;
+  grid-template-columns:minmax(0,1fr);
+  gap:16px;
+}
+.audioCard{padding:20px}
+.audioCardTop{gap:18px}
+.audioCardTop h3{font-size:18px;line-height:1.25;margin:8px 0 7px}
+.audioCard p{font-size:12px;line-height:1.7;max-width:78ch}
+.audioLayerCount{padding:7px 10px;font-size:10px}
+.activeAudioLayers{gap:8px;margin:16px 0 12px}
+.audioEmpty{padding:15px;font-size:11px;line-height:1.6}
+.audioEmpty small{margin-top:6px;font-size:10px;line-height:1.5}
+.audioLayerRow{grid-template-columns:36px minmax(0,1fr) 110px 34px;gap:11px;min-height:60px;padding:11px}
+.audioLayerIcon{width:36px;height:36px;border-radius:9px;font-size:14px}
+.audioLayerInfo b{font-size:12px;line-height:1.35;white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere}
+.audioLayerInfo small{margin-top:5px;font-size:10px;line-height:1.4}
+.audioLayerStop,.audioLayerEdit,.miniAudioEdit,.miniAudioDelete{width:34px;height:34px;font-size:10px}
+.audioForm{gap:10px;margin-top:16px}
+.audioForm label{font-size:11px;line-height:1.35}
+.audioForm input:not([type=file]),.audioForm select{padding:12px 13px;font-size:12px;line-height:1.4}
+.audioForm input[type=file]{font-size:11px;line-height:1.4}
+.audioUploadHint{margin-top:-1px;margin-bottom:8px;padding:10px 12px;font-size:10px;line-height:1.55}
+.audioActions{gap:10px}
+.audioVolumeField{font-size:11px!important}
+.audioSaveToggle{gap:8px;padding:10px 12px;font-size:10px;line-height:1.4}
+.audioActions .primarySmall,.audioQuickActions .softButton{min-height:40px;padding:10px 13px;font-size:11px}
+.audioQuickActions{gap:9px;margin-top:12px}
+.audioQuickActions button{font-size:10px}
+.audioPlayerCard #enableAudioBtn{min-height:44px;padding:11px 15px;font-size:12px}
+.audioPlayerCard .activeAudioLayers{margin-top:16px}
+.rollLog{padding:12px 14px}
+.rollLog b{font-size:12px}
+.rollLog small{font-size:10px;line-height:1.4}
+.rollLog strong{font-size:22px}
+@media(max-width:700px){
+  .diceLayout{gap:13px}
+  .diceLayout>div:last-child{gap:13px}
+  .audioCard{padding:16px}
+  .audioCardTop{gap:12px}
+  .audioCardTop h3{font-size:17px}
+  .audioCard p{font-size:11px;line-height:1.65}
+  .audioLayerRow{grid-template-columns:36px minmax(0,1fr) 34px;gap:9px;padding:10px}
+  .audioLayerVolume{grid-column:2;margin-top:2px}
+  .audioLayerStop{grid-column:3;grid-row:1 / span 2}
+  .audioLayerInfo b{font-size:11px}
+  .audioLayerInfo small{font-size:9px}
+  .audioFieldRow{grid-template-columns:1fr}
+  .audioActions{grid-template-columns:1fr!important}
+  .audioQuickActions{grid-template-columns:1fr}
+}
