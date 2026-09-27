@@ -753,6 +753,7 @@ $('newRoomBtn').onclick=()=>{if(requireMaster())openRoomModal();};
 $('structureBtn').onclick=()=>{state.tool=state.tool==='draw'?'move':'draw';$('structureBtn').classList.toggle('chosen',state.tool==='draw');$('moveBtn').classList.toggle('chosen',state.tool==='move');$('board').classList.toggle('drawing',state.tool==='draw');$('boardHint').textContent=state.tool==='draw'?'Clique e arraste para desenhar um novo cômodo':'Arraste entidades e cômodos para reposicionar';};
 $('moveBtn').onclick=()=>{state.tool='move';$('moveBtn').classList.add('chosen');$('structureBtn').classList.remove('chosen');$('board').classList.remove('drawing');};
 $('zoomIn').onclick=()=>{state.zoom=Math.min(140,state.zoom+10);applyZoom();}; $('zoomOut').onclick=()=>{state.zoom=Math.max(70,state.zoom-10);applyZoom();};
+$('characterFieldsBtn')?.addEventListener('click',openCharacterFieldConfig);
 $('newCharacterBtn').onclick=()=>openCharacterModal(); $('newNpcBtn').onclick=()=>openNpcModal(); $('newSessionBtn').onclick=()=>openSessionModal();
 function getDiceBuilderNotation(){
   const count=Math.min(50,Math.max(1,Number($("diceCount").value)||1));
