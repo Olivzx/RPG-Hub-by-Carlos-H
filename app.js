@@ -634,37 +634,42 @@ async function deleteAudioAsset(id){
 }
 
 function audioPlayerId(){return 'layer_'+Date.now()+'_'+Math.random().toString(36).slice(2,8);}
-async function ensureAudioContext(){
-  if(!state.audioContext){const Ctx=window.AudioContext||window.webkitAudioContext;if(!Ctx)throw new Error('Seu navegador não oferece o mixer de áudio necessário.');state.audioContext=new Ctx();}
-  if(state.audioContext.state==='suspended')await state.audioContext.resume();
-  state.audioEnabled=true;return state.audioContext;
+async function unlockAudio(){
+  state.audioEnabled=true;
+  try{
+    const silent=new Audio('data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAESsAAABAAgAZGF0YQAAAAA=');
+    silent.muted=true;
+    await silent.play().catch(()=>{});
+    silent.pause();silent.src='';
+  }catch(e){console.warn('Audio unlock failed',e);}
 }
+function audioPlayerId(){return 'layer_'+Date.now()+'_'+Math.random().toString(36).slice(2,8);}
 async function playAudioLayer(payload,opts={}){
-  const broadcast=opts.broadcast!==false;if(!state.audioEnabled&&!canEdit())return;
-  const layerId=payload.layer_id||audioPlayerId();
-  if(payload.action==='stop-layer'){await stopAudioLayer(layerId,{broadcast});return;}
+  const broadcast=opts.broadcast!==false;
+  if(!state.audioEnabled&&!canEdit())return;
+  if(payload.action==='stop-layer'){await stopAudioLayer(payload.layer_id,{broadcast});return;}
   if(!payload.url)throw new Error('Este áudio não possui uma URL válida.');
-  const old=state.audioPlayers.get(layerId);if(old){try{old.pause();}catch(e){}try{state.audioGains.get(layerId)?.disconnect();}catch(e){}state.audioPlayers.delete(layerId);state.audioGains.delete(layerId);state.audioLayers.delete(layerId);}
-  const audio=new Audio(payload.url);audio.preload='auto';audio.volume=Number(payload.volume??0.75);audio.loop=payload.loop!==undefined?!!payload.loop:['music','ambient'].includes(payload.kind);
-  const useWebAudio=/^https:\/\/ymexyrqgqpktxzajgsdi\.storage\.supabase\.co\//.test(payload.url)||(() => {try{return new URL(payload.url,location.href).origin===location.origin;}catch(e){return false;}})();
-  let gain=null,source=null;
-  if(useWebAudio){
-    const ctx=await ensureAudioContext();
-    audio.crossOrigin='anonymous';audio.volume=1;
-    source=ctx.createMediaElementSource(audio);gain=ctx.createGain();gain.gain.value=Math.max(0,Math.min(1,Number(payload.volume??0.75)));source.connect(gain);gain.connect(ctx.destination);
-  }else{
-    // URLs externas continuam usando o player nativo para não depender de CORS.
-    audio.volume=Math.max(0,Math.min(1,Number(payload.volume??0.75)));
-  }
-  const layer={...payload,layerId,volume:Number(payload.volume??0.75),loop:audio.loop,audio,source,gain,useWebAudio};
-  state.audioPlayers.set(layerId,audio);state.audioGains.set(layerId,gain);state.audioLayers.set(layerId,layer);
-  audio.onended=()=>{if(!audio.loop){try{source?.disconnect();gain?.disconnect();}catch(e){}state.audioPlayers.delete(layerId);state.audioGains.delete(layerId);state.audioLayers.delete(layerId);renderDice();}};
-  try{await audio.play();}catch(e){try{source?.disconnect();gain?.disconnect();}catch(x){}state.audioPlayers.delete(layerId);state.audioGains.delete(layerId);state.audioLayers.delete(layerId);throw new Error('Não foi possível reproduzir este áudio. Verifique o formato/URL ou ative o áudio da mesa.');}
-  renderDice();if(broadcast&&canEdit())await broadcastAudio({...payload,action:'play-layer',layer_id:layerId});return layerId;
+  state.audioEnabled=true;
+  const layerId=payload.layer_id||audioPlayerId();
+  const old=state.audioPlayers.get(layerId);
+  if(old){try{old.pause();old.currentTime=0;}catch(e){}state.audioPlayers.delete(layerId);state.audioLayers.delete(layerId);}
+  const audio=new Audio(payload.url);
+  audio.preload='auto';
+  audio.loop=payload.loop!==undefined?!!payload.loop:['music','ambient'].includes(payload.kind);
+  audio.volume=Math.max(0,Math.min(1,Number(payload.volume??0.75)));
+  const layer={...payload,layerId,volume:audio.volume,loop:audio.loop,audio};
+  state.audioPlayers.set(layerId,audio);
+  state.audioLayers.set(layerId,layer);
+  audio.onended=()=>{if(!audio.loop){state.audioPlayers.delete(layerId);state.audioLayers.delete(layerId);renderDice();}};
+  try{await audio.play();}
+  catch(e){state.audioPlayers.delete(layerId);state.audioLayers.delete(layerId);console.warn('Audio playback failed',payload.url,e);throw new Error('Não foi possível reproduzir este áudio. Clique em “Ativar áudio” ou verifique o link/arquivo.');}
+  renderDice();
+  if(broadcast&&canEdit())await broadcastAudio({...payload,action:'play-layer',layer_id:layerId});
+  return layerId;
 }
-async function stopAudioLayer(layerId,opts={}){const broadcast=opts.broadcast!==false;const audio=state.audioPlayers.get(layerId),gain=state.audioGains.get(layerId);if(audio){try{audio.pause();audio.currentTime=0;}catch(e){}}try{gain?.disconnect();}catch(e){}state.audioPlayers.delete(layerId);state.audioGains.delete(layerId);state.audioLayers.delete(layerId);renderDice();if(broadcast&&canEdit())await broadcastAudio({action:'stop-layer',layer_id:layerId});}
-async function stopAllAudioLayers(opts={}){const broadcast=opts.broadcast!==false;for(const [id,audio] of state.audioPlayers.entries()){try{audio.pause();audio.currentTime=0;}catch(e){}try{state.audioGains.get(id)?.disconnect();}catch(e){}}state.audioPlayers.clear();state.audioGains.clear();state.audioLayers.clear();renderDice();if(broadcast&&canEdit())await broadcastAudio({action:'stop-all'});}
-async function setAudioLayerVolume(layerId,volume,opts={}){const broadcast=opts.broadcast!==false;const layer=state.audioLayers.get(layerId);if(!layer)return;const v=Math.max(0,Math.min(1,Number(volume)));layer.volume=v;if(layer.gain)layer.gain.gain.value=v;else if(layer.audio)layer.audio.volume=v;state.audioLayers.set(layerId,layer);if(broadcast&&canEdit())await broadcastAudio({action:'set-volume',layer_id:layerId,volume:v});}
+async function stopAudioLayer(layerId,opts={}){const broadcast=opts.broadcast!==false;const audio=state.audioPlayers.get(layerId);if(audio){try{audio.pause();audio.currentTime=0;}catch(e){}}state.audioPlayers.delete(layerId);state.audioLayers.delete(layerId);renderDice();if(broadcast&&canEdit())await broadcastAudio({action:'stop-layer',layer_id:layerId});}
+async function stopAllAudioLayers(opts={}){const broadcast=opts.broadcast!==false;for(const audio of state.audioPlayers.values()){try{audio.pause();audio.currentTime=0;}catch(e){}}state.audioPlayers.clear();state.audioLayers.clear();renderDice();if(broadcast&&canEdit())await broadcastAudio({action:'stop-all'});}
+async function setAudioLayerVolume(layerId,volume,opts={}){const broadcast=opts.broadcast!==false;const layer=state.audioLayers.get(layerId);if(!layer)return;const v=Math.max(0,Math.min(1,Number(volume)));layer.volume=v;if(layer.audio)layer.audio.volume=v;state.audioLayers.set(layerId,layer);if(broadcast&&canEdit())await broadcastAudio({action:'set-volume',layer_id:layerId,volume:v});}
 async function playPlaylist(id){if(!canEdit())return;const items=state.audioPlaylistItems.filter(i=>i.playlist_id===id&&i.enabled).sort((a,b)=>Number(a.sort_order)-Number(b.sort_order));const bundle=items.map(item=>({item,asset:state.audioAssets.find(a=>a.id===item.audio_asset_id)})).filter(x=>x.asset);if(!bundle.length){toast('Essa playlist não possui áudios ativos.','error');return;}await Promise.all(bundle.map(x=>playAudioLayer({action:'play-layer',layer_id:'pl_'+id+'_'+x.asset.id,url:x.asset.url,name:x.asset.name,kind:x.asset.kind,loop:x.asset.loop,volume:x.item.volume??x.asset.default_volume,asset_id:x.asset.id,playlist_id:id})));toast('Playlist tocando em camadas');}
 function openAudioLibraryModal(){
   if(!canEdit())return;
@@ -1429,13 +1434,13 @@ document.querySelectorAll("[data-quick-die]").forEach(b=>b.onclick=async()=>{try
 $('saveBtn').onclick=()=>{setSave('Conexão ativa · alterações salvas automaticamente');toast('Tudo que foi alterado já foi para o Supabase.');};
 
 function wireAudioControls(){
-  $('enableAudioBtn')?.addEventListener('click',async()=>{try{state.audioEnabled=true;const ctx=new (window.AudioContext||window.webkitAudioContext)();if(ctx.state==='suspended')await ctx.resume();renderDice();toast('Áudio ativado');}catch(e){toast('Não foi possível ativar o áudio.','error');}});
-  $('playAudioBtn')?.addEventListener('click',async()=>{try{let url=$('audioUrl').value.trim();const file=$('audioFile').files[0];const kind=$('audioKind').value;let name=$('audioName').value.trim();let storagePath=null;if(file){url=await uploadMedia(file,'audio');storagePath=uploadMedia.lastPath||null;}if(!url)throw new Error('Cole uma URL ou selecione um arquivo.');if(!name)name=file?.name||audioKindLabel(kind);const volume=Number($('audioVolume').value)||0.75;const loop=['music','ambient'].includes(kind);let asset=null;if($('audioSaveLibrary')?.checked)asset=await saveAudioAsset({name,kind,url,volume,loop,storagePath});await playAudioLayer({action:'play-layer',url,name,kind,loop,volume,asset_id:asset?.id||null});$('audioUrl').value='';$('audioFile').value='';$('audioName').value='';toast(asset?'Áudio salvo na biblioteca e tocando':'Camada tocando');}catch(e){toast(e.message||'Não foi possível tocar o áudio.','error');}});
+  $('enableAudioBtn')?.addEventListener('click',async()=>{try{await unlockAudio();renderDice();toast('Áudio ativado');}catch(e){toast(e.message||'Não foi possível ativar o áudio.','error');}});
+  $('playAudioBtn')?.addEventListener('click',async()=>{try{let url=$('audioUrl').value.trim();const file=$('audioFile').files[0];const kind=$('audioKind').value;let name=$('audioName').value.trim();let storagePath=null;if(file){url=await uploadMedia(file,'audio');storagePath=uploadMedia.lastPath||null;}if(!url)throw new Error('Cole uma URL ou selecione um arquivo.');if(!name)name=file?.name||audioKindLabel(kind);const volume=Number($('audioVolume').value)||0.75;const loop=['music','ambient'].includes(kind);let asset=null;if($('audioSaveLibrary')?.checked)asset=await saveAudioAsset({name,kind,url,volume,loop,storagePath});await unlockAudio();await playAudioLayer({action:'play-layer',url,name,kind,loop,volume,asset_id:asset?.id||null});$('audioUrl').value='';$('audioFile').value='';$('audioName').value='';toast(asset?'Áudio salvo e tocando':'Áudio tocando');}catch(e){toast(e.message||'Não foi possível tocar o áudio.','error');}});
   $('stopAllAudioBtn')?.addEventListener('click',async()=>{await stopAllAudioLayers();toast('Todas as camadas foram interrompidas');});
   $('openAudioLibraryBtn')?.addEventListener('click',openAudioLibraryModal);
-  document.querySelectorAll('.audioLayerEdit').forEach(b=>b.onclick=()=>{const layer=b.closest('.audioLayerRow');const assetId=state.audioLayers.get(layer.dataset.layerId)?.asset_id;if(assetId)openEditAudioAssetModal(assetId);});
+  document.querySelectorAll('.audioLayerEdit').forEach(b=>b.onclick=()=>{const row=b.closest('.audioLayerRow');const layer=state.audioLayers.get(row.dataset.layerId);if(layer?.asset_id)openEditAudioAssetModal(layer.asset_id);});
   document.querySelectorAll('.audioLayerStop').forEach(b=>b.onclick=()=>stopAudioLayer(b.closest('.audioLayerRow').dataset.layerId));
-  document.querySelectorAll('.audioLayerVolume').forEach(b=>b.onchange=()=>setAudioLayerVolume(b.closest('.audioLayerRow').dataset.layerId,b.value));
+  document.querySelectorAll('.audioLayerVolume').forEach(b=>b.oninput=()=>setAudioLayerVolume(b.closest('.audioLayerRow').dataset.layerId,b.value,{broadcast:false}));
 }
 $('modalBackdrop').addEventListener('click',e=>{if(e.target===$('modalBackdrop'))closeModal();});document.addEventListener('click',e=>{if(e.target.closest('[data-close]'))closeModal();});
 
