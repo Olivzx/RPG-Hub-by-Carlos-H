@@ -200,7 +200,7 @@ function openNoCampaignState(){
 async function createCampaign(name,description){
   if(!canCreateCampaign()) throw new Error('Somente contas Mestre podem criar campanhas.');
   const {data,error}=await sb.from('campaigns').insert({owner_id:state.user.id,name,description,system_name:'Sistema próprio',invite_code:Math.random().toString(36).slice(2,10).toUpperCase()}).select().single(); if(error) throw error;
-  const {error:me}=await sb.from('campaign_members').insert({campaign_id:data.id,user_id:state.user.id,role:'owner'}); if(me) throw me;
+  const {error:me}=await sb.from('campaign_members').insert({campaign_id:data.id,campaign_owner_id:state.user.id,user_id:state.user.id,role:'owner'}); if(me) throw me;
   state.campaign=data; await loadCampaigns(); await initializeWorld(); await loadCampaignData(); closeModal();toast('Campanha criada');
 }
 function openCampaignCreate(initial=false){
