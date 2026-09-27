@@ -9,8 +9,8 @@ const colors = ['#9487ff','#6ee7b7','#e8c986','#7dd3fc','#f3a8ca','#fb7185','#f5
 const state = {
   user:null, profile:null, campaigns:[], campaign:null, role:'player', members:[], profiles:new Map(),
   locations:[], floors:[], rooms:[], characters:[], characterFields:[], npcs:[], entities:[], sessions:[], rolls:[], audioAssets:[], audioPlaylists:[], audioPlaylistItems:[],
-  location:null, floor:null, selected:null, view:'table', tool:'move', zoom:100, audioChannel:null, sceneChannel:null, audioPlayers:new Map(), audioLayers:new Map(),
-  audioEnabled:false, presenceChannel:null, online:1, isLoading:true, campaignChronicle:null
+  location:null, floor:null, selected:null, view:'table', tool:'move', zoom:100, campaignChannel:null, sessionChannel:null, audioPlayers:new Map(), audioLayers:new Map(),
+  audioEnabled:false, presenceChannel:null, online:1, isLoading:true, campaignChronicle:null, campaignAudioState:null
 };
 
 function isMaster(){ return state.profile?.account_type === 'master'; }
@@ -83,6 +83,14 @@ async function loadCampaignData(){
   const {data:audioPlaylistItems,error:aie}=audioPlaylists?.length?await sb.from('audio_playlist_items').select('*').in('playlist_id',audioPlaylists.map(p=>p.id)):{data:[],error:null};
   if(aie)throw aie;
   state.audioPlaylistItems=audioPlaylistItems||[];
+  const {data:campaignAudioState,error:campaignAudioStateError}=await sb.from('campaign_audio_state').select('*').eq('campaign_id',campaignId).maybeSingle();
+  if(campaignAudioStateError)throw campaignAudioStateError;
+  state.campaignAudioState=campaignAudioState;
+  if(!state.campaignAudioState && canEdit()){
+    const {data:createdAudioState,error:createAudioStateError}=await sb.from('campaign_audio_state').insert({campaign_id:campaignId,layers:[],updated_by:state.user.id}).select('*').single();
+    if(createAudioStateError)throw createAudioStateError;
+    state.campaignAudioState=createdAudioState;
+  }
   state.campaignChronicle=null;
   if(canEdit()){
     const {data:chronicle,error:chronicleError}=await sb.from('campaign_chronicles').select('*').eq('campaign_id',campaignId).maybeSingle();
@@ -133,34 +141,53 @@ async function loadFloors(){
 function ensureFloor(){ if(!state.floor || !state.floors.some(f=>f.id===state.floor)) state.floor=state.floors[0]?.id||null; }
 
 async function subscribeRealtime(){
-  if(state.audioChannel)await sb.removeChannel(state.audioChannel).catch(()=>{});
-  if(state.sceneChannel)await sb.removeChannel(state.sceneChannel).catch(()=>{});
+  if(state.campaignChannel)await sb.removeChannel(state.campaignChannel).catch(()=>{});
+  if(state.sessionChannel)await sb.removeChannel(state.sessionChannel).catch(()=>{});
   if(state.presenceChannel)await sb.removeChannel(state.presenceChannel).catch(()=>{});
+
+  const campaignId=state.campaign?.id;
+  if(campaignId){
+    const campaign=sb.channel(`rpg-hub-campaign-${campaignId}`,{config:{private:true}});
+    campaign.on('broadcast',{event:'entity_move'},({payload})=>{if(payload?.user_id!==state.user.id)receiveEntityMove(payload);});
+    campaign.on('broadcast',{event:'room_move'},({payload})=>{if(payload?.user_id!==state.user.id)receiveRoomMove(payload);});
+    campaign.on('broadcast',{event:'room_resize'},({payload})=>{if(payload?.user_id!==state.user.id)receiveRoomResize(payload);});
+    campaign.on('broadcast',{event:'room_rotate'},({payload})=>{if(payload?.user_id!==state.user.id)receiveRoomRotate(payload);});
+    campaign.on('broadcast',{event:'scene_change'},({payload})=>{if(payload?.user_id!==state.user.id)receiveSceneChange(payload);});
+    campaign.on('broadcast',{event:'audio'},({payload})=>{if(payload?.user_id!==state.user.id)receiveAudio(payload);});
+    campaign.subscribe((status,err)=>{if(status==='CHANNEL_ERROR'||status==='TIMED_OUT')console.warn('Campanha realtime:',status,err);});
+    state.campaignChannel=campaign;
+  }
+
   const sid=currentSession()?.id;
   if(sid){
-    const channel=sb.channel(`rpg-hub-session-${sid}`,{config:{private:true}});
-    channel.on('broadcast',{event:'dice_roll'},({payload})=>{if(payload?.user_id!==state.user.id)receiveRoll(payload);});
-    channel.on('broadcast',{event:'audio'},({payload})=>{if(payload?.user_id!==state.user.id)receiveAudio(payload);});
-    channel.on('broadcast',{event:'audio_sync_request'},({payload})=>{if(canEdit()&&payload?.user_id!==state.user.id)syncActiveAudioToPlayer(payload.user_id);});
-    channel.on('broadcast',{event:'entity_move'},({payload})=>{if(payload?.user_id!==state.user.id)receiveEntityMove(payload);});
-    channel.on('broadcast',{event:'room_move'},({payload})=>{if(payload?.user_id!==state.user.id)receiveRoomMove(payload);});
-    channel.on('broadcast',{event:'room_resize'},({payload})=>{if(payload?.user_id!==state.user.id)receiveRoomResize(payload);});
-    channel.on('broadcast',{event:'room_rotate'},({payload})=>{if(payload?.user_id!==state.user.id)receiveRoomRotate(payload);});
-    channel.on('postgres_changes',{event:'UPDATE',schema:'public',table:'sessions',filter:`id=eq.${sid}`},payload=>{const row=payload.new;if(!row)return;state.sessions=state.sessions.map(x=>x.id===row.id?row:x);if(row.id===currentSession()?.id && row.active_floor_id!==state.floor && !canEdit())receiveSceneChange({floor_id:row.active_floor_id,room_id:row.active_room_id,room_name:state.rooms.find(r=>r.id===row.active_room_id)?.name});});
-    channel.on('postgres_changes',{event:'UPDATE',schema:'public',table:'world_entities',filter:`campaign_id=eq.${state.campaign.id}`},payload=>{const row=payload.new;if(!row||payload.old?.updated_at===row.updated_at)return;receiveEntityMove({entity_id:row.id,x:row.x,y:row.y,room_id:row.room_id,floor_id:row.floor_id});});
-    channel.on('postgres_changes',{event:'UPDATE',schema:'public',table:'rooms'},payload=>{const row=payload.new;if(row?.id)receiveRoomMove({room_id:row.id,x:row.x,y:row.y});});
-    channel.subscribe((status,err)=>{if(status==='CHANNEL_ERROR'||status==='TIMED_OUT')console.warn('Sessão realtime:',status,err);});
-    state.audioChannel=channel;
-    const scene=sb.channel(`rpg-hub-scene-${sid}`,{config:{private:true}});
-    scene.on('broadcast',{event:'scene_change'},({payload})=>{if(payload?.user_id!==state.user.id)receiveSceneChange(payload);});
-    scene.subscribe((status,err)=>{if(status==='CHANNEL_ERROR'||status==='TIMED_OUT')console.warn('Cena realtime:',status,err);});
-    state.sceneChannel=scene;
+    const session=sb.channel(`rpg-hub-session-${sid}`,{config:{private:true}});
+    session.on('broadcast',{event:'dice_roll'},({payload})=>{if(payload?.user_id!==state.user.id)receiveRoll(payload);});
+    session.on('postgres_changes',{event:'UPDATE',schema:'public',table:'sessions',filter:`id=eq.${sid}`},payload=>{
+      const row=payload.new;if(!row)return;
+      state.sessions=state.sessions.map(x=>x.id===row.id?row:x);
+      if(row.id===currentSession()?.id && row.active_floor_id!==state.floor && !canEdit()){
+        receiveSceneChange({floor_id:row.active_floor_id,room_id:row.active_room_id,room_name:state.rooms.find(r=>r.id===row.active_room_id)?.name});
+      }
+    });
+    session.on('postgres_changes',{event:'UPDATE',schema:'public',table:'world_entities',filter:`campaign_id=eq.${state.campaign.id}`},payload=>{
+      const row=payload.new;
+      if(!row||payload.old?.updated_at===row.updated_at)return;
+      receiveEntityMove({entity_id:row.id,x:row.x,y:row.y,room_id:row.room_id,floor_id:row.floor_id});
+    });
+    session.on('postgres_changes',{event:'UPDATE',schema:'public',table:'rooms'},payload=>{
+      const row=payload.new;
+      if(row?.id)receiveRoomMove({room_id:row.id,x:row.x,y:row.y});
+    });
+    session.subscribe((status,err)=>{if(status==='CHANNEL_ERROR'||status==='TIMED_OUT')console.warn('Sessão realtime:',status,err);});
+    state.sessionChannel=session;
   }
+
   const presence=sb.channel(`rpg-hub-presence-${state.campaign.id}`,{config:{private:true,presence:{key:state.user.id}}});
   presence.on('presence',{event:'sync'},()=>{state.online=Object.keys(presence.presenceState()).length;$('onlineCount').textContent=`${Math.max(1,state.online)} online`;});
   presence.subscribe(async status=>{if(status==='SUBSCRIBED')await presence.track({user_id:state.user.id,display_name:state.profile?.display_name||'Aventureiro'});else if(status==='CHANNEL_ERROR'||status==='TIMED_OUT')console.warn('Presença realtime:',status);});
   state.presenceChannel=presence;
 }
+
 function receiveSceneChange(payload){
   if(!payload)return;
   const floor=state.floors.find(f=>f.id===payload.floor_id);
@@ -183,7 +210,7 @@ function receiveRoomResize(payload){
   state.rooms=state.rooms.map(r=>r.id===payload.room_id?{...r,width:Number(payload.width),height:Number(payload.height)}:r);
   renderTable();
 }
-async function broadcastScene(payload){if(!state.sceneChannel||!canEdit())return;await state.sceneChannel.send({type:"broadcast",event:"scene_change",payload:{...payload,user_id:state.user.id}});}
+async function broadcastScene(payload){if(!state.campaignChannel||!canEdit())return;await state.campaignChannel.send({type:"broadcast",event:"scene_change",payload:{...payload,user_id:state.user.id}});}
 async function setActiveScene(floorId,roomId=null){
   if(!canEdit())return;
   const floor=state.floors.find(f=>f.id===floorId);
@@ -204,11 +231,11 @@ async function setActiveScene(floorId,roomId=null){
   }
   renderAll();
 }
-async function broadcastEntityMove(payload){if(!state.audioChannel||!canEdit())return;await state.audioChannel.send({type:"broadcast",event:"entity_move",payload:{...payload,user_id:state.user.id}});}
-async function broadcastRoomMove(payload){if(!state.audioChannel||!canEdit())return;await state.audioChannel.send({type:"broadcast",event:"room_move",payload:{...payload,user_id:state.user.id}});}
-async function broadcastRoomResize(payload){if(!state.audioChannel||!canEdit())return;await state.audioChannel.send({type:"broadcast",event:"room_resize",payload:{...payload,user_id:state.user.id}});}
+async function broadcastEntityMove(payload){if(!state.campaignChannel||!canEdit())return;await state.campaignChannel.send({type:"broadcast",event:"entity_move",payload:{...payload,user_id:state.user.id}});}
+async function broadcastRoomMove(payload){if(!state.campaignChannel||!canEdit())return;await state.campaignChannel.send({type:"broadcast",event:"room_move",payload:{...payload,user_id:state.user.id}});}
+async function broadcastRoomResize(payload){if(!state.campaignChannel||!canEdit())return;await state.campaignChannel.send({type:"broadcast",event:"room_resize",payload:{...payload,user_id:state.user.id}});}
 function receiveRoomRotate(payload){if(!payload?.room_id)return;state.rooms=state.rooms.map(r=>r.id===payload.room_id?{...r,rotation:Number(payload.rotation)||0}:r);renderTable();}
-async function broadcastRoomRotate(payload){if(!state.audioChannel||!canEdit())return;await state.audioChannel.send({type:"broadcast",event:"room_rotate",payload:{...payload,user_id:state.user.id}});}
+async function broadcastRoomRotate(payload){if(!state.campaignChannel||!canEdit())return;await state.campaignChannel.send({type:"broadcast",event:"room_rotate",payload:{...payload,user_id:state.user.id}});}
 
 function receiveRoll(payload){ state.rolls=[payload,...state.rolls].slice(0,30); renderDiceResult(payload); if(state.view!=='dice') $('rollResult').classList.add('rollPulse'); setTimeout(()=>$('rollResult')?.classList.remove('rollPulse'),280); }
 
@@ -1614,7 +1641,7 @@ async function performRoll(notation,rule='normal'){
   if((rule==='advantage'||rule==='disadvantage')&&count===1&&sides===20){const a=rollOnce(1)[0],b=rollOnce(1)[0];base=[a,b];finalBase=[rule==='advantage'?Math.max(a,b):Math.min(a,b)];appliedRule=rule==='advantage'?'Vantagem (maior)':'Desvantagem (menor)';}else{base=rollOnce(count);finalBase=base;appliedRule='Normal';}
   const final=finalBase.reduce((a,b)=>a+b,0)+modifier;
   const payload={campaign_id:state.campaign.id,session_id:currentSession()?.id||null,roller_user_id:state.user.id,character_id:state.characters.find(c=>c.player_id===state.user.id)?.id||null,notation:notation.trim(),base_results:base,rule_results:{label:appliedRule,selected:finalBase,modifier},final_result:final,created_at:new Date().toISOString()};
-  const {data,error}=await sb.from('dice_rolls').insert(payload).select().single();if(error)throw error;state.rolls=[data,...state.rolls].slice(0,30);renderDiceResult(data);renderDice();await state.audioChannel?.send({type:'broadcast',event:'dice_roll',payload:{...data,user_id:state.user.id}});return data;
+  const {data,error}=await sb.from('dice_rolls').insert(payload).select().single();if(error)throw error;state.rolls=[data,...state.rolls].slice(0,30);renderDiceResult(data);renderDice();await state.sessionChannel?.send({type:'broadcast',event:'dice_roll',payload:{...data,user_id:state.user.id}});return data;
 }
 
 async function profileModal(){
