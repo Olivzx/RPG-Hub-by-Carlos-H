@@ -797,8 +797,8 @@ function audioLayerMarkup(){
 }
 
 function audioPanel(){
-  if(!canEdit())return `<div class="audioCard audioPlayerCard"><div class="audioCardTop"><div><div class="eyebrow">SOM DA SESSÃO</div><h3>Áudio sincronizado</h3><p>O mestre controla música, ambientes e efeitos desta mesa.</p></div></div><button id="enableAudioBtn" class="primarySmall">${state.audioEnabled?'Áudio ativo':'Ativar áudio'}</button><div class="activeAudioLayers">${audioLayerMarkup()}</div></div>`;
-  return `<div class="audioCard audioMixerCard"><div class="audioCardTop"><div><div class="eyebrow">PAINEL DO MESTRE</div><h3>Mixer da mesa</h3><p>Use várias camadas ao mesmo tempo: floresta + música + efeitos, por exemplo.</p></div><span class="audioLayerCount">${state.audioLayers.size} ativa${state.audioLayers.size===1?'':'s'}</span></div><div class="activeAudioLayers">${audioLayerMarkup()}</div><div class="audioForm"><div class="audioFieldRow"><label>Nome do áudio<input id="audioName" maxlength="120" placeholder="Ex.: Floresta à noite"></label><label>Tipo<select id="audioKind"><option value="ambient">Ambiente · contínuo</option><option value="music">Música · loop</option><option value="effect">Efeito · uma vez</option><option value="voice">Voz · uma vez</option><option value="other">Outro</option></select></label></div><input id="audioUrl" placeholder="https://.../audio.mp3"><div class="audioUploadHint">Até <strong>50 MB</strong> no projeto atual. Arquivos grandes usam upload resumível automaticamente.</div><input id="audioFile" type="file" accept="audio/*,.mp3,.wav,.ogg,.oga,.m4a,.aac,.flac,.webm"><div class="audioActions"><label class="audioVolumeField">Volume<input id="audioVolume" type="range" min="0" max="1" step="0.05" value="0.75"></label><label class="audioSaveToggle"><input id="audioSaveLibrary" type="checkbox" checked> Salvar na biblioteca</label><button id="playAudioBtn" class="primarySmall">▶ Tocar camada</button></div></div><div class="audioQuickActions"><button id="openAudioLibraryBtn" class="softButton">Biblioteca & playlists</button><button id="stopAllAudioBtn" class="softButton dangerAudioButton">■ Parar tudo</button></div></div>`;
+  if(!canEdit())return `<div class="audioCard audioPlayerCard"><div class="audioCardTop"><div><div class="eyebrow">SOM DA SESSÃO</div><h3>Áudio sincronizado</h3><p>O mestre controla o som da campanha. Todos os jogadores ouvem as mesmas camadas e recebem as alterações em tempo real.</p></div></div><button id="enableAudioBtn" class="primarySmall">${state.audioEnabled?'Áudio ativo':'Ativar áudio da campanha'}</button><div class="activeAudioLayers">${audioLayerMarkup()}</div></div>`;
+  return `<div class="audioCard audioMixerCard"><div class="audioCardTop"><div><div class="eyebrow">PAINEL DO MESTRE</div><h3>Mixer da mesa</h3><p>Use várias camadas ao mesmo tempo. Música, ambientes e efeitos são transmitidos para todos os jogadores.</p></div><span class="audioLayerCount">${state.audioLayers.size} ativa${state.audioLayers.size===1?'':'s'}</span></div><div class="activeAudioLayers">${audioLayerMarkup()}</div><div class="audioForm"><div class="audioFieldRow"><label>Nome do áudio<input id="audioName" maxlength="120" placeholder="Ex.: Floresta à noite"></label><label>Tipo<select id="audioKind"><option value="ambient">Ambiente · contínuo</option><option value="music">Música · loop</option><option value="effect">Efeito · uma vez</option><option value="voice">Voz · uma vez</option><option value="other">Outro</option></select></label></div><input id="audioUrl" placeholder="https://.../audio.mp3"><div class="audioUploadHint">Até <strong>50 MB</strong> no projeto atual. Arquivos grandes usam upload resumível automaticamente.</div><input id="audioFile" type="file" accept="audio/*,.mp3,.wav,.ogg,.oga,.m4a,.aac,.flac,.webm"><div class="audioActions"><label class="audioVolumeField">Volume<input id="audioVolume" type="range" min="0" max="1" step="0.05" value="0.75"></label><label class="audioSaveToggle"><input id="audioSaveLibrary" type="checkbox" checked> Salvar na biblioteca</label><button id="playAudioBtn" class="primarySmall">▶ Tocar camada</button></div></div><div class="audioQuickActions"><button id="openAudioLibraryBtn" class="softButton">Biblioteca & playlists</button><button id="stopAllAudioBtn" class="softButton dangerAudioButton">■ Parar tudo</button></div></div>`;
 }
 function getAudioStoragePath(asset){
   if(asset?.storage_path)return asset.storage_path;
@@ -871,13 +871,81 @@ async function deleteAudioAsset(id){
 }
 
 function audioPlayerId(){return 'layer_'+Date.now()+'_'+Math.random().toString(36).slice(2,8);}
+function getPersistedAudioLayers(){
+  const raw=state.campaignAudioState?.layers;
+  return Array.isArray(raw)?raw:[];
+}
+function serializeActiveAudioLayers(){
+  return [...state.audioLayers.values()].map(layer=>({
+    layer_id:layer.layerId,
+    url:layer.url,
+    name:layer.name||'Áudio',
+    kind:layer.kind||'other',
+    loop:!!layer.loop,
+    volume:Number(layer.volume??0.75),
+    asset_id:layer.asset_id||null,
+    playlist_id:layer.playlist_id||null,
+    started_at:layer.started_at||new Date().toISOString(),
+    start_offset:Number(layer.start_offset||0)
+  }));
+}
+async function persistAudioStateNow(){
+  if(!canEdit()||!state.campaign)return;
+  const layers=serializeActiveAudioLayers();
+  const {data,error}=await sb.from('campaign_audio_state').upsert({
+    campaign_id:state.campaign.id,
+    layers,
+    updated_by:state.user.id,
+    updated_at:new Date().toISOString()
+  },{onConflict:'campaign_id'}).select('*').single();
+  if(error)throw error;
+  state.campaignAudioState=data;
+}
+function scheduleAudioStatePersist(){
+  if(!canEdit())return;
+  clearTimeout(window.__audioPersistTimer);
+  window.__audioPersistTimer=setTimeout(()=>persistAudioStateNow().catch(e=>console.warn('Falha ao persistir estado do áudio',e)),300);
+}
+function audioElapsed(layer){
+  const started=layer?.started_at?new Date(layer.started_at).getTime():Date.now();
+  const offset=Number(layer?.start_offset||0);
+  return Math.max(0,(Date.now()-started)/1000)+offset;
+}
+async function restoreCampaignAudioState(){
+  if(!state.audioEnabled||!state.campaign)return;
+  const layers=getPersistedAudioLayers();
+  if(!layers.length)return;
+  await Promise.all(layers.map(layer=>{
+    const current=audioElapsed(layer);
+    return playAudioLayer({
+      action:'play-layer',
+      layer_id:layer.layer_id,
+      url:layer.url,
+      name:layer.name,
+      kind:layer.kind,
+      loop:layer.loop,
+      volume:layer.volume,
+      asset_id:layer.asset_id,
+      playlist_id:layer.playlist_id,
+      current_time:current,
+      started_at:layer.started_at,
+      start_offset:layer.start_offset
+    },{broadcast:false,restored:true}).catch(e=>console.warn('Não foi possível restaurar',layer.name,e));
+  }));
+}
 async function unlockAudio(){
   state.audioEnabled=true;
-  try{const silent=new Audio('data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAESsAAABAAgAZGF0YQAAAAA=');silent.muted=true;await silent.play().catch(()=>{});silent.pause();silent.src='';}catch(e){console.warn('Audio unlock failed',e);}
-  try{await requestAudioSync();}catch(e){console.warn('Audio sync request failed',e);}
+  try{
+    const silent=new Audio('data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAESsAAABAAgAZGF0YQAAAAA=');
+    silent.muted=true;
+    await silent.play().catch(()=>{});
+    silent.pause();
+    silent.src='';
+  }catch(e){console.warn('Audio unlock failed',e);}
+  await restoreCampaignAudioState();
+  renderDice();
 }
 
-function audioPlayerId(){return 'layer_'+Date.now()+'_'+Math.random().toString(36).slice(2,8);}
 async function playAudioLayer(payload,opts={}){
   const broadcast=opts.broadcast!==false;
   if(!state.audioEnabled&&!canEdit())return;
@@ -885,27 +953,91 @@ async function playAudioLayer(payload,opts={}){
   if(!payload.url)throw new Error('Este áudio não possui uma URL válida.');
   state.audioEnabled=true;
   if(payload.target_user_id&&payload.target_user_id!==state.user.id)return;
+
   const layerId=payload.layer_id||audioPlayerId();
   const old=state.audioPlayers.get(layerId);
   if(old){try{old.pause();old.currentTime=0;}catch(e){}state.audioPlayers.delete(layerId);state.audioLayers.delete(layerId);}
+
   const audio=new Audio(payload.url);
   audio.preload='auto';
   audio.loop=payload.loop!==undefined?!!payload.loop:['music','ambient'].includes(payload.kind);
   audio.volume=Math.max(0,Math.min(1,Number(payload.volume??0.75)));
-  const layer={...payload,layerId,volume:audio.volume,loop:audio.loop,audio};
+
+  const startedAt=payload.started_at||new Date().toISOString();
+  const currentTime=Number.isFinite(Number(payload.current_time))?Number(payload.current_time):0;
+  const layer={...payload,layerId,volume:audio.volume,loop:audio.loop,audio,started_at:startedAt,start_offset:Number(payload.start_offset??currentTime)};
   state.audioPlayers.set(layerId,audio);
   state.audioLayers.set(layerId,layer);
-  audio.onended=()=>{if(!audio.loop){state.audioPlayers.delete(layerId);state.audioLayers.delete(layerId);renderDice();}};
-  try{if(Number.isFinite(Number(payload.current_time)))audio.addEventListener('loadedmetadata',()=>{try{audio.currentTime=Number(payload.current_time)}catch(e){}},{once:true});await audio.play();if(Number.isFinite(Number(payload.current_time))&&audio.readyState>=1){try{audio.currentTime=Number(payload.current_time)}catch(e){}}}
-  catch(e){state.audioPlayers.delete(layerId);state.audioLayers.delete(layerId);console.warn('Audio playback failed',payload.url,e);throw new Error('Não foi possível reproduzir este áudio. Clique em “Ativar áudio” ou verifique o link/arquivo.');}
+
+  audio.onended=async()=>{
+    if(!audio.loop){
+      state.audioPlayers.delete(layerId);
+      state.audioLayers.delete(layerId);
+      renderDice();
+      if(canEdit()&&broadcast){
+        await persistAudioStateNow().catch(e=>console.warn('Falha ao persistir fim do áudio',e));
+        await broadcastAudio({action:'stop-layer',layer_id:layerId});
+      }
+    }
+  };
+
+  try{
+    if(Number.isFinite(currentTime)){
+      audio.addEventListener('loadedmetadata',()=>{try{audio.currentTime=Math.max(0,currentTime);}catch(e){}},{once:true});
+    }
+    await audio.play();
+    if(Number.isFinite(currentTime)&&audio.readyState>=1){try{audio.currentTime=Math.max(0,currentTime);}catch(e){}}
+  }catch(e){
+    state.audioPlayers.delete(layerId);state.audioLayers.delete(layerId);
+    console.warn('Audio playback failed',payload.url,e);
+    throw new Error('Não foi possível reproduzir este áudio. Em jogadores, use “Ativar áudio da campanha” uma vez; também verifique se o link/arquivo está acessível.');
+  }
+
   renderDice();
-  if(broadcast&&canEdit())await broadcastAudio({...payload,action:'play-layer',layer_id:layerId});
+  if(broadcast&&canEdit()){
+    await persistAudioStateNow();
+    await broadcastAudio({...payload,action:'play-layer',layer_id:layerId,started_at:startedAt,start_offset:Number(payload.start_offset??0),current_time:currentTime});
+  }
   return layerId;
 }
-async function stopAudioLayer(layerId,opts={}){const broadcast=opts.broadcast!==false;const audio=state.audioPlayers.get(layerId);if(audio){try{audio.pause();audio.currentTime=0;}catch(e){}}state.audioPlayers.delete(layerId);state.audioLayers.delete(layerId);renderDice();if(broadcast&&canEdit())await broadcastAudio({action:'stop-layer',layer_id:layerId});}
-async function stopAllAudioLayers(opts={}){const broadcast=opts.broadcast!==false;for(const audio of state.audioPlayers.values()){try{audio.pause();audio.currentTime=0;}catch(e){}}state.audioPlayers.clear();state.audioLayers.clear();renderDice();if(broadcast&&canEdit())await broadcastAudio({action:'stop-all'});}
-async function setAudioLayerVolume(layerId,volume,opts={}){const broadcast=opts.broadcast!==false;const layer=state.audioLayers.get(layerId);if(!layer)return;const v=Math.max(0,Math.min(1,Number(volume)));layer.volume=v;if(layer.audio)layer.audio.volume=v;state.audioLayers.set(layerId,layer);if(broadcast&&canEdit())await broadcastAudio({action:'set-volume',layer_id:layerId,volume:v});}
-async function playPlaylist(id){if(!canEdit())return;const items=state.audioPlaylistItems.filter(i=>i.playlist_id===id&&i.enabled).sort((a,b)=>Number(a.sort_order)-Number(b.sort_order));const bundle=items.map(item=>({item,asset:state.audioAssets.find(a=>a.id===item.audio_asset_id)})).filter(x=>x.asset);if(!bundle.length){toast('Essa playlist não possui áudios ativos.','error');return;}await Promise.all(bundle.map(x=>playAudioLayer({action:'play-layer',layer_id:'pl_'+id+'_'+x.asset.id,url:x.asset.url,name:x.asset.name,kind:x.asset.kind,loop:x.asset.loop,volume:x.item.volume??x.asset.default_volume,asset_id:x.asset.id,playlist_id:id})));toast('Playlist tocando em camadas');}
+
+async function stopAudioLayer(layerId,opts={}){
+  const broadcast=opts.broadcast!==false;
+  const audio=state.audioPlayers.get(layerId);
+  if(audio){try{audio.pause();audio.currentTime=0;}catch(e){}}
+  state.audioPlayers.delete(layerId);state.audioLayers.delete(layerId);
+  renderDice();
+  if(broadcast&&canEdit()){await persistAudioStateNow();await broadcastAudio({action:'stop-layer',layer_id:layerId});}
+}
+
+async function stopAllAudioLayers(opts={}){
+  const broadcast=opts.broadcast!==false;
+  for(const audio of state.audioPlayers.values()){try{audio.pause();audio.currentTime=0;}catch(e){}}
+  state.audioPlayers.clear();state.audioLayers.clear();
+  renderDice();
+  if(broadcast&&canEdit()){await persistAudioStateNow();await broadcastAudio({action:'stop-all'});}
+}
+
+async function setAudioLayerVolume(layerId,volume,opts={}){
+  const broadcast=opts.broadcast!==false;
+  const layer=state.audioLayers.get(layerId);if(!layer)return;
+  const v=Math.max(0,Math.min(1,Number(volume)));layer.volume=v;if(layer.audio)layer.audio.volume=v;state.audioLayers.set(layerId,layer);
+  if(broadcast&&canEdit()){await broadcastAudio({action:'set-volume',layer_id:layerId,volume:v});scheduleAudioStatePersist();}
+}
+
+async function playPlaylist(id){
+  if(!canEdit())return;
+  const items=state.audioPlaylistItems.filter(i=>i.playlist_id===id&&i.enabled).sort((a,b)=>Number(a.sort_order)-Number(b.sort_order));
+  const bundle=items.map(item=>({item,asset:state.audioAssets.find(a=>a.id===item.audio_asset_id)})).filter(x=>x.asset);
+  if(!bundle.length){toast('Essa playlist não possui áudios ativos.','error');return;}
+  await Promise.all(bundle.map(x=>playAudioLayer({action:'play-layer',layer_id:'pl_'+id+'_'+x.asset.id,url:x.asset.url,name:x.asset.name,kind:x.asset.kind,loop:x.asset.loop,volume:x.item.volume??x.asset.default_volume,asset_id:x.asset.id,playlist_id:id})));
+  toast('Playlist transmitida para todos os jogadores');
+}
+
+async function broadcastAudio(payload){
+  if(!state.campaignChannel||!canEdit())return;
+  await state.campaignChannel.send({type:'broadcast',event:'audio',payload:{...payload,user_id:state.user.id,master_id:state.user.id,campaign_id:state.campaign.id}});
+}
 function openAudioLibraryModal(){
   if(!canEdit())return;
   const assets=[...state.audioAssets],playlists=[...state.audioPlaylists];
