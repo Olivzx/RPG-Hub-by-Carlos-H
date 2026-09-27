@@ -13,7 +13,15 @@
   <main class="appShell">
     <aside class="sidebar">
       <a class="sideBrand brand" href="index.html"><span class="brandMark">✦</span><div><b>RPG</b> HUB</div></a>
-      <div class="campaignSwitcher"><div class="eyebrow">CAMPANHA</div><div class="campaignSelectWrap"><select id="campaignSelect"></select><button id="newCampaignBtn" class="iconButton" title="Nova campanha">+</button></div><small id="campaignRole">Carregando…</small></div>
+      <div class="campaignSwitcher">
+  <div class="eyebrow">CAMPANHA</div>
+  <div class="campaignSelectWrap"><select id="campaignSelect"></select><button id="newCampaignBtn" class="iconButton" title="Nova campanha">+</button></div>
+  <div class="campaignAccessRow">
+    <button id="campaignInviteBtn" class="campaignMiniButton masterOnly hidden" title="Código de convite">Convite</button>
+    <button id="joinCampaignBtn" class="campaignMiniButton" title="Entrar com código">Entrar</button>
+  </div>
+  <small id="campaignRole">Carregando…</small>
+</div>
       <nav class="sideNav" id="sideNav">
         <button data-view="table" class="active">◫ <span>Mesa</span></button>
         <button data-view="characters">♙ <span>Personagens</span></button>
