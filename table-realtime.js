@@ -12,6 +12,7 @@
   let channel = null;
   let campaignId = null;
   let refreshTimer = null;
+  let campaignListenerAttached = false;
 
   function currentFloorId() {
     return document.querySelector('#floorSwitch [data-floor].chosen')?.dataset.floor ||
@@ -108,8 +109,10 @@
 
   async function subscribe() {
     const select = $('campaignSelect');
-    campaignId = select?.value || null;
-    if (!campaignId) return;
+    const nextCampaignId = select?.value || null;
+    if (!nextCampaignId) return;
+    if (nextCampaignId === campaignId && channel) return;
+    campaignId = nextCampaignId;
 
     if (channel) await sb.removeChannel(channel).catch(() => {});
     channel = sb.channel(`rpg-hub-table-entities-${campaignId}`, { config: { private: true } });
@@ -143,7 +146,13 @@
 
   function waitForCampaign() {
     const select = $('campaignSelect');
-    if (select?.value) return subscribe();
+    if (select?.value) {
+      if (!campaignListenerAttached) {
+        select.addEventListener('change', subscribe);
+        campaignListenerAttached = true;
+      }
+      return subscribe();
+    }
     setTimeout(waitForCampaign, 150);
   }
 
