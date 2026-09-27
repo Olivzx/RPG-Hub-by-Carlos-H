@@ -350,3 +350,270 @@
   .rollLogIdentity small,.rollLogIdentity span{font-size:8px}
   .masterRollLog>strong{font-size:21px}
 }
+
+
+/* ===== Painel privado do mestre + barra lateral fixa ===== */
+.appShell{
+  display:block;
+  min-height:100vh;
+}
+.sidebar{
+  position:fixed;
+  inset:0 auto 0 0;
+  width:250px;
+  height:100vh;
+  min-height:100vh;
+  overflow-y:auto;
+  overflow-x:hidden;
+  z-index:120;
+}
+.workspace{
+  margin-left:250px;
+  min-height:100vh;
+}
+.masterDashboardTop{
+  margin-top:8px;
+}
+.masterDashboardStatus{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  padding:8px 11px;
+  border:1px solid #292f3a;
+  border-radius:10px;
+  background:#10141a;
+  color:#7f8795;
+  font-size:10px;
+}
+.masterLiveDot{
+  width:7px;
+  height:7px;
+  border-radius:50%;
+  background:var(--green);
+  box-shadow:0 0 12px rgba(99,211,155,.55);
+}
+.masterDashboardGrid{
+  display:grid;
+  grid-template-columns:minmax(0,1.25fr) minmax(360px,.75fr);
+  gap:16px;
+  margin-top:21px;
+}
+.masterDashboardCard{
+  border:1px solid #232832;
+  background:#0d1016;
+  border-radius:17px;
+  padding:18px;
+  min-width:0;
+}
+.masterCardHeader{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:14px;
+  margin-bottom:14px;
+}
+.masterCardHeader h3{
+  margin:7px 0 5px;
+  font-size:17px;
+  line-height:1.3;
+}
+.masterCardHeader p{
+  margin:0;
+  color:#6f7787;
+  font-size:10px;
+  line-height:1.6;
+  max-width:70ch;
+}
+.masterCardBadge{
+  flex:0 0 auto;
+  padding:6px 9px;
+  border:1px solid #39335a;
+  border-radius:999px;
+  background:#17142a;
+  color:#aaa3df;
+  font-size:8px;
+  letter-spacing:.06em;
+}
+.masterRollHistory{
+  display:grid;
+  gap:8px;
+  max-height:520px;
+  overflow:auto;
+  padding-right:4px;
+}
+.masterDashboardRoll{
+  border:1px solid #252b35;
+  border-radius:11px;
+  background:#10141a;
+  padding:12px 13px;
+}
+.masterDashboardRollMain{
+  min-width:0;
+}
+.masterDashboardRollTop{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+}
+.masterDashboardRollTop b{
+  min-width:0;
+  color:#e0e3e9;
+  font-size:12px;
+  line-height:1.35;
+  overflow-wrap:anywhere;
+}
+.masterDashboardRollTop strong{
+  flex:0 0 auto;
+  color:#d7d0ff;
+  font-size:22px;
+  line-height:1;
+}
+.masterDashboardRoll small{
+  display:block;
+  margin-top:4px;
+  color:#8a93a3;
+  font-size:9px;
+  line-height:1.45;
+}
+.masterDashboardRoll span{
+  display:block;
+  margin-top:6px;
+  color:#737d8d;
+  font-size:9px;
+  line-height:1.5;
+  overflow-wrap:anywhere;
+}
+.masterDashboardRoll em{
+  display:block;
+  margin-top:5px;
+  color:#555e6b;
+  font-size:8px;
+  font-style:normal;
+}
+.masterDashboardEmpty{
+  display:grid;
+  place-items:center;
+  min-height:140px;
+  border:1px dashed #2b313c;
+  border-radius:11px;
+  color:#697282;
+  font-size:10px;
+  line-height:1.5;
+  text-align:center;
+  padding:20px;
+}
+.masterAudioDashboardCard .audioCard{
+  border:0;
+  background:transparent;
+  padding:0;
+}
+.masterCharactersDashboardCard{
+  margin-top:16px;
+}
+.masterCharactersGrid{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:8px;
+}
+.masterCharacterMini{
+  display:grid;
+  grid-template-columns:42px minmax(0,1fr) auto;
+  align-items:center;
+  gap:10px;
+  padding:10px;
+  border:1px solid #252b35;
+  border-radius:11px;
+  background:#10141a;
+}
+.masterCharacterAvatar{
+  width:42px;
+  height:42px;
+  display:grid;
+  place-items:center;
+  overflow:hidden;
+  border:1px solid #343a48;
+  border-radius:11px;
+  background:#191d26;
+  color:#b8b0e7;
+  font-size:17px;
+}
+.masterCharacterAvatar img{
+  width:100%;
+  height:100%;
+  object-fit:cover;
+}
+.masterCharacterInfo{
+  min-width:0;
+}
+.masterCharacterInfo>b{
+  display:block;
+  color:#dfe2e8;
+  font-size:11px;
+  line-height:1.35;
+}
+.masterCharacterInfo>small{
+  display:block;
+  margin-top:3px;
+  color:#788190;
+  font-size:8px;
+  line-height:1.4;
+  overflow-wrap:anywhere;
+}
+.masterCharacterInfo>span{
+  display:block;
+  margin-top:4px;
+  color:#626b79;
+  font-size:8px;
+}
+.masterCharacterMini .softButton{
+  min-height:34px;
+  padding:8px 10px;
+  font-size:9px;
+}
+
+@media(max-width:1100px){
+  .sidebar{
+    width:78px;
+  }
+  .workspace{
+    margin-left:78px;
+  }
+  .masterDashboardGrid{
+    grid-template-columns:1fr;
+  }
+  .masterCharactersGrid{
+    grid-template-columns:repeat(2,minmax(0,1fr));
+  }
+}
+@media(max-width:700px){
+  .sidebar{
+    display:none;
+  }
+  .workspace{
+    margin-left:0;
+  }
+  .masterDashboardGrid{
+    grid-template-columns:1fr;
+    gap:13px;
+  }
+  .masterDashboardCard{
+    padding:15px;
+  }
+  .masterDashboardTop{
+    display:block;
+  }
+  .masterDashboardStatus{
+    margin-top:10px;
+  }
+  .masterCharactersGrid{
+    grid-template-columns:1fr;
+  }
+  .masterCharacterMini{
+    grid-template-columns:42px minmax(0,1fr);
+  }
+  .masterCharacterMini .softButton{
+    grid-column:1/-1;
+    width:100%;
+  }
+}
