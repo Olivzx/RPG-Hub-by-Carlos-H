@@ -122,7 +122,7 @@ function receiveRoll(payload){ state.rolls=[payload,...state.rolls].slice(0,30);
 
 function renderAll(){renderShell();renderTable();renderCharacters();renderWorld();renderSessions();renderNpcs();renderDice();renderView();}
 function renderShell(){
-  $('campaignRole').textContent=isMaster()?'Conta mestre · '+(isCampaignMaster()?'Mestre da campanha':state.role==='co_master'?'Co-mestre':'membro'):'Conta jogador · '+(state.role==='player'?'Jogador':state.role); $('masterBadge').classList.toggle('hidden',!isCampaignMaster());
+  $('campaignRole').textContent=isMaster()?'Conta mestre · '+(isCampaignMaster()?'Mestre da campanha':state.role==='co_master'?'Co-mestre':'membro'):'Conta jogador · '+(state.role==='player'?'Jogador':state.role); $('masterBadge').classList.toggle('hidden',!isCampaignMaster()); $('accountTypeLabel').textContent=isMaster()?'Mestre':'Jogador';
   $('workspaceTitle').textContent=state.campaign?.name||'RPG HUB'; $('workspaceSubtitle').textContent=state.campaign?.description||'Campanha persistente'; $('boardLocationName').textContent=currentLocation()?.name||'Sem local'; $('userName').textContent=state.profile?.display_name||state.user?.email?.split('@')[0]||'Aventureiro';
   $('userAvatar').innerHTML=state.profile?.avatar_url?`<img src="${escapeHtml(state.profile.avatar_url)}" alt="">`:'?';
   $('newRoomBtn').disabled=!canEdit(); $('newFloorBtn').disabled=!canEdit(); $('newSessionBtn').disabled=!canEdit(); $('newNpcBtn').disabled=!canEdit(); $('newCharacterBtn').disabled=false;
@@ -324,7 +324,17 @@ async function ensureActiveAudioHandlers(){ const active=currentSession(); if(!a
 // Navigation
 $('sideNav').querySelectorAll('button').forEach(b=>b.onclick=()=>{state.view=b.dataset.view;renderView();if(state.view==='dice'){renderDice();setTimeout(wireAudioControls,0);}});
 $('campaignSelect').onchange=async e=>{const next=state.campaigns.find(c=>c.id===e.target.value);if(!next)return;state.campaign=next;state.floor=null;state.selected=null;await loadCampaignData();};
-$('newCampaignBtn').onclick=()=>{if(!canCreateCampaign()){toast('Mude sua conta para Mestre no perfil para criar campanhas.','error');return;}openCampaignCreate(false);}; $('profileBtn').onclick=profileModal; $('signOutBtn').onclick=async()=>{await sb.auth.signOut();}; $('openSessionsBtn').onclick=()=>{state.view='sessions';renderView();}; $('openDiceBtn').onclick=()=>{state.view='dice';renderView();renderDice();setTimeout(wireAudioControls,0);};
+let accountMenuOpen=false;
+function toggleAccountMenu(force){
+  accountMenuOpen=typeof force==='boolean'?force:!accountMenuOpen;
+  $('accountDropdown').classList.toggle('open',accountMenuOpen);
+  $('profileBtn').setAttribute('aria-expanded',String(accountMenuOpen));
+}
+$('profileBtn').onclick=e=>{e.stopPropagation();toggleAccountMenu();};
+$('profileMenuBtn').onclick=()=>{toggleAccountMenu(false);profileModal();};
+$('signOutBtn').onclick=async()=>{toggleAccountMenu(false);await sb.auth.signOut();};
+document.addEventListener('click',e=>{if(accountMenuOpen&&!e.target.closest('#accountMenu'))toggleAccountMenu(false);});
+$('newCampaignBtn').onclick=()=>{if(!canCreateCampaign()){toast('Mude sua conta para Mestre no perfil para criar campanhas.','error');return;}openCampaignCreate(false);}; $('openSessionsBtn').onclick=()=>{state.view='sessions';renderView();}; $('openDiceBtn').onclick=()=>{state.view='dice';renderView();renderDice();setTimeout(wireAudioControls,0);};
 $('newRoomBtn').onclick=()=>{if(requireMaster())openRoomModal();};
 $('structureBtn').onclick=()=>{state.tool=state.tool==='draw'?'move':'draw';$('structureBtn').classList.toggle('chosen',state.tool==='draw');$('moveBtn').classList.toggle('chosen',state.tool==='move');$('board').classList.toggle('drawing',state.tool==='draw');$('boardHint').textContent=state.tool==='draw'?'Clique e arraste para desenhar um novo cômodo':'Arraste entidades e cômodos para reposicionar';};
 $('moveBtn').onclick=()=>{state.tool='move';$('moveBtn').classList.add('chosen');$('structureBtn').classList.remove('chosen');$('board').classList.remove('drawing');};
