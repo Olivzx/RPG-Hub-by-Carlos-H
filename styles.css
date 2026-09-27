@@ -313,3 +313,40 @@
   .audioActions{grid-template-columns:1fr!important}
   .audioQuickActions{grid-template-columns:1fr}
 }
+
+
+/* ===== Sistema de dados: histórico em 1/3 + áudio abaixo dos dados ===== */
+.diceLayout{display:grid;grid-template-columns:minmax(0,2fr) minmax(320px,1fr);gap:16px;align-items:start;margin-top:21px}
+.diceMainColumn{display:grid;gap:16px;min-width:0}
+.diceHistoryPanel{min-width:0;border:1px solid #232832;background:#0d1016;border-radius:17px;padding:18px;height:100%;max-height:760px;overflow:hidden}
+.diceHistoryHeader{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding-bottom:14px;border-bottom:1px solid #252b35}
+.diceHistoryHeader h3{margin:7px 0 4px;font-size:16px;line-height:1.3}
+.diceHistoryHeader p{margin:0;color:#707989;font-size:10px;line-height:1.5}
+.diceHistoryBadge{flex:0 0 auto;padding:6px 9px;border:1px solid #39335a;border-radius:999px;background:#17142a;color:#aaa3df;font-size:9px}
+.diceHistoryPanel #rollHistory{display:grid;gap:8px;margin-top:14px;max-height:calc(760px - 110px);overflow:auto;padding-right:4px}
+.masterRollLog{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center;padding:12px 13px}
+.rollLogIdentity{min-width:0}
+.rollLogIdentity b{display:block;color:#e0e3e9;font-size:12px;line-height:1.35}
+.rollLogIdentity small{display:block;margin-top:3px;color:#8e97a6;font-size:9px;line-height:1.4}
+.rollLogIdentity span{display:block;margin-top:6px;color:#747e8e;font-size:9px;line-height:1.5;overflow-wrap:anywhere}
+.rollLogIdentity em{display:block;margin-top:5px;color:#565f6d;font-size:8px;font-style:normal}
+.masterRollLog>strong{min-width:44px;text-align:right;color:#d5cffd;font-size:24px;line-height:1}
+.diceHistoryPrivate{min-height:180px;display:grid;place-items:center;align-content:center;gap:6px;padding:24px 18px;border:1px dashed #2a303b;border-radius:12px;text-align:center}
+.diceHistoryPrivate span{font-size:22px}
+.diceHistoryPrivate b{font-size:12px;color:#c7c2e5}
+.diceHistoryPrivate small{max-width:30ch;color:#686f7e;font-size:9px;line-height:1.55}
+@media(max-width:1100px){
+  .diceLayout{grid-template-columns:1fr}
+  .diceHistoryPanel{max-height:520px}
+  .diceHistoryPanel #rollHistory{max-height:390px}
+}
+@media(max-width:700px){
+  .diceLayout{gap:13px}
+  .diceHistoryPanel{padding:15px;border-radius:15px;max-height:480px}
+  .diceHistoryHeader{display:block}
+  .diceHistoryBadge{display:inline-flex;margin-top:8px}
+  .masterRollLog{grid-template-columns:minmax(0,1fr) auto;padding:11px}
+  .rollLogIdentity b{font-size:11px}
+  .rollLogIdentity small,.rollLogIdentity span{font-size:8px}
+  .masterRollLog>strong{font-size:21px}
+}
