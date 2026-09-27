@@ -154,6 +154,7 @@ async function subscribeRealtime(){
     campaign.on('broadcast',{event:'room_rotate'},({payload})=>{if(payload?.user_id!==state.user.id)receiveRoomRotate(payload);});
     campaign.on('broadcast',{event:'scene_change'},({payload})=>{if(payload?.user_id!==state.user.id)receiveSceneChange(payload);});
     campaign.on('broadcast',{event:'audio'},({payload})=>{if(payload?.user_id!==state.user.id)receiveAudio(payload);});
+    campaign.on('postgres_changes',{event:'*',schema:'public',table:'characters',filter:`campaign_id=eq.${campaignId}`},payload=>{receiveCharacterChange(payload);});
     campaign.subscribe((status,err)=>{if(status==='CHANNEL_ERROR'||status==='TIMED_OUT')console.warn('Campanha realtime:',status,err);});
     state.campaignChannel=campaign;
   }
@@ -186,6 +187,36 @@ async function subscribeRealtime(){
   presence.on('presence',{event:'sync'},()=>{state.online=Object.keys(presence.presenceState()).length;$('onlineCount').textContent=`${Math.max(1,state.online)} online`;});
   presence.subscribe(async status=>{if(status==='SUBSCRIBED')await presence.track({user_id:state.user.id,display_name:state.profile?.display_name||'Aventureiro'});else if(status==='CHANNEL_ERROR'||status==='TIMED_OUT')console.warn('Presença realtime:',status);});
   state.presenceChannel=presence;
+}
+
+function receiveCharacterChange(payload){
+  if(!payload)return;
+  const eventType=payload.eventType;
+  const row=payload.new;
+  if(eventType==='INSERT'&&row?.id){
+    if(!state.characters.some(c=>c.id===row.id))state.characters=[...state.characters,row];
+    renderAll();
+    if(row.player_id===state.user.id)toast('Seu personagem foi sincronizado com a campanha');
+    else if(canEdit()){
+      const owner=profileFor(row.player_id)?.display_name||'um jogador';
+      toast(`Novo personagem criado por ${owner} · pronto para colocar na mesa`);
+    }
+    return;
+  }
+  if(eventType==='UPDATE'&&row?.id){
+    state.characters=state.characters.map(c=>c.id===row.id?row:c);
+    state.entities=state.entities.map(e=>e.character_id===row.id?{...e,display_name:row.name||e.display_name}:e);
+    renderAll();
+    return;
+  }
+  if(eventType==='DELETE'){
+    const deletedId=payload.old?.id;
+    if(!deletedId)return;
+    state.characters=state.characters.filter(c=>c.id!==deletedId);
+    state.entities=state.entities.filter(e=>e.character_id!==deletedId);
+    if(state.selected?.type==='entity'&&state.entities.every(e=>e.id!==state.selected.id))state.selected=null;
+    renderAll();
+  }
 }
 
 function receiveSceneChange(payload){
