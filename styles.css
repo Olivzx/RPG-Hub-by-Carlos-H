@@ -229,3 +229,28 @@
   .chronicleFooter span+span{margin-top:5px}
   .chronicleMeta{display:none}
 }
+
+/* ===== Avatares na mesa + troca rápida de andar + cômodos diagonais ===== */
+.tokenAvatar,.entityAvatar{position:relative;display:grid;place-items:center;overflow:hidden;background:#1b2029;border:2px solid var(--token-color,#9487ff);border-radius:50%;color:#c9c1ff}
+.tokenAvatar{width:48px;height:48px;font-size:23px;box-shadow:0 0 0 5px rgba(255,255,255,.025),0 0 28px rgba(139,124,255,.14)}
+.entityAvatar{flex:0 0 auto;border:1px solid #2d3440;background:#181c24;color:#a8afbc}
+.entityAvatarWithImage{width:29px;height:29px}
+.tokenAvatar img,.entityAvatarWithImage img{position:relative;z-index:2;width:100%;height:100%;object-fit:cover}
+.tokenFallback{position:absolute;inset:0;display:grid;place-items:center;z-index:1}
+.tokenAvatar:hover{transform:scale(1.05)}
+.tokenBig.selected .tokenAvatar{box-shadow:0 0 0 6px rgba(148,135,255,.14),0 0 34px rgba(148,135,255,.24)}
+.selectedEmoji{overflow:hidden;padding:0}
+.selectedEmoji .entityAvatar{width:38px;height:38px;border:0;border-radius:10px;background:#27223f;font-size:20px}
+.selectionMoveFloor{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:7px;align-items:end;margin-top:11px;padding-top:10px;border-top:1px solid #292d39}
+.selectionMoveFloor label{display:grid;gap:5px;font-size:8px;color:#686f7d}
+.selectionMoveFloor select{width:100%;padding:8px 9px;border:1px solid #2a303b;border-radius:8px;background:#0a0d12;color:#dfe2e8;font-size:9px}
+.selectionMoveFloor button{min-height:36px;font-size:8px}
+.rotationPresets{display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin:4px 0 2px}
+.rotationPresets span{font-size:7px;color:#626a78;margin-right:2px}
+.rotationPresets button{padding:6px 8px;border:1px solid #292f3a;border-radius:7px;background:#10141a;color:#9891c8;font-size:7px}
+.rotationPresets button:hover{border-color:#4b4276;background:#19162a;color:#d8d2ff}
+@media(max-width:700px){
+  .selectionMoveFloor{grid-template-columns:1fr}
+  .selectionMoveFloor button{width:100%}
+  .rotationPresets{overflow-x:auto;flex-wrap:nowrap;padding-bottom:2px}
+}
