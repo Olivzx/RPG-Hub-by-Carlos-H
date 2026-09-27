@@ -811,7 +811,7 @@ async function seedCharacterFieldsForCampaign(campaignId){
     ['attr_sabedoria','Sabedoria','number','attributes.sabedoria',false,130],
     ['attr_carisma','Carisma','number','attributes.carisma',false,140],
     ['avatar_url','Foto / avatar','url','avatar_url',false,150],
-    ['notes','Ficha complementar','textarea','notes',false,160]
+    ['notes','Ficha complementar','textarea','notes',false,160],
     ['current_items','Itens atuais / equipamentos em uso','textarea','sheet_data.current_items',false,165],
   ];
   const payload=defaults.map(([field_key,label,field_type,data_key,required,sort_order])=>({campaign_id:campaignId,field_key,label,field_type,data_key,required,sort_order}));
