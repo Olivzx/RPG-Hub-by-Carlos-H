@@ -449,12 +449,12 @@ function renderWorld(){
   document.querySelectorAll('[data-edit-location]').forEach(b=>b.onclick=()=>openLocationModal(b.dataset.editLocation));
   document.querySelectorAll('[data-delete-location]').forEach(b=>b.onclick=()=>openDeleteLocationModal(b.dataset.deleteLocation));
   document.querySelectorAll('[data-new-floor]').forEach(b=>b.onclick=()=>openFloorModal(null,b.dataset.newFloor));
-  document.querySelectorAll('[data-edit-floor]').forEach(b=>b.onclick=e=>{e.preventDefault();openFloorModal(b.dataset.editFloor);});
-  document.querySelectorAll('[data-delete-floor]').forEach(b=>b.onclick=e=>{e.preventDefault();openDeleteFloorModal(b.dataset.deleteFloor);});
+  document.querySelectorAll('[data-edit-floor]').forEach(b=>b.onclick=e=>{e.preventDefault();e.stopPropagation();openFloorModal(b.dataset.editFloor);});
+  document.querySelectorAll('[data-delete-floor]').forEach(b=>b.onclick=e=>{e.preventDefault();e.stopPropagation();openDeleteFloorModal(b.dataset.deleteFloor);});
   document.querySelectorAll('[data-new-room-floor]').forEach(b=>b.onclick=()=>openRoomModal(null,b.dataset.newRoomFloor));
   document.querySelectorAll('[data-edit-room-world]').forEach(b=>b.onclick=()=>openRoomModal(b.dataset.editRoomWorld));
   document.querySelectorAll('[data-delete-room-world]').forEach(b=>b.onclick=()=>deleteRoom(b.dataset.deleteRoomWorld));
-  document.querySelectorAll('[data-open-floor]').forEach(b=>b.onclick=()=>{state.floor=b.dataset.openFloor;state.selected=null;state.view='table';renderAll();});
+  document.querySelectorAll('[data-open-floor]').forEach(b=>b.onclick=async e=>{e.preventDefault();e.stopPropagation();const floorId=b.dataset.openFloor;if(canEdit())await setActiveScene(floorId,null);else{state.floor=floorId;state.selected=null;state.view='table';renderAll();}});
 }
 
 function openLocationCreateModal(){
@@ -813,6 +813,7 @@ async function seedCharacterFieldsForCampaign(campaignId){
     ['attr_carisma','Carisma','number','attributes.carisma',false,140],
     ['avatar_url','Foto / avatar','url','avatar_url',false,150],
     ['notes','Ficha complementar','textarea','notes',false,160]
+    ['current_items','Itens atuais / equipamentos em uso','textarea','sheet_data.current_items',false,165],
   ];
   const payload=defaults.map(([field_key,label,field_type,data_key,required,sort_order])=>({campaign_id:campaignId,field_key,label,field_type,data_key,required,sort_order}));
   const {error}=await sb.from('character_field_definitions').insert(payload);
