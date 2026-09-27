@@ -343,6 +343,82 @@
     document.head.appendChild(style);
   }
 
+
+  let playerAudioResumeBound = false;
+  let playerAudioResumeTimer = null;
+
+  async function syncPlayerAudioNow(forceUnlock) {
+    if (typeof canEdit === 'function' && canEdit()) return;
+    if (!state.campaign) return;
+
+    state.audioEnabled = true;
+    if (typeof renderDice === 'function') renderDice();
+
+    try {
+      if (forceUnlock && typeof unlockAudio === 'function') {
+        await unlockAudio();
+      } else if (typeof restoreCampaignAudioState === 'function') {
+        await restoreCampaignAudioState();
+      }
+      if (typeof renderDice === 'function') renderDice();
+    } catch (error) {
+      console.warn('RPG HUB audio resume:', error);
+    }
+  }
+
+  function bindPlayerAudioResume() {
+    if (playerAudioResumeBound) return;
+    playerAudioResumeBound = true;
+
+    const resume = async function () {
+      document.removeEventListener('pointerdown', resume, true);
+      document.removeEventListener('touchstart', resume, true);
+      document.removeEventListener('keydown', resume, true);
+      document.removeEventListener('click', resume, true);
+      await syncPlayerAudioNow(true);
+    };
+
+    document.addEventListener('pointerdown', resume, true);
+    document.addEventListener('touchstart', resume, true);
+    document.addEventListener('keydown', resume, true);
+    document.addEventListener('click', resume, true);
+  }
+
+  function schedulePlayerAudioSync(delay) {
+    clearTimeout(playerAudioResumeTimer);
+    playerAudioResumeTimer = setTimeout(function () {
+      syncPlayerAudioNow(false);
+    }, delay || 150);
+  }
+
+  function makePlayerAudioUiActive() {
+    const button = $('enableAudioBtn');
+    if (!button || canEdit()) return;
+    button.textContent = 'Áudio sincronizado';
+    button.classList.add('audioReady');
+    button.setAttribute('aria-label', 'Áudio da campanha sincronizado automaticamente');
+  }
+
+  function initPlayerAudioSync() {
+    if (!state || canEdit()) return;
+
+    // O navegador pode bloquear autoplay, mas a campanha já fica armada:
+    // quando permitido, o áudio começa imediatamente; caso contrário,
+    // a primeira interação do jogador destrava e restaura o ponto atual.
+    state.audioEnabled = true;
+    makePlayerAudioUiActive();
+    schedulePlayerAudioSync(0);
+    bindPlayerAudioResume();
+
+    document.addEventListener('visibilitychange', function () {
+      if (!document.hidden) schedulePlayerAudioSync(0);
+    });
+
+    window.addEventListener('focus', function () {
+      schedulePlayerAudioSync(0);
+    });
+  }
+
   function init() {
     if (!window.rpgSupabase || typeof state === 'undefined') {
       roomChannelState.poll = setTimeout(init, 250);
@@ -358,12 +434,15 @@
       campaignSelect.addEventListener('change', function () {
         setTimeout(subscribeTableRealtime, 500);
         setTimeout(enhanceCharacterCards, 700);
+        setTimeout(initPlayerAudioSync, 900);
       });
     }
 
     enhanceCharacterCards();
     setTimeout(enhanceCharacterCards, 500);
     setTimeout(enhanceCharacterCards, 1200);
+    setTimeout(initPlayerAudioSync, 100);
+    setTimeout(makePlayerAudioUiActive, 700);
   }
 
   window.addEventListener('load', init);
