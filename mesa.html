@@ -22,7 +22,20 @@
         <button data-view="npcs">♜ <span>NPCs & monstros</span></button>
         <button data-view="dice">⚄ <span>Dados</span></button>
       </nav>
-      <div class="sideBottom"><button id="profileBtn" class="userPill"><div id="userAvatar" class="avatar">?</div><span id="userName">Usuário</span><span>⌄</span></button><button id="signOutBtn" class="logoutButton">Sair</button></div>
+      <div class="sideBottom">
+  <div class="accountMenu" id="accountMenu">
+    <button id="profileBtn" class="userPill" aria-haspopup="menu" aria-expanded="false">
+      <div id="userAvatar" class="avatar">?</div>
+      <span id="userName">Usuário</span>
+      <span class="accountChevron">⌄</span>
+    </button>
+    <div class="accountDropdown" id="accountDropdown" role="menu">
+      <div class="accountDropdownHead"><span class="eyebrow">CONTA</span><b id="accountTypeLabel">Jogador</b></div>
+      <button id="profileMenuBtn" class="accountAction" role="menuitem"><span>◉</span><span>Editar perfil</span><i>›</i></button>
+      <button id="signOutBtn" class="accountAction danger" role="menuitem"><span>↪</span><span>Sair da conta</span><i>›</i></button>
+    </div>
+  </div>
+</div>
     </aside>
 
     <section class="workspace">
