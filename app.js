@@ -8,7 +8,7 @@ const colors = ['#9487ff','#6ee7b7','#e8c986','#7dd3fc','#f3a8ca','#fb7185','#f5
 
 const state = {
   user:null, profile:null, campaigns:[], campaign:null, role:'player', members:[], profiles:new Map(),
-  locations:[], floors:[], rooms:[], characters:[], npcs:[], entities:[], sessions:[], rolls:[],
+  locations:[], floors:[], rooms:[], characters:[], characterFields:[], npcs:[], entities:[], sessions:[], rolls:[],
   location:null, floor:null, selected:null, view:'table', tool:'move', zoom:100, audioChannel:null, audio:null,
   audioEnabled:false, presenceChannel:null, online:1, isLoading:true
 };
@@ -65,17 +65,18 @@ async function loadCampaigns(){
 async function loadCampaignData(){
   if(!state.campaign)return;
   const campaignId=state.campaign.id;
-  const [{data:members,error:me},{data:locations,error:le},{data:characters,error:ce},{data:npcs,error:ne},{data:entities,error:ee},{data:sessions,error:se},{data:rolls,error:re}]=await Promise.all([
+  const [{data:members,error:me},{data:locations,error:le},{data:characters,error:ce},{data:characterFields,error:cfe},{data:npcs,error:ne},{data:entities,error:ee},{data:sessions,error:se},{data:rolls,error:re}]=await Promise.all([
     sb.from('campaign_members').select('*').eq('campaign_id',campaignId),
     sb.from('locations').select('*').eq('campaign_id',campaignId).order('sort_order'),
     sb.from('characters').select('*').eq('campaign_id',campaignId).order('name'),
+    sb.from('character_field_definitions').select('*').eq('campaign_id',campaignId).order('sort_order'),
     sb.from('npcs').select('*').eq('campaign_id',campaignId).order('name'),
     sb.from('world_entities').select('*').eq('campaign_id',campaignId).order('created_at'),
     sb.from('sessions').select('*').eq('campaign_id',campaignId).order('session_number',{ascending:false}),
     sb.from('dice_rolls').select('*').eq('campaign_id',campaignId).order('created_at',{ascending:false}).limit(30)
   ]);
   if(me||le||ce||ne||ee||se||re) throw (me||le||ce||ne||ee||se||re);
-  state.members=members||[]; state.locations=locations||[]; state.characters=characters||[]; state.npcs=npcs||[]; state.entities=entities||[]; state.sessions=sessions||[]; state.rolls=rolls||[];
+  state.members=members||[]; state.locations=locations||[]; state.characters=characters||[]; state.characterFields=characterFields||[]; state.npcs=npcs||[]; state.entities=entities||[]; state.sessions=sessions||[]; state.rolls=rolls||[];
   const mine=state.members.find(m=>m.user_id===state.user.id); state.role=state.campaign.owner_id===state.user.id?'owner':(mine?.role||'player');
   state.profiles=new Map();
   const ids=[...new Set(state.members.map(m=>m.user_id).filter(Boolean))];
@@ -286,9 +287,18 @@ function startRoomResize(e,el){
 function applyZoom(){ $('board').style.setProperty('--board-zoom',String(state.zoom/100));$('zoomValue').textContent=state.zoom+'%'; }
 
 function renderCharacters(){
-  const grid=$('charactersGrid'); if(!state.characters.length){grid.innerHTML='<div class="emptyPanel">Ainda não existem personagens nesta campanha.<br><span>O primeiro personagem pode ser criado agora.</span></div>';return;}
-  grid.innerHTML=state.characters.map(c=>{const p=profileFor(c.player_id);const avatar=c.avatar_url||p?.avatar_url;return `<article class="dataCard"><div class="cardAvatar">${avatar?`<img src="${escapeHtml(avatar)}" alt="">`:'♙'}</div><div class="dataCardMain"><div class="cardKicker">NÍVEL ${c.level??0}</div><h3>${escapeHtml(c.name)}</h3><p>${escapeHtml(c.ancestry_name||'—')} · ${escapeHtml(c.class_name||'Classe não definida')}</p><div class="miniStats"><span>HP <b>${c.hp_current??'—'}/${c.hp_max??'—'}</b></span><span>CA <b>${c.armor_class??'—'}</b></span><span>SORTE <b>${c.luck??0}</b></span></div><small class="playerLine">Jogador: ${escapeHtml(p?.display_name || (c.player_id===state.user.id?'Você':'ID '+String(c.player_id||'—').slice(0,8)))}</small></div><div class="cardActions"><button data-edit-character="${c.id}">Abrir ficha</button>${canEdit()?`<button class="softButton" data-add-char="${c.id}">${state.entities.some(e=>e.character_id===c.id)?'Na mesa':'Colocar na mesa'}</button>`:''}</div></article>`;}).join('');
-  document.querySelectorAll('[data-edit-character]').forEach(b=>b.onclick=()=>openCharacterModal(b.dataset.editCharacter)); document.querySelectorAll('[data-add-char]').forEach(b=>b.onclick=()=>addCharacterToBoard(b.dataset.addChar));
+  const grid=$('charactersGrid');
+  $('characterFieldsBtn')?.classList.toggle('hidden',!canEdit());
+  if(!state.characters.length){
+    grid.innerHTML='<div class="emptyPanel">Ainda não existem personagens nesta campanha.<br><span>O primeiro personagem pode ser criado agora.</span></div>';
+    return;
+  }
+  grid.innerHTML=state.characters.map(c=>{
+    const p=profileFor(c.player_id), avatar=c.avatar_url||p?.avatar_url;
+    return `<article class="dataCard"><div class="cardAvatar">${avatar?`<img src="${escapeHtml(avatar)}" alt="">`:'♙'}</div><div class="dataCardMain"><div class="cardKicker">${c.level!=null?'NÍVEL '+escapeHtml(c.level):'PERSONAGEM'}</div><h3>${escapeHtml(c.name)}</h3><p>${escapeHtml(c.class_name||'—')} · ${escapeHtml(c.ancestry_name||'Sem origem definida')}</p><div class="miniStats"><span>HP <b>${c.hp_current??'—'}/${c.hp_max??'—'}</b></span><span>DEFESA <b>${c.armor_class??'—'}</b></span><span>SORTE <b>${c.luck??0}</b></span></div><small class="playerLine">Jogador: ${escapeHtml(p?.display_name || (c.player_id===state.user.id?'Você':'Jogador'))}</small></div><div class="cardActions"><button data-edit-character="${c.id}">Abrir ficha</button>${canEdit()?`<button class="softButton" data-add-char="${c.id}">${state.entities.some(e=>e.character_id===c.id)?'Na mesa':'Colocar na mesa'}</button>`:''}</div></article>`;
+  }).join('');
+  document.querySelectorAll('[data-edit-character]').forEach(b=>b.onclick=()=>openCharacterModal(b.dataset.editCharacter));
+  document.querySelectorAll('[data-add-char]').forEach(b=>b.onclick=()=>addCharacterToBoard(b.dataset.addChar));
 }
 
 function renderWorld(){
@@ -420,26 +430,116 @@ function openRoomModal(id){
 }
 async function deleteRoom(id){if(!requireMaster())return; if(!confirm('Excluir este cômodo? Entidades vinculadas serão mantidas, mas sem o cômodo.'))return;const {error}=await sb.from('rooms').delete().eq('id',id);if(error){toast(error.message,'error');return;}state.rooms=state.rooms.filter(r=>r.id!==id);state.selected=null;renderAll();toast('Cômodo excluído');}
 
-function openCharacterModal(id){
-  const existing=id?state.characters.find(x=>x.id===id):null; if(existing && !canEdit() && existing.player_id!==state.user.id){toast('Você só pode editar sua própria ficha.','error');return;}
-  const c=existing||{name:'',class_name:'',ancestry_name:'',level:1,hp_current:'',hp_max:'',armor_class:'',luck:0,luck_points:0,notes:'',attributes:{},sheet_data:{},avatar_url:''}; const self=state.user.id; const members=state.members;
-  const memberOptions=members.map(m=>{const p=profileFor(m.user_id);return `<option value="${m.user_id}" ${(c.player_id||self)===m.user_id?'selected':''}>${escapeHtml(p?.display_name || (m.user_id===self?'Você':'Jogador '+m.user_id.slice(0,8)))}</option>`}).join('');
-  showModal(`<div class="modalHeader"><div><div class="eyebrow">FICHA TÉCNICA</div><h3>${existing?'Editar personagem':'Novo personagem'}</h3></div><button class="closeButton" data-close>×</button></div><div class="formGrid"><label>Nome<input id="charName" value="${escapeHtml(c.name)}"></label><label>Classe<input id="charClass" value="${escapeHtml(c.class_name||'')}"></label><label>Ancestralidade<input id="charAncestry" value="${escapeHtml(c.ancestry_name||'')}"></label><label>Nível<input id="charLevel" type="number" min="0" value="${c.level??1}"></label><label>HP atual<input id="charHp" type="number" min="0" value="${c.hp_current??''}"></label><label>HP máximo<input id="charHpMax" type="number" min="0" value="${c.hp_max??''}"></label><label>CA<input id="charAc" type="number" min="0" value="${c.armor_class??''}"></label><label>Sorte<input id="charLuck" type="number" value="${c.luck??0}"></label><label>Pontos de sorte<input id="charLuckPoints" type="number" value="${c.luck_points??0}"></label><label>Jogador<select id="charPlayer" ${canEdit()?'':'disabled'}>${memberOptions}</select></label></div><label>URL ou avatar da ficha<input id="charAvatar" value="${escapeHtml(c.avatar_url||'')}" placeholder="https://.../imagem.webp"></label><label>Foto do personagem<input id="charAvatarFile" type="file" accept="image/*"></label><div class="attributeBlock"><div class="attributeTitle"><span>Atributos</span><small>Informe apenas os valores numéricos.</small></div><div class="attributeGrid">
-<label class="attributeField"><span>Força</span><input id="attrForca" type="number" min="0" max="30" value="${Number(c.attributes?.forca ?? c.attributes?.strength ?? 0)}"></label>
-<label class="attributeField"><span>Destreza</span><input id="attrDestreza" type="number" min="0" max="30" value="${Number(c.attributes?.destreza ?? c.attributes?.dexterity ?? 0)}"></label>
-<label class="attributeField"><span>Constituição</span><input id="attrConstituicao" type="number" min="0" max="30" value="${Number(c.attributes?.constituicao ?? c.attributes?.constitution ?? 0)}"></label>
-<label class="attributeField"><span>Inteligência</span><input id="attrInteligencia" type="number" min="0" max="30" value="${Number(c.attributes?.inteligencia ?? c.attributes?.intelligence ?? 0)}"></label>
-<label class="attributeField"><span>Sabedoria</span><input id="attrSabedoria" type="number" min="0" max="30" value="${Number(c.attributes?.sabedoria ?? c.attributes?.wisdom ?? 0)}"></label>
-<label class="attributeField"><span>Carisma</span><input id="attrCarisma" type="number" min="0" max="30" value="${Number(c.attributes?.carisma ?? c.attributes?.charisma ?? 0)}"></label>
-</div></div><label>Ficha técnica / habilidades / equipamentos / notas<textarea id="charSheet" rows="8">${escapeHtml(c.notes||'')}</textarea></label><div class="modalActions"><button class="softButton" data-close>Cancelar</button><button id="saveCharacter" class="primarySmall">Salvar ficha</button></div>`);
-  $('saveCharacter').onclick=async()=>{try{const payload={campaign_id:state.campaign.id,player_id:$('charPlayer').value||self,name:$('charName').value.trim(),class_name:$('charClass').value.trim(),ancestry_name:$('charAncestry').value.trim(),level:Number($('charLevel').value)||0,hp_current:$('charHp').value===''?null:Number($('charHp').value),hp_max:$('charHpMax').value===''?null:Number($('charHpMax').value),armor_class:$('charAc').value===''?null:Number($('charAc').value),luck:Number($('charLuck').value)||0,luck_points:Number($('charLuckPoints').value)||0,avatar_url:$('charAvatar').value.trim()||null,notes:$('charSheet').value.trim()};payload.attributes={
-  forca:Number($('attrForca').value)||0,
-  destreza:Number($('attrDestreza').value)||0,
-  constituicao:Number($('attrConstituicao').value)||0,
-  inteligencia:Number($('attrInteligencia').value)||0,
-  sabedoria:Number($('attrSabedoria').value)||0,
-  carisma:Number($('attrCarisma').value)||0
-};if(!payload.name)throw new Error('Informe o nome do personagem.');if(canEdit()){if(existing?.id){payload.player_id=$('charPlayer').value||null;}}else{payload.player_id=self;}if(existing){const {data,error}=await sb.from('characters').update(payload).eq('id',existing.id).select().single();if(error)throw error;state.characters=state.characters.map(x=>x.id===existing.id?data:x);}else{const {data,error}=await sb.from('characters').insert(payload).select().single();if(error)throw error;state.characters.push(data);}const file=$('charAvatarFile').files[0];if(file){payload.avatar_url=await uploadMedia(file,`characters/${uid()}`);const targetId=existing?.id||state.characters.at(-1).id;const {data,error}=await sb.from('characters').update({avatar_url:payload.avatar_url}).eq('id',targetId).select().single();if(error)throw error;state.characters=state.characters.map(x=>x.id===targetId?data:x);}closeModal();renderAll();toast('Ficha salva');}catch(e){toast(e.message,'error');}};
+function normalizeFieldKey(label){
+  return String(label||'campo').toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'').slice(0,48)||'campo';
+}
+function fieldValueFromCharacter(character,field){
+  const path=String(field.data_key||'').split('.');
+  if(path.length===1)return character?.[path[0]];
+  return character?.[path[0]]?.[path[1]];
+}
+function setFieldValue(payload,field,value){
+  const path=String(field.data_key||'').split('.');
+  if(path.length===1){payload[path[0]]=value;return;}
+  if(!payload[path[0]]||typeof payload[path[0]]!=='object')payload[path[0]]={};
+  payload[path[0]][path[1]]=value;
+}
+function fieldInputHtml(field,character,isMasterEditor){
+  const raw=fieldValueFromCharacter(character,field);
+  const value=raw===null||raw===undefined?'':raw;
+  const disabled=(!isMasterEditor && !field.player_editable)?'disabled':'';
+  const required=field.required?'required':'';
+  const req=field.required?'<span class="requiredMark">*</span>':'';
+  const id='field_'+field.id;
+  const options=Array.isArray(field.options)?field.options:[];
+  if(field.data_key==='avatar_url'){
+    return `<label class="dynamicField">${escapeHtml(field.label)} ${req}<input id="${id}" data-field-id="${field.id}" data-data-key="${escapeHtml(field.data_key)}" data-type="url" value="${escapeHtml(value)}" placeholder="https://.../imagem.webp" ${disabled} ${required}><input id="${id}_file" class="dynamicFile" type="file" accept="image/*" ${disabled}><small>URL ou envio de arquivo</small></label>`;
+  }
+  if(field.field_type==='textarea'){
+    return `<label class="dynamicField">${escapeHtml(field.label)} ${req}<textarea id="${id}" data-field-id="${field.id}" data-data-key="${escapeHtml(field.data_key)}" data-type="textarea" rows="6" ${disabled} ${required}>${escapeHtml(value)}</textarea>${disabled?'<small>Somente o mestre</small>':''}</label>`;
+  }
+  if(field.field_type==='number'){
+    return `<label class="dynamicField">${escapeHtml(field.label)} ${req}<input id="${id}" data-field-id="${field.id}" data-data-key="${escapeHtml(field.data_key)}" data-type="number" type="number" value="${escapeHtml(value)}" ${disabled} ${required}>${disabled?'<small>Somente o mestre</small>':''}</label>`;
+  }
+  if(field.field_type==='select'){
+    return `<label class="dynamicField">${escapeHtml(field.label)} ${req}<select id="${id}" data-field-id="${field.id}" data-data-key="${escapeHtml(field.data_key)}" data-type="select" ${disabled} ${required}><option value="">Selecione</option>${options.map(o=>`<option value="${escapeHtml(o)}" ${String(value)===String(o)?'selected':''}>${escapeHtml(o)}</option>`).join('')}</select>${disabled?'<small>Somente o mestre</small>':''}</label>`;
+  }
+  if(field.field_type==='checkbox'){
+    return `<label class="dynamicCheck"><input id="${id}" data-field-id="${field.id}" data-data-key="${escapeHtml(field.data_key)}" data-type="checkbox" type="checkbox" ${value?'checked':''} ${disabled}> <span>${escapeHtml(field.label)}</span>${field.required?'<span class="requiredMark">*</span>':''}</label>`;
+  }
+  return `<label class="dynamicField">${escapeHtml(field.label)} ${req}<input id="${id}" data-field-id="${field.id}" data-data-key="${escapeHtml(field.data_key)}" data-type="${field.field_type||'text'}" value="${escapeHtml(value)}" ${disabled} ${required}>${disabled?'<small>Somente o mestre</small>':''}</label>`;
+}
+function getDynamicFieldDefinitions(isMasterEditor){
+  return (state.characterFields||[]).filter(f=>f.enabled && (isMasterEditor || f.player_visible)).sort((a,b)=>Number(a.sort_order)-Number(b.sort_order));
+}
+function buildCharacterPayloadFromFields(formRoot){
+  const payload={campaign_id:state.campaign.id,attributes:{},sheet_data:{}};
+  formRoot.querySelectorAll('[data-field-id]').forEach(el=>{
+    const type=el.dataset.type;
+    let value;
+    if(type==='checkbox')value=el.checked;
+    else if(type==='number')value=el.value===''?null:Number(el.value);
+    else value=el.value;
+    const field=state.characterFields.find(f=>String(f.id)===String(el.dataset.fieldId));
+    if(field)setFieldValue(payload,field,value);
+  });
+  return payload;
+}
+async function openCharacterModal(id){
+  const existing=id?state.characters.find(x=>x.id===id):null;
+  if(existing && !canEdit() && existing.player_id!==state.user.id){toast('Você só pode editar sua própria ficha.','error');return;}
+  const isMasterEditor=canEdit();
+  const c=existing||{name:'',class_name:'',ancestry_name:'',level:1,hp_current:'',hp_max:'',armor_class:'',luck:0,luck_points:0,notes:'',attributes:{},sheet_data:{},avatar_url:''};
+  const defs=getDynamicFieldDefinitions(isMasterEditor);
+  const visibleFields=defs.length?defs:[{id:'fallback_name',label:'Nome do personagem',field_type:'text',data_key:'name',enabled:true,player_visible:true,player_editable:true,required:true,sort_order:0}];
+  const memberOptions=state.members.map(m=>{const p=profileFor(m.user_id);return `<option value="${m.user_id}" ${(c.player_id||state.user.id)===m.user_id?'selected':''}>${escapeHtml(p?.display_name||(m.user_id===state.user.id?'Você':'Jogador'))}</option>`;}).join('');
+  const fieldsHtml=visibleFields.map(f=>fieldInputHtml(f,c,isMasterEditor)).join('');
+  const playerFieldNote=isMasterEditor?'Você está visualizando a ficha como mestre. Campos podem ser exibidos ou limitados aos jogadores na configuração.':'Preencha somente os campos liberados pelo mestre desta campanha.';
+  showModal(`<div class="modalHeader"><div><div class="eyebrow">FICHA DA CAMPANHA</div><h3>${existing?'Editar personagem':'Novo personagem'}</h3></div><button class="closeButton" data-close>×</button></div>
+    <p class="modalHint">${playerFieldNote}</p>
+    ${isMasterEditor?`<div class="characterAssign"><label>Jogador responsável<select id="charPlayer">${memberOptions}</select></label></div>`:''}
+    <div id="dynamicCharacterFields" class="dynamicCharacterFields">${fieldsHtml}</div>
+    <div class="modalActions"><button class="softButton" data-close>Cancelar</button><button id="saveCharacter" class="primarySmall">Salvar ficha</button></div>`);
+  $('saveCharacter').onclick=async()=>{
+    try{
+      const payload=buildCharacterPayloadFromFields($('dynamicCharacterFields'));
+      payload.id=undefined;
+      payload.campaign_id=state.campaign.id;
+      if(isMasterEditor){payload.player_id=$('charPlayer')?.value||null;}else{payload.player_id=state.user.id;}
+      const name=payload.name?.trim?.()||'';
+      if(!name){toast('O nome do personagem é obrigatório.','error');return;}
+      const defsForValidation=getDynamicFieldDefinitions(isMasterEditor);
+      for(const f of defsForValidation){
+        if(!f.required||(!isMasterEditor&&!f.player_editable)||!f.enabled)continue;
+        const v=fieldValueFromCharacter(payload,f);
+        if(v===null||v===undefined||v===''||(f.field_type==='checkbox'&&v!==true)){toast('Preencha o campo obrigatório: '+f.label,'error');return;}
+      }
+      if(!payload.attributes)payload.attributes={};
+      if(!payload.sheet_data)payload.sheet_data={};
+      if(existing){
+        const updatePayload={...payload};delete updatePayload.id;
+        const {data,error}=await sb.from('characters').update(updatePayload).eq('id',existing.id).select().single();
+        if(error)throw error;
+        state.characters=state.characters.map(x=>x.id===existing.id?data:x);
+      }else{
+        const {data,error}=await sb.from('characters').insert(payload).select().single();
+        if(error)throw error;
+        state.characters.push(data);
+      }
+      const fileIds=visibleFields.filter(f=>f.data_key==='avatar_url').map(f=>f.id);
+      for(const fieldId of fileIds){
+        const file=$( 'field_'+fieldId+'_file')?.files?.[0];
+        if(file){
+          const avatar=await uploadMedia(file,'characters/'+(existing?.id||uid()));
+          const targetId=existing?.id||state.characters.at(-1).id;
+          const {data,error}=await sb.from('characters').update({avatar_url:avatar}).eq('id',targetId).select().single();
+          if(error)throw error;
+          state.characters=state.characters.map(x=>x.id===targetId?data:x);
+        }
+      }
+      closeModal();renderAll();toast('Ficha salva');
+    }catch(e){toast(e.message||'Não foi possível salvar a ficha.','error');}
+  };
 }
 
 async function openLocationModal(id){const l=state.locations.find(x=>x.id===id);if(!l)return;showModal(`<div class="modalHeader"><div><div class="eyebrow">LOCAL</div><h3>Editar local</h3></div><button class="closeButton" data-close>×</button></div><label>Nome<input id="locName" value="${escapeHtml(l.name)}"></label><label>Descrição<textarea id="locDesc" rows="4">${escapeHtml(l.description||'')}</textarea></label><div class="modalActions"><button class="softButton" data-close>Cancelar</button><button id="saveLocation" class="primarySmall">Salvar</button></div>`);$('saveLocation').onclick=async()=>{if(!requireMaster())return;const {data,error}=await sb.from('locations').update({name:$('locName').value.trim(),description:$('locDesc').value.trim()}).eq('id',id).select().single();if(error){toast(error.message,'error');return;}state.locations=state.locations.map(x=>x.id===id?data:x);closeModal();renderAll();toast('Local atualizado');};}
