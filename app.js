@@ -9,7 +9,7 @@ const colors = ['#9487ff','#6ee7b7','#e8c986','#7dd3fc','#f3a8ca','#fb7185','#f5
 const state = {
   user:null, profile:null, campaigns:[], campaign:null, role:'player', members:[], profiles:new Map(),
   locations:[], floors:[], rooms:[], characters:[], characterFields:[], npcs:[], entities:[], sessions:[], rolls:[], audioAssets:[], audioPlaylists:[], audioPlaylistItems:[],
-  location:null, floor:null, selected:null, view:'table', tool:'move', zoom:100, audioChannel:null, audio:null,
+  location:null, floor:null, selected:null, view:'table', tool:'move', zoom:100, audioChannel:null, audioPlayers:new Map(), audioLayers:new Map(),
   audioEnabled:false, presenceChannel:null, online:1, isLoading:true
 };
 
