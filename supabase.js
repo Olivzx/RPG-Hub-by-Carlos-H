@@ -9,13 +9,4 @@
   window.rpgSupabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
     auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
   });
-
-  // Realtime da mesa: carrega somente na página que possui a camada de tokens.
-  window.addEventListener('DOMContentLoaded', () => {
-    if (!document.getElementById('tokenLayer')) return;
-    const script = document.createElement('script');
-    script.src = 'table-realtime.js?v=20260927';
-    script.async = true;
-    document.body.appendChild(script);
-  });
 })();
