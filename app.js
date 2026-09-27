@@ -133,6 +133,9 @@ async function subscribeRealtime(){
     channel.on('broadcast',{event:'entity_move'},({payload})=>{if(payload?.user_id!==state.user.id)receiveEntityMove(payload);});
     channel.on('broadcast',{event:'room_move'},({payload})=>{if(payload?.user_id!==state.user.id)receiveRoomMove(payload);});
     channel.on('broadcast',{event:'room_resize'},({payload})=>{if(payload?.user_id!==state.user.id)receiveRoomResize(payload);});
+    channel.on('postgres_changes',{event:'UPDATE',schema:'public',table:'sessions',filter:`id=eq.${sid}`},payload=>{const row=payload.new;if(!row)return;state.sessions=state.sessions.map(x=>x.id===row.id?row:x);if(row.id===currentSession()?.id && row.active_floor_id!==state.floor && !canEdit())receiveSceneChange({floor_id:row.active_floor_id,room_id:row.active_room_id,room_name:state.rooms.find(r=>r.id===row.active_room_id)?.name});});
+    channel.on('postgres_changes',{event:'UPDATE',schema:'public',table:'world_entities',filter:`campaign_id=eq.${state.campaign.id}`},payload=>{const row=payload.new;if(!row||payload.old?.updated_at===row.updated_at)return;receiveEntityMove({entity_id:row.id,x:row.x,y:row.y,room_id:row.room_id,floor_id:row.floor_id});});
+    channel.on('postgres_changes',{event:'UPDATE',schema:'public',table:'rooms'},payload=>{const row=payload.new;if(row?.id)receiveRoomMove({room_id:row.id,x:row.x,y:row.y});});
     channel.subscribe((status,err)=>{if(status==='CHANNEL_ERROR'||status==='TIMED_OUT')console.warn('Sessão realtime:',status,err);});
     state.audioChannel=channel;
     const scene=sb.channel(`rpg-hub-scene-${sid}`,{config:{private:true}});
@@ -192,6 +195,7 @@ function renderShell(){
   $('userAvatar').innerHTML=state.profile?.avatar_url?`<img src="${escapeHtml(state.profile.avatar_url)}" alt="">`:'?';
   $('newRoomBtn').disabled=!canEdit(); $('newFloorBtn').disabled=!canEdit(); $('newSessionBtn').disabled=!canEdit(); $('newNpcBtn').disabled=!canEdit(); $('newCharacterBtn').disabled=false;
   const active=currentSession(); $('activeSessionLabel').textContent=active?`Sessão #${active.session_number} · ${active.status.toUpperCase()}`:'Nenhuma sessão ativa'; $('activeSessionTitle').textContent=active?.title||'Crie uma sessão para começar';
+  $('enablePlayerAudioBtn')?.classList.toggle('hidden',canEdit());
   const list=state.campaigns.map(c=>`<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
   $('campaignSelect').innerHTML=list;
   const mobileSelect=$('mobileCampaignSelect');
@@ -1492,6 +1496,8 @@ document.querySelectorAll("[data-quick-die]").forEach(b=>b.onclick=async()=>{try
 $('saveBtn').onclick=()=>{setSave('Conexão ativa · alterações salvas automaticamente');toast('Tudo que foi alterado já foi para o Supabase.');};
 
 function wireAudioControls(){
+  $('enablePlayerAudioBtn')?.addEventListener('click',async()=>{try{await unlockAudio();toast('Sons da mesa ativados');}catch(e){toast('Não foi possível ativar os sons.','error');}});
+
   $('enableAudioBtn')?.addEventListener('click',async()=>{try{await unlockAudio();renderDice();toast('Áudio ativado');}catch(e){toast(e.message||'Não foi possível ativar o áudio.','error');}});
   $('playAudioBtn')?.addEventListener('click',async()=>{try{let url=$('audioUrl').value.trim();const file=$('audioFile').files[0];const kind=$('audioKind').value;let name=$('audioName').value.trim();let storagePath=null;if(file){url=await uploadMedia(file,'audio');storagePath=uploadMedia.lastPath||null;}if(!url)throw new Error('Cole uma URL ou selecione um arquivo.');if(!name)name=file?.name||audioKindLabel(kind);const volume=Number($('audioVolume').value)||0.75;const loop=['music','ambient'].includes(kind);let asset=null;if($('audioSaveLibrary')?.checked)asset=await saveAudioAsset({name,kind,url,volume,loop,storagePath});await unlockAudio();await playAudioLayer({action:'play-layer',url,name,kind,loop,volume,asset_id:asset?.id||null});$('audioUrl').value='';$('audioFile').value='';$('audioName').value='';toast(asset?'Áudio salvo e tocando':'Áudio tocando');}catch(e){toast(e.message||'Não foi possível tocar o áudio.','error');}});
   $('stopAllAudioBtn')?.addEventListener('click',async()=>{await stopAllAudioLayers();toast('Todas as camadas foram interrompidas');});
