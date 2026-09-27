@@ -81,6 +81,7 @@ async function loadCampaignData(){
   state.profiles=new Map();
   const ids=[...new Set(state.members.map(m=>m.user_id).filter(Boolean))];
   if(ids.length){ const {data:profiles}=await sb.from('profiles').select('id,display_name,avatar_url').in('id',ids); (profiles||[]).forEach(p=>state.profiles.set(p.id,p)); }
+  await ensureCharacterFields();
   if(!state.locations.length && canEdit()) await initializeWorld();
   else { await loadFloors(); }
   ensureFloor();
@@ -352,35 +353,45 @@ function openNoCampaignState(){
   $('openProfileFromEmpty').onclick=()=>{closeModal();profileModal();};
 }
 
+async async function seedCharacterFieldsForCampaign(campaignId){
+  const defaults=[
+    ['name','Nome do personagem','text','name',true,0],
+    ['class_name','Classe / função','text','class_name',false,10],
+    ['ancestry_name','Origem / ancestralidade','text','ancestry_name',false,20],
+    ['level','Nível','number','level',false,30],
+    ['hp_current','Vida atual','number','hp_current',false,40],
+    ['hp_max','Vida máxima','number','hp_max',false,50],
+    ['armor_class','Defesa / CA','number','armor_class',false,60],
+    ['luck','Sorte','number','luck',false,70],
+    ['luck_points','Pontos de sorte','number','luck_points',false,80],
+    ['attr_forca','Força','number','attributes.forca',false,90],
+    ['attr_destreza','Destreza','number','attributes.destreza',false,100],
+    ['attr_constituicao','Constituição','number','attributes.constituicao',false,110],
+    ['attr_inteligencia','Inteligência','number','attributes.inteligencia',false,120],
+    ['attr_sabedoria','Sabedoria','number','attributes.sabedoria',false,130],
+    ['attr_carisma','Carisma','number','attributes.carisma',false,140],
+    ['avatar_url','Foto / avatar','url','avatar_url',false,150],
+    ['notes','Ficha complementar','textarea','notes',false,160]
+  ];
+  const payload=defaults.map(([field_key,label,field_type,data_key,required,sort_order])=>({campaign_id:campaignId,field_key,label,field_type,data_key,required,sort_order}));
+  const {error}=await sb.from('character_field_definitions').insert(payload);
+  if(error && !/duplicate|unique/i.test(error.message||''))throw error;
+  state.characterFields=payload.map(x=>({...x,id:crypto.randomUUID(),options:[],enabled:true,player_visible:true,player_editable:true}));
+}
+
+async function ensureCharacterFields(){
+  if(state.characterFields.length||!state.campaign)return;
+  if(canEdit()){await seedCharacterFieldsForCampaign(state.campaign.id);}
+}
+
 async function createCampaign(name,description){
   if(!canCreateCampaign()) throw new Error('Somente contas Mestre podem criar campanhas.');
   const inviteCode=Math.random().toString(36).slice(2,12).toUpperCase();
-  const {data,error}=await sb.from('campaigns').insert({owner_id:state.user.id,name,description,system_name:'Sistema próprio',invite_code:inviteCode})
-    .select('id,owner_id,name,description,system_name,cover_url,discord_url,discord_guild_id,timezone,created_at,updated_at').single();
+  const {data,error}=await sb.from('campaigns').insert({owner_id:state.user.id,name,description,system_name:'Sistema próprio',invite_code:inviteCode}).select('id,owner_id,name,description,system_name,cover_url,discord_url,discord_guild_id,timezone,created_at,updated_at').single();
   if(error) throw error;
   const {error:me}=await sb.from('campaign_members').insert({campaign_id:data.id,campaign_owner_id:state.user.id,user_id:state.user.id,role:'owner'}); if(me) throw me;
+  await seedCharacterFieldsForCampaign(data.id);
   state.campaign=data; await loadCampaigns(); await initializeWorld(); await loadCampaignData(); closeModal();toast('Campanha criada');
-}
-function openDeleteCampaignModal(){
-  if(!canEdit()||!state.campaign)return;
-  const campaignName=state.campaign.name;
-  showModal(`<div class="modalHeader"><div><div class="eyebrow dangerEyebrow">ZONA DE RISCO</div><h3>Excluir campanha inteira</h3></div><button class="closeButton" data-close>×</button></div><div class="dangerPanel"><strong>ATENÇÃO: exclusão permanente.</strong><p>Serão removidos desta campanha os membros, personagens, NPCs, mapa, andares, cômodos, sessões e rolagens. Esta ação não pode ser desfeita.</p></div><label>Digite o nome da campanha <span class="requiredMark">*</span><input id="deleteCampaignName" autocomplete="off" placeholder="${escapeHtml(campaignName)}"></label><label>Digite <code>EXCLUIR CAMPANHA</code> <span class="requiredMark">*</span><input id="deleteCampaignPhrase" autocomplete="off" placeholder="EXCLUIR CAMPANHA"></label><div class="modalActions"><button class="softButton" data-close>Cancelar</button><button id="confirmDeleteCampaign" class="dangerButton" disabled>Excluir campanha definitivamente</button></div>`);
-  const name=$('deleteCampaignName'),phrase=$('deleteCampaignPhrase'),btn=$('confirmDeleteCampaign');
-  const sync=()=>{btn.disabled=name.value.trim()!==campaignName.trim()||phrase.value.trim().toUpperCase()!=='EXCLUIR CAMPANHA';};
-  name.addEventListener('input',sync);phrase.addEventListener('input',sync);
-  btn.onclick=async()=>{
-    if(btn.disabled)return;
-    btn.disabled=true;
-    try{
-      const campaignId=state.campaign.id; const {error}=await sb.from('campaigns').delete().eq('id',campaignId).eq('owner_id',state.user.id); if(error)throw error;
-      if(state.audioChannel)await sb.removeChannel(state.audioChannel).catch(()=>{}); if(state.presenceChannel)await sb.removeChannel(state.presenceChannel).catch(()=>{});
-      state.campaigns=state.campaigns.filter(x=>x.id!==campaignId); state.campaign=state.campaigns[0]||null;
-      state.location=null;state.floor=null;state.rooms=[];state.floors=[];state.characters=[];state.npcs=[];state.entities=[];state.sessions=[];state.rolls=[];state.selectedSessionId=null;state.selected=null;
-      closeModal();
-      if(state.campaign){await loadCampaignData();}else{renderAll();openCampaignCreate(true);}
-      toast('Campanha excluída definitivamente');
-    }catch(e){btn.disabled=false;toast(e.message||'Não foi possível excluir a campanha.','error');}
-  };
 }
 async function openCampaignInvite(){
   if(!canEdit()||!state.campaign)return;
@@ -430,6 +441,53 @@ function openRoomModal(id){
 }
 async function deleteRoom(id){if(!requireMaster())return; if(!confirm('Excluir este cômodo? Entidades vinculadas serão mantidas, mas sem o cômodo.'))return;const {error}=await sb.from('rooms').delete().eq('id',id);if(error){toast(error.message,'error');return;}state.rooms=state.rooms.filter(r=>r.id!==id);state.selected=null;renderAll();toast('Cômodo excluído');}
 
+function fieldTypeLabel(type){return ({text:'Texto curto',number:'Número',textarea:'Texto longo',select:'Seleção',checkbox:'Sim / não',url:'URL'})[type]||type;}
+function slugifyField(label){return normalizeFieldKey(label);}
+async function openCharacterFieldConfig(){
+  if(!requireMaster())return;
+  const fields=[...(state.characterFields||[])].sort((a,b)=>Number(a.sort_order)-Number(b.sort_order));
+  const rows=fields.map((f,index)=>`<div class="fieldConfigRow" data-config-id="${f.id}">
+    <div class="fieldConfigMain"><span class="fieldGrip">⋮⋮</span><div><b>${escapeHtml(f.label)}</b><small>${escapeHtml(fieldTypeLabel(f.field_type))} · ${escapeHtml(f.data_key)}</small></div></div>
+    <div class="fieldConfigChecks"><label><input type="checkbox" data-field-enabled ${f.enabled?'checked':''}> Ativo</label><label><input type="checkbox" data-field-visible ${f.player_visible?'checked':''}> Jogador vê</label><label><input type="checkbox" data-field-editable ${f.player_editable?'checked':''} ${f.player_visible?'':'disabled'}> Jogador edita</label><label><input type="checkbox" data-field-required ${f.required?'checked':''}> Obrigatório</label></div>
+    <div class="fieldConfigEdit"><input data-field-label value="${escapeHtml(f.label)}"><select data-field-type disabled><option>${escapeHtml(fieldTypeLabel(f.field_type))}</option></select></div>
+  </div>`).join('');
+  showModal(`<div class="modalHeader"><div><div class="eyebrow">CONFIGURAÇÃO DA CAMPANHA</div><h3>Campos da ficha</h3></div><button class="closeButton" data-close>×</button></div>
+    <p class="modalHint">Você decide quais informações existem na ficha e o que os jogadores podem preencher. O RPG HUB não obriga D&D, Ordem Paranormal ou qualquer outro sistema.</p>
+    <div class="fieldConfigList">${rows||'<div class="emptyPanel">Nenhum campo configurado.</div>'}</div>
+    <div class="configAddPanel"><div><b>Adicionar campo personalizado</b><small>Crie campos próprios da sua campanha, como Fama, Sanidade, Profissão, Estresse, Poderes ou qualquer outro.</small></div><button id="addCharacterField" class="softButton">+ Adicionar campo</button></div>
+    <div class="modalActions"><button class="softButton" data-close>Cancelar</button><button id="saveCharacterFields" class="primarySmall">Salvar configuração</button></div>`);
+  document.querySelectorAll('[data-field-visible]').forEach(cb=>cb.addEventListener('change',()=>{const row=cb.closest('.fieldConfigRow');const edit=row.querySelector('[data-field-editable]');if(edit){edit.disabled=!cb.checked;if(!cb.checked)edit.checked=false;}}));
+  $('addCharacterField').onclick=()=>openAddCharacterFieldModal();
+  $('saveCharacterFields').onclick=async()=>{
+    try{
+      const updates=[...document.querySelectorAll('.fieldConfigRow')].map((row,index)=>{const id=row.dataset.configId;const f=fields.find(x=>String(x.id)===String(id));const visible=row.querySelector('[data-field-visible]').checked;return {id,label:row.querySelector('[data-field-label]').value.trim()||f.label,enabled:row.querySelector('[data-field-enabled]').checked,player_visible:visible,player_editable:visible&&row.querySelector('[data-field-editable]').checked,required:row.querySelector('[data-field-required]').checked,sort_order:index*10};});
+      for(const u of updates){const {error}=await sb.from('character_field_definitions').update({label:u.label,enabled:u.enabled,player_visible:u.player_visible,player_editable:u.player_editable,required:u.required,sort_order:u.sort_order}).eq('id',u.id);if(error)throw error;}
+      const {data,error}=await sb.from('character_field_definitions').select('*').eq('campaign_id',state.campaign.id).order('sort_order');if(error)throw error;state.characterFields=data||[];closeModal();renderAll();toast('Configuração da ficha salva');
+    }catch(e){toast(e.message||'Não foi possível salvar a configuração.','error');}
+  };
+}
+
+function openAddCharacterFieldModal(){
+  showModal(`<div class="modalHeader"><div><div class="eyebrow">NOVO CAMPO</div><h3>Campo personalizado</h3></div><button class="closeButton" data-close>×</button></div>
+    <label>Nome do campo<input id="newFieldLabel" maxlength="80" placeholder="Ex.: Fama"></label>
+    <label>Tipo<select id="newFieldType"><option value="text">Texto curto</option><option value="number">Número</option><option value="textarea">Texto longo</option><option value="select">Seleção</option><option value="checkbox">Sim / não</option><option value="url">URL</option></select></label>
+    <label id="newFieldOptionsWrap" class="hidden">Opções da seleção<input id="newFieldOptions" placeholder="Baixa, Média, Alta"></label>
+    <div class="configToggleGrid"><label><input id="newFieldEnabled" type="checkbox" checked> Ativo</label><label><input id="newFieldVisible" type="checkbox" checked> Jogador vê</label><label><input id="newFieldEditable" type="checkbox" checked> Jogador edita</label><label><input id="newFieldRequired" type="checkbox"> Obrigatório</label></div>
+    <p class="modalHint">O valor será armazenado na ficha da campanha e poderá ser usado independentemente do sistema de RPG.</p>
+    <div class="modalActions"><button class="softButton" data-close>Cancelar</button><button id="createCustomField" class="primarySmall">Adicionar campo</button></div>`);
+  $('newFieldType').onchange=()=>$('newFieldOptionsWrap').classList.toggle('hidden',$('newFieldType').value!=='select');
+  $('newFieldVisible').onchange=()=>{if(!$('newFieldVisible').checked)$('newFieldEditable').checked=false;$('newFieldEditable').disabled=!$('newFieldVisible').checked;};
+  $('createCustomField').onclick=async()=>{
+    try{
+      const label=$('newFieldLabel').value.trim();if(!label){toast('Informe o nome do campo.','error');return;}
+      const type=$('newFieldType').value;const key='custom_'+slugifyField(label)+'_'+Date.now().toString(36);
+      const options=type==='select'?$('newFieldOptions').value.split(',').map(x=>x.trim()).filter(Boolean):[];
+      const next=(state.characterFields||[]).reduce((m,f)=>Math.max(m,Number(f.sort_order)||0),0)+10;
+      const payload={campaign_id:state.campaign.id,field_key:key,label,field_type:type,data_key:'sheet_data.'+key,options,enabled:$('newFieldEnabled').checked,player_visible:$('newFieldVisible').checked,player_editable:$('newFieldEditable').checked,required:$('newFieldRequired').checked,sort_order:next};
+      const {data,error}=await sb.from('character_field_definitions').insert(payload).select().single();if(error)throw error;state.characterFields.push(data);closeModal();openCharacterFieldConfig();toast('Campo adicionado');
+    }catch(e){toast(e.message||'Não foi possível adicionar o campo.','error');}
+  };
+}
 function normalizeFieldKey(label){
   return String(label||'campo').toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'').slice(0,48)||'campo';
 }
