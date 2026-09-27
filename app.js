@@ -79,6 +79,9 @@ async function loadCampaignData(){
   ]);
   if(me||le||ce||ne||ee||se||re||aae||ape) throw (me||le||ce||ne||ee||se||re||aae||ape);
   state.members=members||[]; state.locations=locations||[]; state.characters=characters||[]; state.characterFields=characterFields||[]; state.npcs=npcs||[]; state.entities=entities||[]; state.sessions=sessions||[]; state.rolls=rolls||[]; state.audioAssets=audioAssets||[]; state.audioPlaylists=audioPlaylists||[]; state.audioPlaylistItems=[];
+  const {data:audioPlaylistItems,error:aie}=audioPlaylists?.length?await sb.from('audio_playlist_items').select('*').in('playlist_id',audioPlaylists.map(p=>p.id)):{data:[],error:null};
+  if(aie)throw aie;
+  state.audioPlaylistItems=audioPlaylistItems||[];
   const mine=state.members.find(m=>m.user_id===state.user.id); state.role=state.campaign.owner_id===state.user.id?'owner':(mine?.role||'player');
   state.profiles=new Map();
   const ids=[...new Set(state.members.map(m=>m.user_id).filter(Boolean))];
