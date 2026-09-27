@@ -303,10 +303,201 @@ function renderCharacters(){
 }
 
 function renderWorld(){
-  const f=state.floors; $('worldStats').innerHTML=`<div class="statsHead"><div><span>LOCais</span><b>${state.locations.length}</b></div><div><span>ANDARES</span><b>${f.length}</b></div><div><span>CÔMODOS</span><b>${state.rooms.length}</b></div><div><span>ENTIDADES</span><b>${state.entities.length}</b></div></div>`;
-  $('worldLocations').innerHTML=state.locations.map(l=>`<article class="locationCard"><div><div class="eyebrow">LOCAL</div><h3>${escapeHtml(l.name)}</h3><p>${escapeHtml(l.description||'Sem descrição')}</p></div><button class="softButton" data-edit-location="${l.id}" ${canEdit()?'':'disabled'}>Editar</button><div class="floorStack">${f.filter(x=>x.location_id===l.id).map(x=>`<button class="floorCard" data-world-floor="${x.id}"><span>${escapeHtml(x.name)}</span><small>${state.rooms.filter(r=>r.floor_id===x.id).length} cômodo(s)</small><b>→</b></button>`).join('')||'<div class="emptySelect">Nenhum andar.</div>'}</div></article>`).join('') || '<div class="emptyPanel">Crie um local para começar.</div>';
-  document.querySelectorAll('[data-edit-location]').forEach(b=>b.onclick=()=>openLocationModal(b.dataset.editLocation));document.querySelectorAll('[data-world-floor]').forEach(b=>b.onclick=()=>{state.floor=b.dataset.worldFloor;state.view='table';renderAll();});
+  const floors=state.floors||[];
+  const rooms=state.rooms||[];
+  $('worldStats').innerHTML=\`<div class="statsHead">
+    <div><span>LOCAIS</span><b>\${state.locations.length}</b></div>
+    <div><span>ANDARES</span><b>\${floors.length}</b></div>
+    <div><span>CÔMODOS</span><b>\${rooms.length}</b></div>
+    <div><span>ENTIDADES</span><b>\${state.entities.length}</b></div>
+  </div>
+  <div class="worldActionsCard">
+    <div><span class="eyebrow">GERENCIAMENTO</span><b>Seu mundo continua salvo entre as sessões.</b><small>Crie locais, organize andares e edite cada cômodo sem precisar reconstruir a mesa.</small></div>
+    \${canEdit()?'<button id="newLocationWorldBtn" class="primarySmall">+ Novo local</button>':''}
+  </div>\`;
+
+  const locations=state.locations.map(l=>{
+    const locationFloors=floors.filter(f=>f.location_id===l.id).sort((x,y)=>Number(x.sort_order)-Number(y.sort_order));
+    return \`<article class="worldLocationCard">
+      <div class="worldLocationHeader">
+        <div class="worldLocationIdentity">
+          <div class="worldLocationIcon">\${l.image_url?'<img src="'+escapeHtml(l.image_url)+'" alt="">':'◇'}</div>
+          <div>
+            <div class="eyebrow">\${escapeHtml(l.location_type||'LOCAL')}</div>
+            <h3>\${escapeHtml(l.name)}</h3>
+            <p>\${escapeHtml(l.description||'Sem descrição')}</p>
+          </div>
+        </div>
+        \${canEdit()?'<div class="worldActionGroup"><button class="softButton" data-edit-location="'+l.id+'">Editar local</button><button class="dangerGhost" data-delete-location="'+l.id+'">Excluir</button></div>':''}
+      </div>
+      \${l.notes?\`<div class="worldNote"><span>ANOTAÇÕES DO MESTRE</span><p>\${escapeHtml(l.notes)}</p></div>\`:''}
+      <div class="worldFloorSection">
+        <div class="worldSubhead"><div><span class="eyebrow">ESTRUTURA</span><b>\${locationFloors.length} andar(es)</b></div>\${canEdit()?'<button class="textButton" data-new-floor="'+l.id+'">+ Novo andar</button>':''}</div>
+        <div class="worldFloorList">
+          \${locationFloors.map(f=>{
+            const floorRooms=rooms.filter(r=>r.floor_id===f.id).sort((x,y)=>Number(x.sort_order)-Number(y.sort_order));
+            return \`<details class="worldFloorCard">
+              <summary>
+                <div><span class="floorIndex">#\${Number(f.floor_number)===0?'T':Number(f.floor_number)}</span><span class="floorSummaryText"><b>\${escapeHtml(f.name)}</b><small>\${floorRooms.length} cômodo(s)\${f.description?' · '+escapeHtml(f.description):''}</small></span></div>
+                <div class="worldFloorActions">
+                  <span class="roomCountBadge">\${floorRooms.length}</span>
+                  \${canEdit()?'<button type="button" class="miniAction" data-edit-floor="'+f.id+'">Editar</button><button type="button" class="miniAction danger" data-delete-floor="'+f.id+'">Excluir</button>':''}
+                </div>
+              </summary>
+              \${f.notes?\`<div class="worldNote compact"><span>ANOTAÇÕES</span><p>\${escapeHtml(f.notes)}</p></div>\`:''}
+              <div class="worldRoomTools">\${canEdit()?'<button class="softButton" data-new-room-floor="'+f.id+'">+ Novo cômodo</button>':''}<button class="softButton" data-open-floor="'+f.id+'">Abrir na mesa</button></div>
+              <div class="worldRoomList">
+                \${floorRooms.map(r=>\`<div class="worldRoomCard">
+                  <div class="worldRoomMain"><div class="roomMiniIcon">▧</div><div><b>\${escapeHtml(r.name)}</b><small>\${escapeHtml(r.description||'Sem descrição')}</small></div></div>
+                  <div class="worldRoomMeta"><span>\${Number(r.width).toFixed(1)} × \${Number(r.height).toFixed(1)}%</span><span>\${Number(r.x).toFixed(1)}, \${Number(r.y).toFixed(1)}%</span></div>
+                  \${canEdit()?'<div class="worldRoomActions"><button class="miniAction" data-edit-room-world="'+r.id+'">Editar</button><button class="miniAction danger" data-delete-room-world="'+r.id+'">Excluir</button></div>':''}
+                </div>\`).join('')||'<div class="emptySelect">Nenhum cômodo neste andar.</div>'}
+              </div>
+            </details>\`;
+          }).join('')||'<div class="emptySelect">Nenhum andar neste local.</div>'}
+        </div>
+      </div>
+    </article>\`;
+  }).join('');
+  $('worldLocations').innerHTML=locations||'<div class="emptyPanel">Nenhum local cadastrado. Crie o primeiro local para começar a construir seu mundo.</div>';
+
+  $('newLocationWorldBtn')?.addEventListener('click',openLocationCreateModal);
+  document.querySelectorAll('[data-edit-location]').forEach(b=>b.onclick=()=>openLocationModal(b.dataset.editLocation));
+  document.querySelectorAll('[data-delete-location]').forEach(b=>b.onclick=()=>openDeleteLocationModal(b.dataset.deleteLocation));
+  document.querySelectorAll('[data-new-floor]').forEach(b=>b.onclick=()=>openFloorModal(null,b.dataset.newFloor));
+  document.querySelectorAll('[data-edit-floor]').forEach(b=>b.onclick=e=>{e.preventDefault();openFloorModal(b.dataset.editFloor);});
+  document.querySelectorAll('[data-delete-floor]').forEach(b=>b.onclick=e=>{e.preventDefault();openDeleteFloorModal(b.dataset.deleteFloor);});
+  document.querySelectorAll('[data-new-room-floor]').forEach(b=>b.onclick=()=>openRoomModal(null,b.dataset.newRoomFloor));
+  document.querySelectorAll('[data-edit-room-world]').forEach(b=>b.onclick=()=>openRoomModal(b.dataset.editRoomWorld));
+  document.querySelectorAll('[data-delete-room-world]').forEach(b=>b.onclick=()=>deleteRoom(b.dataset.deleteRoomWorld));
+  document.querySelectorAll('[data-open-floor]').forEach(b=>b.onclick=()=>{state.floor=b.dataset.openFloor;state.selected=null;state.view='table';renderAll();});
 }
+
+function openLocationCreateModal(){
+  if(!requireMaster())return;
+  showModal(\`<div class="modalHeader"><div><div class="eyebrow">MUNDO</div><h3>Novo local</h3></div><button class="closeButton" data-close>×</button></div>
+    <div class="formGrid">
+      <label>Nome do local<input id="locName" maxlength="120" placeholder="Ex.: Castelo de Velador"></label>
+      <label>Tipo<select id="locType"><option>Local</option><option>Cidade</option><option>Edifício</option><option>Dungeon</option><option>Região</option><option>Outro</option></select></label>
+    </div>
+    <label>Descrição <span class="optional">(opcional)</span><textarea id="locDesc" rows="4" placeholder="O que é este lugar?"></textarea></label>
+    <label>Imagem <span class="optional">(opcional)</span><input id="locImage" placeholder="https://..."></label>
+    <label>Anotações do mestre <span class="optional">(opcional)</span><textarea id="locNotes" rows="4" placeholder="Informações que ajudam a organizar este local."></textarea></label>
+    <div class="modalActions"><button class="softButton" data-close>Cancelar</button><button id="createLocation" class="primarySmall">Criar local</button></div>\`);
+  $('createLocation').onclick=async()=>{
+    try{
+      const name=$('locName').value.trim();if(!name){toast('Informe o nome do local.','error');$('locName').focus();return;}
+      const {data,error}=await sb.from('locations').insert({campaign_id:state.campaign.id,name,location_type:$('locType').value,description:$('locDesc').value.trim(),image_url:$('locImage').value.trim()||null,notes:$('locNotes').value.trim()||null,created_by:state.user.id,sort_order:state.locations.length}).select().single();
+      if(error)throw error;
+      state.locations.push(data);state.location=data;closeModal();renderAll();toast('Local criado');
+    }catch(e){toast(e.message||'Não foi possível criar o local.','error');}
+  };
+}
+
+function openLocationModal(id){
+  if(!requireMaster())return;
+  const l=state.locations.find(x=>x.id===id);if(!l)return;
+  showModal(\`<div class="modalHeader"><div><div class="eyebrow">LOCAL</div><h3>Editar local</h3></div><button class="closeButton" data-close>×</button></div>
+    <div class="formGrid">
+      <label>Nome<input id="locName" maxlength="120" value="\${escapeHtml(l.name)}"></label>
+      <label>Tipo<select id="locType">\${['Local','Cidade','Edifício','Dungeon','Região','Outro'].map(x=>\`<option \${x===l.location_type?'selected':''}>\${x}</option>\`).join('')}</select></label>
+    </div>
+    <label>Descrição <span class="optional">(opcional)</span><textarea id="locDesc" rows="4">\${escapeHtml(l.description||'')}</textarea></label>
+    <label>Imagem <span class="optional">(opcional)</span><input id="locImage" value="\${escapeHtml(l.image_url||'')}" placeholder="https://..."></label>
+    <label>Anotações do mestre <span class="optional">(opcional)</span><textarea id="locNotes" rows="5">\${escapeHtml(l.notes||'')}</textarea></label>
+    <div class="modalActions"><button class="softButton" data-close>Cancelar</button><button id="saveLocation" class="primarySmall">Salvar alterações</button></div>\`);
+  $('saveLocation').onclick=async()=>{
+    try{
+      const name=$('locName').value.trim();if(!name){toast('Informe o nome do local.','error');return;}
+      const {data,error}=await sb.from('locations').update({name,location_type:$('locType').value,description:$('locDesc').value.trim(),image_url:$('locImage').value.trim()||null,notes:$('locNotes').value.trim()||null}).eq('id',id).select().single();
+      if(error)throw error;state.locations=state.locations.map(x=>x.id===id?data:x);if(state.location?.id===id)state.location=data;closeModal();renderAll();toast('Local atualizado');
+    }catch(e){toast(e.message||'Não foi possível atualizar o local.','error');}
+  };
+}
+
+function openDeleteLocationModal(id){
+  if(!requireMaster())return;
+  const l=state.locations.find(x=>x.id===id);if(!l)return;
+  const countFloors=state.floors.filter(f=>f.location_id===id).length;
+  showModal(\`<div class="modalHeader"><div><div class="eyebrow dangerEyebrow">EXCLUSÃO</div><h3>Excluir local</h3></div><button class="closeButton" data-close>×</button></div>
+    <div class="dangerPanel"><strong>Excluir este local remove toda a estrutura dele.</strong><p>\${countFloors} andar(es) e os cômodos vinculados serão apagados. Esta ação não pode ser desfeita.</p></div>
+    <label>Digite o nome do local para confirmar <span class="requiredMark">*</span><input id="deleteLocationName" placeholder="\${escapeHtml(l.name)}" autocomplete="off"></label>
+    <div class="modalActions"><button class="softButton" data-close>Cancelar</button><button id="confirmDeleteLocation" class="dangerButton" disabled>Excluir local</button></div>\`);
+  const input=$('deleteLocationName'),btn=$('confirmDeleteLocation');input.oninput=()=>btn.disabled=input.value.trim()!==l.name.trim();
+  btn.onclick=async()=>{try{const {error}=await sb.from('locations').delete().eq('id',id);if(error)throw error;state.locations=state.locations.filter(x=>x.id!==id);state.floors=state.floors.filter(x=>x.location_id!==id);state.rooms=state.rooms.filter(r=>state.floors.some(f=>f.id===r.floor_id));state.location=state.locations[0]||null;state.floor=state.floors[0]?.id||null;closeModal();renderAll();toast('Local excluído');}catch(e){toast(e.message||'Não foi possível excluir o local.','error');}};
+}
+
+function openFloorModal(id,locationId){
+  if(!requireMaster())return;
+  const floor=id?state.floors.find(x=>x.id===id):null;
+  const defaultLocation=locationId||floor?.location_id||currentLocation()?.id||state.locations[0]?.id;
+  const f=floor||{name:'Novo andar',floor_number:0,description:'',notes:'',location_id:defaultLocation,sort_order:state.floors.length};
+  const locationOptions=state.locations.map(l=>\`<option value="\${l.id}" \${l.id===f.location_id?'selected':''}>\${escapeHtml(l.name)}</option>\`).join('');
+  showModal(\`<div class="modalHeader"><div><div class="eyebrow">MUNDO</div><h3>\${floor?'Editar andar':'Novo andar'}</h3></div><button class="closeButton" data-close>×</button></div>
+    <div class="formGrid">
+      <label>Nome do andar<input id="floorName" maxlength="120" value="\${escapeHtml(f.name)}" placeholder="Ex.: Subsolo"></label>
+      <label>Número<input id="floorNum" type="number" min="-50" max="100" value="\${Number(f.floor_number)}"></label>
+      <label>Local<select id="floorLocation">\${locationOptions}</select></label>
+    </div>
+    <label>Descrição <span class="optional">(opcional)</span><textarea id="floorDesc" rows="4">\${escapeHtml(f.description||'')}</textarea></label>
+    <label>Anotações do mestre <span class="optional">(opcional)</span><textarea id="floorNotes" rows="4">\${escapeHtml(f.notes||'')}</textarea></label>
+    <div class="modalActions"><button class="softButton" data-close>Cancelar</button><button id="saveFloor" class="primarySmall">\${floor?'Salvar alterações':'Criar andar'}</button></div>\`);
+  $('saveFloor').onclick=async()=>{
+    try{
+      const name=$('floorName').value.trim();if(!name){toast('Informe o nome do andar.','error');return;}
+      const payload={location_id:$('floorLocation').value,name,floor_number:Number($('floorNum').value),description:$('floorDesc').value.trim(),notes:$('floorNotes').value.trim()||null,sort_order:floor?.sort_order??state.floors.filter(x=>x.location_id===$('floorLocation').value).length};
+      const result=f?await sb.from('floors').update(payload).eq('id',f.id).select().single():await sb.from('floors').insert(payload).select().single();
+      if(result.error)throw result.error;
+      if(f)state.floors=state.floors.map(x=>x.id===f.id?result.data:x);else state.floors.push(result.data);
+      state.floor=result.data.id;closeModal();renderAll();toast(floor?'Andar atualizado':'Andar criado');
+    }catch(e){toast(e.message||'Não foi possível salvar o andar.','error');}
+  };
+}
+
+function openDeleteFloorModal(id){
+  if(!requireMaster())return;
+  const f=state.floors.find(x=>x.id===id);if(!f)return;
+  const roomCount=state.rooms.filter(r=>r.floor_id===id).length;
+  showModal(\`<div class="modalHeader"><div><div class="eyebrow dangerEyebrow">EXCLUSÃO</div><h3>Excluir andar</h3></div><button class="closeButton" data-close>×</button></div>
+    <div class="dangerPanel"><strong>\${escapeHtml(f.name)} será removido.</strong><p>\${roomCount} cômodo(s) vinculado(s) também serão excluídos. Esta ação não pode ser desfeita.</p></div>
+    <label>Digite o nome do andar para confirmar <span class="requiredMark">*</span><input id="deleteFloorName" placeholder="\${escapeHtml(f.name)}"></label>
+    <div class="modalActions"><button class="softButton" data-close>Cancelar</button><button id="confirmDeleteFloor" class="dangerButton" disabled>Excluir andar</button></div>\`);
+  const input=$('deleteFloorName'),btn=$('confirmDeleteFloor');input.oninput=()=>btn.disabled=input.value.trim()!==f.name.trim();
+  btn.onclick=async()=>{try{const {error}=await sb.from('floors').delete().eq('id',id);if(error)throw error;state.floors=state.floors.filter(x=>x.id!==id);state.rooms=state.rooms.filter(r=>r.floor_id!==id);if(state.floor===id)state.floor=state.floors[0]?.id||null;closeModal();renderAll();toast('Andar excluído');}catch(e){toast(e.message||'Não foi possível excluir o andar.','error');}};
+}
+
+function openRoomModal(id,floorId){
+  if(!requireMaster())return;
+  const room=id?state.rooms.find(x=>x.id===id):null;
+  const g=window.__roomGeom;
+  const r=room||{name:'Novo cômodo',description:'',notes:'',image_url:'',x:g?.x??20,y:g?.y??20,width:g?.width??30,height:g?.height??25,floor_id:floorId||state.floor};
+  const floorOptions=state.floors.map(f=>\`<option value="\${f.id}" \${f.id===r.floor_id?'selected':''}>\${escapeHtml(f.name)}</option>\`).join('');
+  showModal(\`<div class="modalHeader"><div><div class="eyebrow">CÔMODO</div><h3>\${room?'Editar cômodo':'Novo cômodo'}</h3></div><button class="closeButton" data-close>×</button></div>
+    <div class="formGrid">
+      <label>Nome<input id="roomName" maxlength="120" value="\${escapeHtml(r.name)}"></label>
+      <label>Andar<select id="roomFloor">\${floorOptions}</select></label>
+      <label>Posição X %<input id="roomX" type="number" min="0" max="100" step="0.5" value="\${r.x}"></label>
+      <label>Posição Y %<input id="roomY" type="number" min="0" max="100" step="0.5" value="\${r.y}"></label>
+      <label>Largura %<input id="roomW" type="number" min="5" max="95" step="0.5" value="\${r.width}"></label>
+      <label>Altura %<input id="roomH" type="number" min="5" max="90" step="0.5" value="\${r.height}"></label>
+    </div>
+    <label>Descrição <span class="optional">(opcional)</span><textarea id="roomDesc" rows="4">\${escapeHtml(r.description||'')}</textarea></label>
+    <label>Imagem do cômodo <span class="optional">(opcional)</span><input id="roomImage" value="\${escapeHtml(r.image_url||'')}" placeholder="https://..."></label>
+    <label>Anotações do mestre <span class="optional">(opcional)</span><textarea id="roomNotes" rows="4">\${escapeHtml(r.notes||'')}</textarea></label>
+    <div class="modalHint">A posição e o tamanho podem ser ajustados tanto aqui quanto diretamente na mesa visual.</div>
+    <div class="modalActions"><button class="softButton" data-close>Cancelar</button><button id="saveRoom" class="primarySmall">Salvar cômodo</button></div>\`);
+  $('saveRoom').onclick=async()=>{
+    try{
+      const name=$('roomName').value.trim();if(!name){toast('Informe o nome do cômodo.','error');return;}
+      const payload={floor_id:$('roomFloor').value,name,description:$('roomDesc').value.trim(),image_url:$('roomImage').value.trim()||null,notes:$('roomNotes').value.trim()||null,x:Number($('roomX').value),y:Number($('roomY').value),width:Number($('roomW').value),height:Number($('roomH').value)};
+      const result=room?await sb.from('rooms').update(payload).eq('id',room.id).select().single():await sb.from('rooms').insert({...payload,sort_order:state.rooms.filter(x=>x.floor_id===payload.floor_id).length}).select().single();
+      if(result.error)throw result.error;
+      if(room)state.rooms=state.rooms.map(x=>x.id===room.id?result.data:x);else state.rooms.push(result.data);
+      state.floor=result.data.floor_id;state.selected={type:'room',id:result.data.id};closeModal();renderAll();setSave('Cômodo salvo');toast(room?'Cômodo atualizado':'Cômodo criado');
+    }catch(e){toast(e.message||'Não foi possível salvar o cômodo.','error');}
+  };
+}
+
 function renderSessions(){
   $('sessionsList').innerHTML=state.sessions.map(s=>`<article class="sessionCard"><div><div class="sessionNumber">SESSÃO #${s.session_number}</div><h3>${escapeHtml(s.title)}</h3><p>${escapeHtml(s.summary||'Sem resumo')}</p><small>${fmtDate(s.starts_at)}</small></div><div class="sessionStatus"><span class="status ${s.status}">${s.status}</span><div class="sessionCardActions"><button data-session-open="${s.id}">Abrir</button>${canEdit()?`<button class="softButton" data-session-edit="${s.id}">Editar</button><button class="dangerGhost" data-session-delete="${s.id}">Excluir</button>`:''}</div></div></article>`).join('') || '<div class="emptyPanel">Nenhuma sessão cadastrada.</div>';
   document.querySelectorAll('[data-session-open]').forEach(b=>b.onclick=async()=>{await activateSession(b.dataset.sessionOpen);});
@@ -810,6 +1001,7 @@ document.addEventListener('click',e=>{if(accountMenuOpen&&!e.target.closest('#ac
 $('deleteCampaignBtn').onclick=()=>openDeleteCampaignModal();
 $('joinCampaignBtn').onclick=()=>openJoinCampaignModal();
 $('campaignInviteBtn').onclick=()=>openCampaignInvite();
+$('newLocationTopBtn')?.addEventListener('click',openLocationCreateModal);
 $('newCampaignBtn').onclick=()=>{if(!canCreateCampaign()){toast('Mude sua conta para Mestre no perfil para criar campanhas.','error');return;}openCampaignCreate(false);}; $('openSessionsBtn').onclick=()=>{state.view='sessions';renderView();}; $('openDiceBtn').onclick=()=>{state.view='dice';renderView();renderDice();setTimeout(wireAudioControls,0);};
 $('newRoomBtn').onclick=()=>{if(requireMaster())openRoomModal();};
 $('structureBtn').onclick=()=>{state.tool=state.tool==='draw'?'move':'draw';$('structureBtn').classList.toggle('chosen',state.tool==='draw');$('moveBtn').classList.toggle('chosen',state.tool==='move');$('board').classList.toggle('drawing',state.tool==='draw');$('boardHint').textContent=state.tool==='draw'?'Clique e arraste para desenhar um novo cômodo':'Arraste entidades e cômodos para reposicionar';};
