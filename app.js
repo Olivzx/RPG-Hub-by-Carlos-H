@@ -559,15 +559,25 @@ async function ensureAudioContext(){
 }
 async function playAudioLayer(payload,opts={}){
   const broadcast=opts.broadcast!==false;if(!state.audioEnabled&&!canEdit())return;
-  const ctx=await ensureAudioContext();const layerId=payload.layer_id||audioPlayerId();
+  const layerId=payload.layer_id||audioPlayerId();
   if(payload.action==='stop-layer'){await stopAudioLayer(layerId,{broadcast});return;}
-  const old=state.audioPlayers.get(layerId);if(old){try{old.pause();}catch(e){}try{state.audioGains.get(layerId)?.disconnect();}catch(e){}state.audioPlayers.delete(layerId);state.audioGains.delete(layerId);state.audioLayers.delete(layerId);}
   if(!payload.url)throw new Error('Este áudio não possui uma URL válida.');
-  const audio=new Audio(payload.url);audio.preload='auto';audio.crossOrigin='anonymous';audio.volume=1;audio.loop=payload.loop!==undefined?!!payload.loop:['music','ambient'].includes(payload.kind);
-  const source=ctx.createMediaElementSource(audio);const gain=ctx.createGain();const volume=Math.max(0,Math.min(1,Number(payload.volume??0.75)));gain.gain.value=volume;source.connect(gain);gain.connect(ctx.destination);
-  const layer={...payload,layerId,volume,loop:audio.loop,audio,source,gain};state.audioPlayers.set(layerId,audio);state.audioGains.set(layerId,gain);state.audioLayers.set(layerId,layer);
-  audio.onended=()=>{if(!audio.loop){try{source.disconnect();gain.disconnect();}catch(e){}state.audioPlayers.delete(layerId);state.audioGains.delete(layerId);state.audioLayers.delete(layerId);renderDice();}};
-  try{await audio.play();}catch(e){try{source.disconnect();gain.disconnect();}catch(x){}state.audioPlayers.delete(layerId);state.audioGains.delete(layerId);state.audioLayers.delete(layerId);throw new Error('Não foi possível reproduzir este áudio. Verifique o formato/URL ou ative o áudio da mesa.');}
+  const old=state.audioPlayers.get(layerId);if(old){try{old.pause();}catch(e){}try{state.audioGains.get(layerId)?.disconnect();}catch(e){}state.audioPlayers.delete(layerId);state.audioGains.delete(layerId);state.audioLayers.delete(layerId);}
+  const audio=new Audio(payload.url);audio.preload='auto';audio.volume=Number(payload.volume??0.75);audio.loop=payload.loop!==undefined?!!payload.loop:['music','ambient'].includes(payload.kind);
+  const useWebAudio=/^https:\/\/ymexyrqgqpktxzajgsdi\.storage\.supabase\.co\//.test(payload.url)||(() => {try{return new URL(payload.url,location.href).origin===location.origin;}catch(e){return false;}})();
+  let gain=null,source=null;
+  if(useWebAudio){
+    const ctx=await ensureAudioContext();
+    audio.crossOrigin='anonymous';audio.volume=1;
+    source=ctx.createMediaElementSource(audio);gain=ctx.createGain();gain.gain.value=Math.max(0,Math.min(1,Number(payload.volume??0.75)));source.connect(gain);gain.connect(ctx.destination);
+  }else{
+    // URLs externas continuam usando o player nativo para não depender de CORS.
+    audio.volume=Math.max(0,Math.min(1,Number(payload.volume??0.75)));
+  }
+  const layer={...payload,layerId,volume:Number(payload.volume??0.75),loop:audio.loop,audio,source,gain,useWebAudio};
+  state.audioPlayers.set(layerId,audio);state.audioGains.set(layerId,gain);state.audioLayers.set(layerId,layer);
+  audio.onended=()=>{if(!audio.loop){try{source?.disconnect();gain?.disconnect();}catch(e){}state.audioPlayers.delete(layerId);state.audioGains.delete(layerId);state.audioLayers.delete(layerId);renderDice();}};
+  try{await audio.play();}catch(e){try{source?.disconnect();gain?.disconnect();}catch(x){}state.audioPlayers.delete(layerId);state.audioGains.delete(layerId);state.audioLayers.delete(layerId);throw new Error('Não foi possível reproduzir este áudio. Verifique o formato/URL ou ative o áudio da mesa.');}
   renderDice();if(broadcast&&canEdit())await broadcastAudio({...payload,action:'play-layer',layer_id:layerId});return layerId;
 }
 async function stopAudioLayer(layerId,opts={}){const broadcast=opts.broadcast!==false;const audio=state.audioPlayers.get(layerId),gain=state.audioGains.get(layerId);if(audio){try{audio.pause();audio.currentTime=0;}catch(e){}}try{gain?.disconnect();}catch(e){}state.audioPlayers.delete(layerId);state.audioGains.delete(layerId);state.audioLayers.delete(layerId);renderDice();if(broadcast&&canEdit())await broadcastAudio({action:'stop-layer',layer_id:layerId});}
