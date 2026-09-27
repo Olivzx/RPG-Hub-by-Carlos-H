@@ -192,7 +192,6 @@ async function setActiveScene(floorId,roomId=null){
   }
   renderAll();
 }
-async function broadcastEntityMove
 async function broadcastEntityMove(payload){if(!state.audioChannel||!canEdit())return;await state.audioChannel.send({type:"broadcast",event:"entity_move",payload:{...payload,user_id:state.user.id}});}
 async function broadcastRoomMove(payload){if(!state.audioChannel||!canEdit())return;await state.audioChannel.send({type:"broadcast",event:"room_move",payload:{...payload,user_id:state.user.id}});}
 async function broadcastRoomResize(payload){if(!state.audioChannel||!canEdit())return;await state.audioChannel.send({type:"broadcast",event:"room_resize",payload:{...payload,user_id:state.user.id}});}
