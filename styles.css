@@ -8,3 +8,23 @@
 
 /* ===== Rolagem múltipla de dados ===== */
 .diceBuilder{grid-template-columns:repeat(4,minmax(90px,1fr)) auto}.diceBuilder .primarySmall{white-space:nowrap;align-self:end}.dicePresetRow{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}.dicePresetRow button{padding:7px 10px;border:1px solid #272d38;background:#0f1319;color:#858d9c;border-radius:8px;font-size:9px}.dicePresetRow button:hover{border-color:#514876;color:#c9c2ff}.rollBreakdownHead{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}.rollBreakdownHead span{font-size:8px;color:#827aaa}.dieResults{display:flex;flex-wrap:wrap;gap:7px}.dieResultChip{min-width:52px;padding:8px 9px;border:1px solid #2a303b;border-radius:9px;background:#11151c;text-align:center}.dieResultChip small{display:block;color:#626a78;font-size:7px;text-transform:uppercase;letter-spacing:.08em}.dieResultChip b{display:block;font-size:18px;color:#d8d2ff;margin-top:3px}.rollSummary{display:flex;align-items:center;gap:7px;margin-top:11px;padding-top:10px;border-top:1px solid #262c36;color:#777f8d;font-size:9px}.rollSummary strong{font-size:17px;color:#d8d2ff}.rollSummary small{margin-left:auto;color:#626a78}@media(max-width:700px){.diceBuilder{grid-template-columns:1fr 1fr}.diceBuilder label:nth-child(3){grid-column:1}.diceBuilder label:nth-child(4){grid-column:2}.diceBuilder .primarySmall{grid-column:1/-1}.dicePresetRow{overflow:auto;flex-wrap:nowrap;padding-bottom:2px}.dicePresetRow button{flex:0 0 auto}}
+
+/* ===== Menu da conta ===== */
+.accountMenu{position:relative}
+.sideBottom{gap:0}
+.userPill{position:relative;border:1px solid transparent;border-top-color:#20242e;border-radius:12px;transition:background .18s,border-color .18s,transform .18s}
+.userPill:hover,.userPill[aria-expanded="true"]{background:#141821;border-color:#292f3a;transform:translateY(-1px)}
+.accountChevron{margin-left:auto;color:#737c8b;transition:transform .18s}
+.userPill[aria-expanded="true"] .accountChevron{transform:rotate(180deg);color:#bdb6ff}
+.accountDropdown{position:absolute;left:0;right:0;bottom:calc(100% + 9px);padding:7px;border:1px solid #303644;border-radius:13px;background:linear-gradient(180deg,#151a24,#10141b);box-shadow:0 25px 65px rgba(0,0,0,.48),0 0 0 1px rgba(148,135,255,.04);opacity:0;visibility:hidden;pointer-events:none;transform:translateY(7px) scale(.98);transform-origin:bottom;transition:opacity .16s,transform .16s,visibility .16s;z-index:120}
+.accountDropdown.open{opacity:1;visibility:visible;pointer-events:auto;transform:translateY(0) scale(1)}
+.accountDropdownHead{display:flex;justify-content:space-between;align-items:end;padding:9px 10px 8px;margin-bottom:4px;border-bottom:1px solid #252b35}
+.accountDropdownHead .eyebrow{margin:0}
+.accountDropdownHead b{font-size:9px;color:#aaa3e5}
+.accountAction{width:100%;display:grid;grid-template-columns:18px 1fr auto;align-items:center;gap:7px;padding:10px;border-radius:9px;color:#8b94a4;text-align:left;font-size:10px;transition:background .15s,color .15s}
+.accountAction:hover{background:#1a1f29;color:#d8d5e8}
+.accountAction span:first-child{color:#9690d4}
+.accountAction i{font-style:normal;color:#586170}
+.accountAction.danger:hover{background:#27181e;color:#ffabb9}
+.accountAction.danger:hover span:first-child,.accountAction.danger:hover i{color:#f28ca0}
+@media(max-width:1100px){.accountDropdown{left:auto;right:0;width:220px}.accountMenu{display:block}}
