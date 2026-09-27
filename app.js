@@ -299,9 +299,12 @@ function renderShell(){
   $('mobileNewCampaignBtn')?.classList.toggle('hidden',!canCreateCampaign());
   $('chronicleNav')?.classList.toggle('hidden',!canEdit());
   $('mobileChronicleNav')?.classList.toggle('hidden',!canEdit());
+  $('rollHistoryNav')?.classList.toggle('hidden',!canEdit());
+  $('mobileRollHistoryNav')?.classList.toggle('hidden',!canEdit());
+  $('viewRollhistory')?.classList.toggle('hidden',!canEdit());
   $('mobileJoinCampaignBtn')?.classList.remove('hidden');
 }
-function renderView(){ if(state.view==='chronicle'&&!canEdit())state.view='table'; document.querySelectorAll('.view').forEach(v=>v.classList.remove('active')); $(`view${state.view.charAt(0).toUpperCase()+state.view.slice(1)}`)?.classList.add('active'); document.querySelectorAll('#sideNav button, #mobileBottomNav button').forEach(b=>b.classList.toggle('active',b.dataset.view===state.view)); }
+function renderView(){ if((state.view==='chronicle'||state.view==='rollhistory')&&!canEdit())state.view='table'; document.querySelectorAll('.view').forEach(v=>v.classList.remove('active')); $(`view${state.view.charAt(0).toUpperCase()+state.view.slice(1)}`)?.classList.add('active'); document.querySelectorAll('#sideNav button, #mobileBottomNav button').forEach(b=>b.classList.toggle('active',b.dataset.view===state.view)); }
 
 function entityAvatarUrl(entity){
   if(!entity)return null;
@@ -1863,7 +1866,7 @@ async function profileModal(){
 async function ensureActiveAudioHandlers(){ const active=currentSession(); if(!active)return; if(!$('enableAudioBtn'))return; $('enableAudioBtn').onclick=async()=>{try{state.audioEnabled=true;const ctx=new (window.AudioContext||window.webkitAudioContext)();if(ctx.state==='suspended')await ctx.resume();const osc=ctx.createOscillator();osc.connect(ctx.destination);osc.start();osc.stop(ctx.currentTime+0.01);renderDice();toast('Áudio ativado para esta mesa');}catch(e){toast('Não foi possível ativar o áudio.','error');}}; }
 
 // Navigation
-document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>{state.view=b.dataset.view;renderView();if(state.view==='dice'){renderDice();setTimeout(wireAudioControls,0);}});
+document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>{if((b.dataset.view==='rollhistory'||b.dataset.view==='chronicle')&&!canEdit()){state.view='table';renderView();return;}state.view=b.dataset.view;renderView();if(state.view==='dice'||state.view==='rollhistory'){renderDice();setTimeout(wireAudioControls,0);}});
 $('mobileProfileBtn')?.addEventListener('click',()=>profileModal());
 $('campaignSelect').onchange=async e=>{const next=state.campaigns.find(c=>c.id===e.target.value);if(!next)return;state.campaign=next;state.floor=null;state.selected=null;await loadCampaignData();};
 let accountMenuOpen=false;
