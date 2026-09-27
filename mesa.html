@@ -47,6 +47,7 @@
     </aside>
 
     <section class="workspace">
+      <div class="mobileAppHeader"><a class="mobileBrand brand" href="index.html"><span class="brandMark">✦</span><span>RPG <b>HUB</b></span></a><button id="mobileProfileBtn" class="mobileProfileButton"><div class="avatar">?</div><span id="mobileUserName">Usuário</span></button></div>
       <header class="workspaceTop">
         <div><div class="eyebrow" id="workspaceEyebrow">MESA DA CAMPANHA</div><h1 id="workspaceTitle">Carregando…</h1><p id="workspaceSubtitle" class="workspaceSubtitle">Preparando sua mesa.</p></div>
         <div class="topActions"><button class="softButton" id="saveBtn">Salvar</button><div class="sessionOnline"><i></i><span id="onlineCount">1 online</span></div></div>
@@ -76,6 +77,14 @@
       <section id="viewNpcs" class="view"><div class="sectionTop"><div><div class="eyebrow">BESTIÁRIO</div><h2>NPCs & monstros</h2><p>Cadastre aliados, inimigos, criaturas e informações privadas do mestre.</p></div><button id="newNpcBtn" class="primarySmall">+ Novo NPC / monstro</button></div><div id="npcsGrid" class="cardGrid"></div></section>
       <section id="viewDice" class="view"><div class="sectionTop"><div><div class="eyebrow">SISTEMA DE DADOS</div><h2>Rolagens da sessão</h2><p>Resultados salvos no banco e sincronizados em tempo real.</p></div></div><div class="diceLayout"><div class="diceCard"><div class="diceControls diceBuilder"><label>Quantidade<input id="diceCount" type="number" min="1" max="50" value="1"></label><label>Tipo de dado<select id="diceSides"><option value="4">d4</option><option value="6">d6</option><option value="8">d8</option><option value="10">d10</option><option value="12">d12</option><option value="20" selected>d20</option><option value="100">d100</option></select></label><label>Modificador<input id="diceModifier" type="number" value="0" step="1" placeholder="+3"></label><label>Regra<select id="diceRule"><option value="normal">Normal</option><option value="advantage">Vantagem</option><option value="disadvantage">Desvantagem</option></select></label><button id="rollBtn" class="primarySmall">Rolar <span id="diceNotationPreview">1d20</span></button></div><div class="dicePresetRow"><button data-dice-preset="1d20">1d20</button><button data-dice-preset="2d20">2d20</button><button data-dice-preset="1d6">1d6</button><button data-dice-preset="2d6">2d6</button><button data-dice-preset="2d8">2d8</button><button data-dice-preset="3d6">3d6</button></div><div class="bigRoll" id="bigRoll">—</div><div class="rollBreakdown" id="rollBreakdown">Nenhuma rolagem ainda.</div></div><div><div class="sessionAudioCard" id="sessionAudioCard"></div><div id="rollHistory" class="stack compact"></div></div></div></section>
     </section>
+  <nav class="mobileBottomNav" id="mobileBottomNav" aria-label="Navegação da mesa">
+  <button data-view="table"><span>◫</span><small>Mesa</small></button>
+  <button data-view="characters"><span>♙</span><small>Personagens</small></button>
+  <button data-view="world"><span>◇</span><small>Mundo</small></button>
+  <button data-view="sessions"><span>✦</span><small>Sessões</small></button>
+  <button data-view="npcs"><span>♜</span><small>NPCs</small></button>
+  <button data-view="dice"><span>⚄</span><small>Dados</small></button>
+</nav>
   </main>
 
   <div id="modalBackdrop" class="modalBackdrop" aria-hidden="true"><div class="modalCard" id="modalCard"></div></div>
