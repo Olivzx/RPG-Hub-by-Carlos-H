@@ -1189,10 +1189,9 @@ function openEntityModal(id){
 }
 
 async function uploadMedia(file,prefix){const ext=(file.name.split('.').pop()||'bin').toLowerCase().replace(/[^a-z0-9]/g,'');const path=`${state.user.id}/${prefix}-${Date.now()}.${ext}`;const {error}=await sb.storage.from('rpg-media').upload(path,file,{cacheControl:'3600',upsert:false,contentType:file.type||undefined});if(error)throw error;return sb.storage.from('rpg-media').getPublicUrl(path).data.publicUrl;}
-async function playLocalAudio(payload){ if(!state.audioEnabled) return; if(state.audio){state.audio.pause();state.audio=null;}if(payload.action==='stop')return;const audio=new Audio(payload.url);audio.volume=Number(payload.volume??0.75);audio.loop=payload.kind==='music';state.audio=audio;try{await audio.play();}catch(e){console.warn('Autoplay bloqueado',e);toast('Clique em “Ativar áudio” para ouvir o som da sessão.','error');} }
-function receiveAudio(payload){playLocalAudio(payload);}
-async function broadcastAudio(payload){if(!state.audioChannel)return;if(canEdit())state.audioEnabled=true;await state.audioChannel.send({type:'broadcast',event:'audio',payload:{...payload,user_id:state.user.id}});await playLocalAudio(payload);}
-
+async function playLocalAudio(payload){if(payload.action==='stop'||payload.action==='stop-all'){await stopAllAudioLayers({broadcast:false});return;}if(payload.action==='stop-layer'){await stopAudioLayer(payload.layer_id,{broadcast:false});return;}if(payload.action==='set-volume'){await setAudioLayerVolume(payload.layer_id,payload.volume,{broadcast:false});return;}if(payload.action==='play-layer')await playAudioLayer(payload,{broadcast:false});}
+function receiveAudio(payload){return playLocalAudio(payload);}
+async function broadcastAudio(payload){if(!state.audioChannel)return;await state.audioChannel.send({type:'broadcast',event:'audio',payload:{...payload,user_id:state.user.id}});}
 async function performRoll(notation,rule='normal'){
   const parsed=/^(\d+)d(\d+)([+-]\d+)?$/i.exec(notation.trim());if(!parsed)throw new Error('Use uma notação como 1d20 ou 2d6+3.');
   const count=Math.min(50,Math.max(1,Number(parsed[1]))),sides=Math.min(1000,Math.max(2,Number(parsed[2]))),modifier=Number(parsed[3]||0);
@@ -1270,9 +1269,12 @@ document.querySelectorAll("[data-quick-die]").forEach(b=>b.onclick=async()=>{try
 $('saveBtn').onclick=()=>{setSave('Conexão ativa · alterações salvas automaticamente');toast('Tudo que foi alterado já foi para o Supabase.');};
 
 function wireAudioControls(){
-  $('enableAudioBtn')?.addEventListener('click',async()=>{state.audioEnabled=true;try{const ctx=new (window.AudioContext||window.webkitAudioContext)();if(ctx.state==='suspended')await ctx.resume();const o=ctx.createOscillator();o.connect(ctx.destination);o.start();o.stop(ctx.currentTime+0.01);renderDice();toast('Áudio ativado');}catch(e){toast('Não foi possível ativar o áudio.','error');}});
-  $('playAudioBtn')?.addEventListener('click',async()=>{try{let url=$('audioUrl').value.trim();const file=$('audioFile').files[0];if(file)url=await uploadMedia(file,`audio/${uid()}`);if(!url)throw new Error('Cole uma URL ou selecione um arquivo.');await broadcastAudio({action:'play',url,volume:Number($('audioVolume').value),kind:$('audioKind')?.value||'music',name:file?.name||($('audioKind')?.value==='effect'?'Efeito sonoro':'Música')});toast('Áudio enviado para a sessão');}catch(e){toast(e.message,'error');}});
-  $('stopAudioBtn')?.addEventListener('click',async()=>{await broadcastAudio({action:'stop'});toast('Áudio interrompido');});
+  $('enableAudioBtn')?.addEventListener('click',async()=>{try{state.audioEnabled=true;const ctx=new (window.AudioContext||window.webkitAudioContext)();if(ctx.state==='suspended')await ctx.resume();renderDice();toast('Áudio ativado');}catch(e){toast('Não foi possível ativar o áudio.','error');}});
+  $('playAudioBtn')?.addEventListener('click',async()=>{try{let url=$('audioUrl').value.trim();const file=$('audioFile').files[0];const kind=$('audioKind').value;let name=$('audioName').value.trim();if(file)url=await uploadMedia(file,'audio');if(!url)throw new Error('Cole uma URL ou selecione um arquivo.');if(!name)name=file?.name||audioKindLabel(kind);const volume=Number($('audioVolume').value)||0.75;const loop=['music','ambient'].includes(kind);let asset=null;if($('audioSaveLibrary')?.checked)asset=await saveAudioAsset({name,kind,url,volume,loop});await playAudioLayer({action:'play-layer',url,name,kind,loop,volume,asset_id:asset?.id||null});$('audioUrl').value='';$('audioFile').value='';$('audioName').value='';toast(asset?'Áudio salvo na biblioteca e tocando':'Camada tocando');}catch(e){toast(e.message||'Não foi possível tocar o áudio.','error');}});
+  $('stopAllAudioBtn')?.addEventListener('click',async()=>{await stopAllAudioLayers();toast('Todas as camadas foram interrompidas');});
+  $('openAudioLibraryBtn')?.addEventListener('click',openAudioLibraryModal);
+  document.querySelectorAll('.audioLayerStop').forEach(b=>b.onclick=()=>stopAudioLayer(b.closest('.audioLayerRow').dataset.layerId));
+  document.querySelectorAll('.audioLayerVolume').forEach(b=>b.onchange=()=>setAudioLayerVolume(b.closest('.audioLayerRow').dataset.layerId,b.value));
 }
 $('modalBackdrop').addEventListener('click',e=>{if(e.target===$('modalBackdrop'))closeModal();});document.addEventListener('click',e=>{if(e.target.closest('[data-close]'))closeModal();});
 
