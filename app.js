@@ -1754,17 +1754,14 @@ async function uploadMedia(file,prefix){
   let offset=0;const chunkSize=5*1024*1024;while(offset<file.size){const chunk=file.slice(offset,Math.min(offset+chunkSize,file.size));const patch=await fetch(uploadUrl,{method:'PATCH',headers:{Authorization:`Bearer ${session.access_token}`,'Tus-Resumable':'1.0.0','Upload-Offset':String(offset),'Content-Type':'application/offset+octet-stream'},body:chunk});if(!patch.ok)throw new Error((await patch.text())||`Falha no upload em ${Math.round(offset/file.size*100)}%.`);const serverOffset=Number(patch.headers.get('Upload-Offset'));offset=Number.isFinite(serverOffset)&&serverOffset>offset?serverOffset:offset+chunk.size;setSave(`Enviando áudio… ${Math.round(offset/file.size*100)}%`,true);}
   return sb.storage.from('rpg-media').getPublicUrl(path).data.publicUrl;
 }
-async function playLocalAudio(payload){if(payload.action==='stop'||payload.action==='stop-all'){await stopAllAudioLayers({broadcast:false});return;}if(payload.action==='stop-layer'){await stopAudioLayer(payload.layer_id,{broadcast:false});return;}if(payload.action==='set-volume'){await setAudioLayerVolume(payload.layer_id,payload.volume,{broadcast:false});return;}if(payload.action==='play-layer')await playAudioLayer(payload,{broadcast:false});}
-function receiveAudio(payload){return playLocalAudio(payload);}
-async function syncActiveAudioToPlayer(targetUserId){
-  if(!canEdit()||!state.audioChannel)return;
-  for(const layer of state.audioLayers.values()){
-    if(!layer.audio||!layer.url||!layer.loop)continue;
-    await state.audioChannel.send({type:'broadcast',event:'audio',payload:{action:'play-layer',layer_id:'sync_'+layer.layerId,url:layer.url,name:layer.name,kind:layer.kind,loop:true,volume:layer.volume,asset_id:layer.asset_id||null,current_time:Number(layer.audio.currentTime||0),target_user_id:targetUserId,user_id:state.user.id}});
-  }
+async function playLocalAudio(payload){
+  if(payload.action==='stop'||payload.action==='stop-all'){await stopAllAudioLayers({broadcast:false});return;}
+  if(payload.action==='stop-layer'){await stopAudioLayer(payload.layer_id,{broadcast:false});return;}
+  if(payload.action==='set-volume'){await setAudioLayerVolume(payload.layer_id,payload.volume,{broadcast:false});return;}
+  if(payload.action==='play-layer')await playAudioLayer(payload,{broadcast:false});
 }
-async function requestAudioSync(){if(!state.audioChannel)return;await state.audioChannel.send({type:'broadcast',event:'audio_sync_request',payload:{user_id:state.user.id}});}
-async function broadcastAudio(payload){if(!state.audioChannel)return;await state.audioChannel.send({type:'broadcast',event:'audio',payload:{...payload,user_id:state.user.id}});}
+function receiveAudio(payload){return playLocalAudio(payload);}
+
 async function performRoll(notation,rule='normal'){
   const parsed=/^(\d+)d(\d+)([+-]\d+)?$/i.exec(notation.trim());if(!parsed)throw new Error('Use uma notação como 1d20 ou 2d6+3.');
   const count=Math.min(50,Math.max(1,Number(parsed[1]))),sides=Math.min(1000,Math.max(2,Number(parsed[2]))),modifier=Number(parsed[3]||0);
