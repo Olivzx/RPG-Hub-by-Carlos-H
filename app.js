@@ -122,7 +122,7 @@ function receiveRoll(payload){ state.rolls=[payload,...state.rolls].slice(0,30);
 
 function renderAll(){renderShell();renderTable();renderCharacters();renderWorld();renderSessions();renderNpcs();renderDice();renderView();}
 function renderShell(){
-  $('campaignRole').textContent=isMaster()?'Conta mestre · '+(isCampaignMaster()?'Mestre da campanha':state.role==='co_master'?'Co-mestre':'membro'):'Conta jogador · '+(state.role==='player'?'Jogador':state.role); $('masterBadge').classList.toggle('hidden',!isCampaignMaster()); $('accountTypeLabel').textContent=isMaster()?'Mestre':'Jogador';
+  $('campaignRole').textContent=isMaster()?'Conta mestre · '+(isCampaignMaster()?'Mestre da campanha':state.role==='co_master'?'Co-mestre':'membro'):'Conta jogador · '+(state.role==='player'?'Jogador':state.role); $('masterBadge').classList.toggle('hidden',!isCampaignMaster()); const accountTypeLabel=$('accountTypeLabel'); if(accountTypeLabel)accountTypeLabel.textContent=isMaster()?'Mestre':'Jogador';
   $('workspaceTitle').textContent=state.campaign?.name||'RPG HUB'; $('workspaceSubtitle').textContent=state.campaign?.description||'Campanha persistente'; $('boardLocationName').textContent=currentLocation()?.name||'Sem local'; $('userName').textContent=state.profile?.display_name||state.user?.email?.split('@')[0]||'Aventureiro';
   $('userAvatar').innerHTML=state.profile?.avatar_url?`<img src="${escapeHtml(state.profile.avatar_url)}" alt="">`:'?';
   $('newRoomBtn').disabled=!canEdit(); $('newFloorBtn').disabled=!canEdit(); $('newSessionBtn').disabled=!canEdit(); $('newNpcBtn').disabled=!canEdit(); $('newCharacterBtn').disabled=false;
@@ -331,7 +331,7 @@ function toggleAccountMenu(force){
   $('profileBtn').setAttribute('aria-expanded',String(accountMenuOpen));
 }
 $('profileBtn').onclick=e=>{e.stopPropagation();toggleAccountMenu();};
-$('profileMenuBtn').onclick=()=>{toggleAccountMenu(false);profileModal();};
+$('profileMenuBtn')?.addEventListener('click',()=>{toggleAccountMenu(false);profileModal();});
 $('signOutBtn').onclick=async()=>{toggleAccountMenu(false);await sb.auth.signOut();};
 document.addEventListener('click',e=>{if(accountMenuOpen&&!e.target.closest('#accountMenu'))toggleAccountMenu(false);});
 $('newCampaignBtn').onclick=()=>{if(!canCreateCampaign()){toast('Mude sua conta para Mestre no perfil para criar campanhas.','error');return;}openCampaignCreate(false);}; $('openSessionsBtn').onclick=()=>{state.view='sessions';renderView();}; $('openDiceBtn').onclick=()=>{state.view='dice';renderView();renderDice();setTimeout(wireAudioControls,0);};
