@@ -17,6 +17,7 @@
       <div class="authTabs"><button id="loginTab" class="active">Entrar</button><button id="registerTab">Criar conta</button></div>
       <form id="authForm">
         <label id="displayNameField" class="hidden">Nome de exibição<input id="displayName" maxlength="80" placeholder="Como você quer aparecer na mesa?"></label>
+        <label id="accountTypeField" class="hidden">Tipo de conta<select id="accountType"><option value="player">Jogador</option><option value="master">Mestre</option></select></label>
         <label>E-mail<input id="email" type="email" autocomplete="email" required placeholder="voce@email.com"></label>
         <label>Senha<input id="password" type="password" autocomplete="current-password" minlength="6" required placeholder="••••••••"></label>
         <button class="primaryButton full" id="submitBtn" type="submit"><span id="submitText">Entrar</span><span>→</span></button>
@@ -33,7 +34,7 @@
       const render = () => {
         const isRegister = mode === 'register';
         $('loginTab').classList.toggle('active', !isRegister); $('registerTab').classList.toggle('active', isRegister);
-        $('displayNameField').classList.toggle('hidden', !isRegister);
+        $('displayNameField').classList.toggle('hidden', !isRegister); $('accountTypeField').classList.toggle('hidden', !isRegister);
         $('authTitle').textContent = isRegister ? 'Criar sua conta' : 'Entrar no RPG HUB';
         $('authSubtitle').textContent = isRegister ? 'Crie sua identidade e entre na primeira campanha.' : 'Entre para continuar sua campanha.';
         $('submitText').textContent = isRegister ? 'Criar conta' : 'Entrar';
@@ -42,11 +43,11 @@
       $('registerTab').onclick = () => { mode='register'; render(); };
       $('authForm').onsubmit = async e => {
         e.preventDefault();
-        const email=$('email').value.trim(), password=$('password').value, display=$('displayName').value.trim();
+        const email=$('email').value.trim(), password=$('password').value, display=$('displayName').value.trim(), accountType=$('accountType').value;
         $('submitBtn').disabled=true; $('authMessage').className='formMessage'; $('authMessage').textContent='Processando…';
         try {
           if (mode==='register') {
-            const {data,error}=await sb.auth.signUp({email,password,options:{data:{display_name:display}}});
+            const {data,error}=await sb.auth.signUp({email,password,options:{data:{display_name:display,account_type:accountType}}});
             if(error) throw error;
             if(data.session){ location.href='mesa.html'; return; }
             $('authMessage').classList.add('success'); $('authMessage').textContent='Conta criada. Confira seu e-mail para confirmar o acesso.';
