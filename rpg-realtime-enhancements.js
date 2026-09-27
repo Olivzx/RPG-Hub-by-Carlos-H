@@ -357,6 +357,8 @@
     try {
       if (forceUnlock && typeof unlockAudio === 'function') {
         await unlockAudio();
+        // unlockAudio não restaura novamente quando o estado já estava armado.
+        if (typeof restoreCampaignAudioState === 'function') await restoreCampaignAudioState();
       } else if (typeof restoreCampaignAudioState === 'function') {
         await restoreCampaignAudioState();
       }
