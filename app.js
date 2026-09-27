@@ -10,7 +10,7 @@ const state = {
   user:null, profile:null, campaigns:[], campaign:null, role:'player', members:[], profiles:new Map(),
   locations:[], floors:[], rooms:[], characters:[], characterFields:[], npcs:[], entities:[], sessions:[], rolls:[], audioAssets:[], audioPlaylists:[], audioPlaylistItems:[],
   location:null, floor:null, selected:null, view:'table', tool:'move', zoom:100, audioChannel:null, sceneChannel:null, audioPlayers:new Map(), audioLayers:new Map(),
-  audioEnabled:false, presenceChannel:null, online:1, isLoading:true
+  audioEnabled:false, presenceChannel:null, online:1, isLoading:true, campaignChronicle:null
 };
 
 function isMaster(){ return state.profile?.account_type === 'master'; }
@@ -83,6 +83,17 @@ async function loadCampaignData(){
   const {data:audioPlaylistItems,error:aie}=audioPlaylists?.length?await sb.from('audio_playlist_items').select('*').in('playlist_id',audioPlaylists.map(p=>p.id)):{data:[],error:null};
   if(aie)throw aie;
   state.audioPlaylistItems=audioPlaylistItems||[];
+  state.campaignChronicle=null;
+  if(canEdit()){
+    const {data:chronicle,error:chronicleError}=await sb.from('campaign_chronicles').select('*').eq('campaign_id',campaignId).maybeSingle();
+    if(chronicleError)throw chronicleError;
+    if(chronicle){state.campaignChronicle=chronicle;}
+    else{
+      const {data:createdChronicle,error:createChronicleError}=await sb.from('campaign_chronicles').insert({campaign_id:campaignId,content:'',updated_by:state.user.id}).select('*').single();
+      if(createChronicleError)throw createChronicleError;
+      state.campaignChronicle=createdChronicle;
+    }
+  }
   const mine=state.members.find(m=>m.user_id===state.user.id); state.role=state.campaign.owner_id===state.user.id?'owner':(mine?.role||'player');
   state.profiles=new Map();
   const ids=[...new Set(state.members.map(m=>m.user_id).filter(Boolean))];
@@ -198,7 +209,7 @@ async function broadcastRoomResize(payload){if(!state.audioChannel||!canEdit())r
 
 function receiveRoll(payload){ state.rolls=[payload,...state.rolls].slice(0,30); renderDiceResult(payload); if(state.view!=='dice') $('rollResult').classList.add('rollPulse'); setTimeout(()=>$('rollResult')?.classList.remove('rollPulse'),280); }
 
-function renderAll(){renderShell();renderTable();renderCharacters();renderWorld();renderSessions();renderNpcs();renderDice();renderView();}
+function renderAll(){renderShell();renderTable();renderCharacters();renderWorld();renderSessions();renderNpcs();renderDice();renderChronicle();renderView();}
 function renderShell(){
   $('campaignRole').textContent=isMaster()?'Conta mestre · '+(isCampaignMaster()?'Mestre da campanha':state.role==='co_master'?'Co-mestre':'membro'):'Conta jogador · '+(state.role==='player'?'Jogador':state.role); const mobileUserName=$('mobileUserName');if(mobileUserName)mobileUserName.textContent=state.profile?.display_name||'Usuário'; $('masterBadge').classList.toggle('hidden',!isCampaignMaster()); const accountTypeLabel=$('accountTypeLabel'); if(accountTypeLabel)accountTypeLabel.textContent=isMaster()?'Mestre':'Jogador';
   $('workspaceTitle').textContent=state.campaign?.name||'RPG HUB'; $('workspaceSubtitle').textContent=state.campaign?.description||'Campanha persistente'; $('boardLocationName').textContent=currentLocation()?.name||'Sem local'; $('userName').textContent=state.profile?.display_name||state.user?.email?.split('@')[0]||'Aventureiro';
@@ -215,9 +226,11 @@ function renderShell(){
   $('joinCampaignBtn').classList.remove('hidden');
   const deleteCampaignBtn=$('deleteCampaignBtn');if(deleteCampaignBtn)deleteCampaignBtn.classList.toggle('hidden',!canEdit());
   $('mobileNewCampaignBtn')?.classList.toggle('hidden',!canCreateCampaign());
+  $('chronicleNav')?.classList.toggle('hidden',!canEdit());
+  $('mobileChronicleNav')?.classList.toggle('hidden',!canEdit());
   $('mobileJoinCampaignBtn')?.classList.remove('hidden');
 }
-function renderView(){ document.querySelectorAll('.view').forEach(v=>v.classList.remove('active')); $(`view${state.view.charAt(0).toUpperCase()+state.view.slice(1)}`)?.classList.add('active'); document.querySelectorAll('#sideNav button').forEach(b=>b.classList.toggle('active',b.dataset.view===state.view)); }
+function renderView(){ if(state.view==='chronicle'&&!canEdit())state.view='table'; document.querySelectorAll('.view').forEach(v=>v.classList.remove('active')); $(`view${state.view.charAt(0).toUpperCase()+state.view.slice(1)}`)?.classList.add('active'); document.querySelectorAll('#sideNav button, #mobileBottomNav button').forEach(b=>b.classList.toggle('active',b.dataset.view===state.view)); }
 
 function renderTable(){
   const f=currentFloor(); $('contextFloor').textContent=f?.name||'Sem andar'; $('boardFloorName').textContent=f?.name?.toUpperCase()||'—'; ensureFloor();
@@ -582,12 +595,21 @@ function openRoomModal(id,floorId){
 }
 
 function renderSessions(){
-  $('sessionsList').innerHTML=state.sessions.map(s=>`<article class="sessionCard"><div><div class="sessionNumber">SESSÃO #${s.session_number}</div><h3>${escapeHtml(s.title)}</h3><p>${escapeHtml(s.summary||'Sem resumo')}</p><small>${fmtDate(s.starts_at)}</small></div><div class="sessionStatus"><span class="status ${s.status}">${s.status}</span><div class="sessionCardActions"><button data-session-open="${s.id}">Abrir</button>${canEdit()?`<button class="softButton" data-session-edit="${s.id}">Editar</button><button class="dangerGhost" data-session-delete="${s.id}">Excluir</button>`:''}</div></div></article>`).join('') || '<div class="emptyPanel">Nenhuma sessão cadastrada.</div>';
+  $('sessionsList').innerHTML=state.sessions.map(s=>`<article class="sessionCard"><div><div class="sessionNumber">SESSÃO #${s.session_number}</div><h3>${escapeHtml(s.title)}</h3><p>${escapeHtml(s.summary||'Sem resumo')}</p><small>${fmtDate(s.starts_at)}</small>${s.history?'<small class="sessionHistoryHint">Histórico registrado</small>':'<small class="sessionHistoryHint muted">Histórico ainda não registrado</small>'}</div><div class="sessionStatus"><span class="status ${s.status}">${s.status}</span><div class="sessionCardActions"><button data-session-open="${s.id}">Abrir</button><button class="softButton" data-session-history="${s.id}">Histórico</button>${canEdit()?`<button class="softButton" data-session-edit="${s.id}">Editar</button><button class="dangerGhost" data-session-delete="${s.id}">Excluir</button>`:''}</div></div></article>`).join('') || '<div class="emptyPanel">Nenhuma sessão cadastrada.</div>';
   document.querySelectorAll('[data-session-open]').forEach(b=>b.onclick=async()=>{await activateSession(b.dataset.sessionOpen);});
+  document.querySelectorAll('[data-session-history]').forEach(b=>b.onclick=()=>openSessionHistoryModal(b.dataset.sessionHistory));
   document.querySelectorAll('[data-session-edit]').forEach(b=>b.onclick=()=>openSessionModal(b.dataset.sessionEdit));
   document.querySelectorAll('[data-session-delete]').forEach(b=>b.onclick=()=>openDeleteSessionModal(b.dataset.sessionDelete));
 }
 
+function openSessionHistoryModal(id){
+  const session=state.sessions.find(x=>x.id===id);if(!session)return;
+  const history=session.history?.trim()||'O mestre ainda não registrou o que aconteceu nesta sessão.';
+  showModal('<div class="modalHeader"><div><div class="eyebrow">MEMÓRIA DA AVENTURA</div><h3>Histórico da Sessão #'+escapeHtml(session.session_number)+' · '+escapeHtml(session.title)+'</h3></div><button class="closeButton" data-close>×</button></div>' +
+    '<div class="sessionHistoryMeta"><span>'+escapeHtml(fmtDate(session.starts_at))+'</span><span class="status '+escapeHtml(session.status)+'">'+escapeHtml(session.status)+'</span></div>' +
+    '<article class="sessionHistoryContent">'+escapeHtml(history)+'</article>' +
+    '<div class="modalActions"><button class="primarySmall" data-close>Fechar</button></div>');
+}
 function openDeleteSessionModal(id){
   if(!canEdit())return;
   const session=state.sessions.find(x=>x.id===id); if(!session)return;
@@ -602,6 +624,37 @@ function openDeleteSessionModal(id){
     catch(e){btn.disabled=false;toast(e.message||'Não foi possível excluir a sessão.','error');}
   };
 }
+function renderChronicle(){
+  const nav=$('chronicleNav'),mobileNav=$('mobileChronicleNav');
+  nav?.classList.toggle('hidden',!canEdit());mobileNav?.classList.toggle('hidden',!canEdit());
+  if(!canEdit()){if(state.view==='chronicle')state.view='table';return;}
+  const field=$('chronicleContent');
+  if(field)field.value=state.campaignChronicle?.content||'';
+  const meta=$('chronicleMeta');
+  if(meta){const updated=state.campaignChronicle?.updated_at;meta.textContent=updated?'Última edição · '+fmtDate(updated):'Ainda sem registros';}
+  const save=$('saveChronicle');
+  if(save)save.onclick=saveCampaignChronicle;
+  if(field && !field.dataset.hotkey){field.dataset.hotkey='1';field.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='s'){e.preventDefault();saveCampaignChronicle();}});}
+}
+
+async function saveCampaignChronicle(){
+  if(!canEdit()||!state.campaign)return;
+  const field=$('chronicleContent');if(!field)return;
+  const save=$('saveChronicle');
+  try{
+    save?.setAttribute('disabled','disabled');if(save)save.textContent='Salvando…';
+    const payload={campaign_id:state.campaign.id,content:field.value,updated_by:state.user.id};
+    const result=state.campaignChronicle?.campaign_id===state.campaign.id
+      ?await sb.from('campaign_chronicles').update({content:payload.content,updated_by:payload.updated_by}).eq('campaign_id',state.campaign.id).select('*').single()
+      :await sb.from('campaign_chronicles').insert(payload).select('*').single();
+    if(result.error)throw result.error;
+    state.campaignChronicle=result.data;
+    renderChronicle();
+    setSave('Crônica da mesa salva');toast('História da mesa salva');
+  }catch(e){toast(e.message||'Não foi possível salvar a crônica.','error');}
+  finally{save?.removeAttribute('disabled');if(save)save.textContent='Salvar crônica';}
+}
+
 function renderNpcs(){
   $('npcsGrid').innerHTML=state.npcs.map(n=>`<article class="dataCard"><div class="cardAvatar npc">${n.avatar_url?`<img src="${escapeHtml(n.avatar_url)}" alt="">`:'♜'}</div><div class="dataCardMain"><div class="cardKicker">NPC / MONSTRO</div><h3>${escapeHtml(n.name)}</h3><p>${escapeHtml(n.description||'Sem descrição')}</p><small class="privateNote">Anotação do mestre: ${escapeHtml(n.notes_private||'—')}</small></div><div class="cardActions"><button data-edit-npc="${n.id}">Editar</button>${canEdit()?`<button class="softButton" data-add-npc="${n.id}">${state.entities.some(e=>e.npc_id===n.id)?'Na mesa':'Colocar na mesa'}</button>`:''}</div></article>`).join('') || '<div class="emptyPanel">Nenhum NPC ou monstro cadastrado.</div>';
   document.querySelectorAll('[data-edit-npc]').forEach(b=>b.onclick=()=>openNpcModal(b.dataset.editNpc));document.querySelectorAll('[data-add-npc]').forEach(b=>b.onclick=()=>addNpcToBoard(b.dataset.addNpc));
@@ -1366,13 +1419,14 @@ function openSessionModal(id){
     <label>Data e hora <span class="optional">(opcional)</span><input id="sessStarts" type="datetime-local" value="${s?.starts_at?new Date(s.starts_at).toISOString().slice(0,16):''}"></label>
   </div>
   <label>Descrição da sessão <span class="optional">(opcional)</span><textarea id="sessSummary" rows="7" maxlength="4000" placeholder="Você pode deixar em branco e preencher depois.">${escapeHtml(s?.summary||'')}</textarea></label>
-  <p class="modalHint">A descrição não é obrigatória. Só o título é necessário para salvar a sessão.</p>
+  <label>Histórico da sessão <span class="optional">(escrito pelo mestre)</span><textarea id="sessHistory" rows="10" maxlength="20000" placeholder="Registre o que aconteceu durante a aventura: decisões, descobertas, NPCs encontrados, combates, consequências, itens obtidos e tudo que você quiser preservar para a próxima sessão.">${escapeHtml(s?.history||'')}</textarea>
+  <p class="modalHint">A descrição é opcional. O histórico é exclusivo de edição do mestre, mas pode ser consultado por todos os participantes da campanha.</p>
   <div class="modalActions"><button class="softButton" data-close>Cancelar</button><button id="saveSession" class="primarySmall">${s?'Salvar alterações':'Criar sessão'}</button></div>`);
   $('saveSession').onclick=async()=>{
     try{
       const title=$('sessTitle').value.trim();
       if(!title){toast('Informe o título da sessão.','error');$('sessTitle').focus();return;}
-      const payload={campaign_id:state.campaign.id,session_number:Number($('sessNumber').value)||next,title,summary:$('sessSummary').value.trim(),starts_at:$('sessStarts').value?new Date($('sessStarts').value).toISOString():null,status:$('sessStatus').value,created_by:s?s.created_by:state.user.id};
+      const payload={campaign_id:state.campaign.id,session_number:Number($('sessNumber').value)||next,title,summary:$('sessSummary').value.trim(),history:$('sessHistory').value.trim(),starts_at:$('sessStarts').value?new Date($('sessStarts').value).toISOString():null,status:$('sessStatus').value,created_by:s?s.created_by:state.user.id};
       const result=s?await sb.from('sessions').update(payload).eq('id',s.id).select().single():await sb.from('sessions').insert(payload).select().single();
       if(result.error)throw result.error;
       if(s)state.sessions=state.sessions.map(x=>x.id===s.id?result.data:x);else state.sessions.push(result.data);
