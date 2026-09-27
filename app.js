@@ -876,6 +876,37 @@ function openCampaignCreate(initial=false){
   showModal(`<div class="mobileCreateWizard"><div class="modalHeader"><div><div class="eyebrow">${initial?'PRIMEIRO PASSO':'NOVA CAMPANHA'}</div><h3>${intro}</h3></div><button class="closeButton" data-close>×</button></div><div class="wizardIntro"><span class="wizardStep active">1</span><div><b>Comece pelo nome</b><small>A descrição é opcional e pode ser adicionada depois.</small></div></div><label>Nome da campanha <span class="requiredMark">*</span><input id="mCampaignName" maxlength="120" autocomplete="off" placeholder="Ex.: Sombras de Valedorn"></label><label>Descrição <span class="optional">(opcional)</span><textarea id="mCampaignDesc" rows="5" maxlength="2000" placeholder="Você pode explicar o cenário, sistema ou proposta da campanha — mas não é obrigatório."></textarea><div class="wizardFeatureGrid"><div><span>✓</span><b>Código de convite</b><small>Gerado automaticamente.</small></div><div><span>✓</span><b>Mundo persistente</b><small>Monte locais e cômodos depois.</small></div><div><span>✓</span><b>Ficha configurável</b><small>Defina os campos dos jogadores.</small></div><div><span>✓</span><b>Áudio em tempo real</b><small>Use música e efeitos na mesa.</small></div></div><div class="modalActions"><button class="softButton" data-close>Cancelar</button><button id="saveCampaign" class="primarySmall">Criar campanha</button></div></div>`);
   $('saveCampaign').onclick=async()=>{const btn=$('saveCampaign');try{const n=$('mCampaignName').value.trim();if(!n){toast('Informe o nome da campanha.','error');$('mCampaignName').focus();return;}btn.disabled=true;btn.textContent='Criando…';await createCampaign(n,$('mCampaignDesc').value.trim());}catch(e){btn.disabled=false;btn.textContent='Criar campanha';toast(e.message||'Não foi possível criar a campanha.','error');}};
 }
+async function openDeleteCampaignModal(){
+  if(!canEdit()||!state.campaign)return;
+  const campaign=state.campaign;
+  showModal('<div class="modalHeader"><div><div class="eyebrow dangerEyebrow">EXCLUSÃO DA CAMPANHA</div><h3>Excluir campanha</h3></div><button class="closeButton" data-close>×</button></div>' +
+    '<div class="dangerPanel"><strong>Esta ação remove a campanha e toda a estrutura vinculada.</strong><p>Serão excluídos locais, andares, cômodos, personagens, NPCs, entidades, sessões, rolagens, playlists, áudios cadastrados e configurações da ficha. Esta ação não pode ser desfeita.</p></div>' +
+    '<label>Digite o nome da campanha para confirmar <span class="requiredMark">*</span><input id="deleteCampaignName" autocomplete="off" placeholder="' + escapeHtml(campaign.name) + '"></label>' +
+    '<div class="modalActions"><button class="softButton" data-close>Cancelar</button><button id="confirmDeleteCampaign" class="dangerButton" disabled>Excluir campanha</button></div>');
+  const input=$('deleteCampaignName'),btn=$('confirmDeleteCampaign');
+  const sync=()=>{btn.disabled=input.value.trim()!==campaign.name.trim();};
+  input.addEventListener('input',sync);
+  btn.onclick=async()=>{
+    if(input.value.trim()!==campaign.name.trim())return;
+    btn.disabled=true;
+    try{
+      const {error}=await sb.rpc('delete_campaign',{p_campaign_id:campaign.id});
+      if(error)throw error;
+      state.audioLayers.forEach(layer=>{try{layer.audio?.pause();}catch(_){}});
+      state.audioLayers.clear();state.audioPlayers.clear();
+      state.campaigns=state.campaigns.filter(c=>c.id!==campaign.id);
+      state.campaign=state.campaigns[0]||null;
+      state.floor=null;state.location=null;state.selected=null;state.selectedSessionId=null;
+      closeModal();
+      if(state.campaign){await loadCampaignData();}else{renderAll();openNoCampaignState();}
+      toast('Campanha excluída');
+    }catch(e){
+      btn.disabled=false;
+      toast(e.message||'Não foi possível excluir a campanha.','error');
+    }
+  };
+}
+
 async function deleteRoom(id){if(!requireMaster())return; if(!confirm('Excluir este cômodo? Entidades vinculadas serão mantidas, mas sem o cômodo.'))return;const {error}=await sb.from('rooms').delete().eq('id',id);if(error){toast(error.message,'error');return;}state.rooms=state.rooms.filter(r=>r.id!==id);state.selected=null;renderAll();toast('Cômodo excluído');}
 
 function fieldTypeLabel(type){return ({text:'Texto curto',number:'Número',textarea:'Texto longo',select:'Seleção',checkbox:'Sim / não',url:'URL'})[type]||type;}
@@ -1483,7 +1514,7 @@ $('profileBtn').onclick=e=>{e.stopPropagation();toggleAccountMenu();};
 $('profileMenuBtn')?.addEventListener('click',()=>{toggleAccountMenu(false);profileModal();});
 $('signOutBtn').onclick=async()=>{toggleAccountMenu(false);await sb.auth.signOut();};
 document.addEventListener('click',e=>{if(accountMenuOpen&&!e.target.closest('#accountMenu'))toggleAccountMenu(false);});
-$('deleteCampaignBtn').onclick=()=>openDeleteCampaignModal();
+$('deleteCampaignBtn').onclick=()=>{if(canEdit())openDeleteCampaignModal();};
 $('joinCampaignBtn').onclick=()=>openJoinCampaignModal();
 $('campaignInviteBtn').onclick=()=>openCampaignInvite();
 $('newLocationTopBtn')?.addEventListener('click',openLocationCreateModal);
