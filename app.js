@@ -158,9 +158,124 @@ function bindTableInteractions(){
   document.querySelectorAll('.room').forEach(el=>{el.onclick=e=>{if(e.target.closest('.roomResize'))return;state.selected={type:'room',id:el.dataset.roomId};renderTable();};el.onpointerdown=e=>startRoomDrag(e,el);});
   document.querySelectorAll('.roomResize').forEach(el=>el.onpointerdown=e=>startRoomResize(e,el.parentElement));
 }
-function startEntityDrag(e,el){if(state.tool!=='move')return;e.preventDefault();const id=el.dataset.entityId, board=$('board'), rect=board.getBoundingClientRect();el.classList.add('dragging');const move=ev=>{const x=Math.max(3,Math.min(97,((ev.clientX-rect.left)/rect.width)*100));const y=Math.max(7,Math.min(93,((ev.clientY-rect.top)/rect.height)*100));el.style.left=x+'%';el.style.top=y+'%';el.dataset.x=x;el.dataset.y=y;};const up=async()=>{document.removeEventListener('pointermove',move);el.classList.remove('dragging');const x=Number(el.dataset.x),y=Number(el.dataset.y);if(Number.isFinite(x)&&Number.isFinite(y)){const current=state.entities.find(q=>q.id===id);const room=roomAtPosition(x,y,current?.floor_id||state.floor);const {data,error}=await sb.from('world_entities').update({x,y,room_id:room?.id||null}).eq('id',id).select().single();if(error){toast(error.message,'error');return;}state.entities=state.entities.map(e=>e.id===id?data:e);setSave('Posição da entidade salva');}};document.addEventListener('pointermove',move);document.addEventListener('pointerup',up,{once:true});}
-function startRoomDrag(e,el){if(!canEdit()||state.tool!=='move'||e.target.closest('.roomResize'))return;e.preventDefault();e.stopPropagation();const r=state.rooms.find(x=>x.id===el.dataset.roomId),board=$('board'),rect=board.getBoundingClientRect(),sx=e.clientX,sy=e.clientY,ox=Number(r.x),oy=Number(r.y);const move=ev=>{const x=Math.max(2,Math.min(98-Number(r.width),ox+((ev.clientX-sx)/rect.width)*100));const y=Math.max(5,Math.min(95-Number(r.height),oy+((ev.clientY-sy)/rect.height)*100));el.style.left=x+'%';el.style.top=y+'%';el.dataset.x=x;el.dataset.y=y;};const up=async()=>{document.removeEventListener('pointermove',move);const x=Number(el.dataset.x),y=Number(el.dataset.y);if(Number.isFinite(x)&&Number.isFinite(y)){const {data,error}=await sb.from('rooms').update({x,y}).eq('id',r.id).select().single();if(error){toast(error.message,'error');return;}state.rooms=state.rooms.map(q=>q.id===r.id?data:q);setSave('Cômodo reposicionado');}};document.addEventListener('pointermove',move);document.addEventListener('pointerup',up,{once:true});}
-function startRoomResize(e,el){if(!canEdit()||state.tool!=='move')return;e.preventDefault();e.stopPropagation();const r=state.rooms.find(x=>x.id===el.dataset.roomId),board=$('board'),rect=board.getBoundingClientRect(),sx=e.clientX,sy=e.clientY,ow=Number(r.width),oh=Number(r.height);const move=ev=>{const w=Math.max(10,Math.min(85,ow+((ev.clientX-sx)/rect.width)*100)),h=Math.max(8,Math.min(75,oh+((ev.clientY-sy)/rect.height)*100));el.style.width=w+'%';el.style.height=h+'%';el.dataset.w=w;el.dataset.h=h;};const up=async()=>{document.removeEventListener('pointermove',move);const width=Number(el.dataset.w),height=Number(el.dataset.h);if(Number.isFinite(width)&&Number.isFinite(height)){const {data,error}=await sb.from('rooms').update({width,height}).eq('id',r.id).select().single();if(error){toast(error.message,'error');return;}state.rooms=state.rooms.map(q=>q.id===r.id?data:q);setSave('Área do cômodo salva');}};document.addEventListener('pointermove',move);document.addEventListener('pointerup',up,{once:true});}
+function startEntityDrag(e,el){
+  if(state.tool!=='move')return;
+  e.preventDefault();
+  const id=el.dataset.entityId;
+  const current=state.entities.find(q=>q.id===id);
+  if(!current)return;
+  const board=$('board');
+  const rect=board.getBoundingClientRect();
+  const previous={x:Number(current.x),y:Number(current.y),room_id:current.room_id??null};
+  let latestX=previous.x,latestY=previous.y;
+  el.classList.add('dragging');
+
+  const move=ev=>{
+    const x=Math.max(3,Math.min(97,((ev.clientX-rect.left)/rect.width)*100));
+    const y=Math.max(7,Math.min(93,((ev.clientY-rect.top)/rect.height)*100));
+    latestX=x; latestY=y;
+    const room=roomAtPosition(x,y,current.floor_id||state.floor);
+    state.entities=state.entities.map(item=>item.id===id?{...item,x,y,room_id:room?.id||null}:item);
+    el.style.left=x+'%';
+    el.style.top=y+'%';
+    el.dataset.x=x;
+    el.dataset.y=y;
+  };
+
+  const up=async()=>{
+    document.removeEventListener('pointermove',move);
+    el.classList.remove('dragging');
+    const room=roomAtPosition(latestX,latestY,current.floor_id||state.floor);
+    const {data,error}=await sb.from('world_entities').update({x:latestX,y:latestY,room_id:room?.id||null}).eq('id',id).select().single();
+    if(error){
+      state.entities=state.entities.map(item=>item.id===id?{...item,...previous}:item);
+      toast(error.message,'error');
+      renderTable();
+      return;
+    }
+    state.entities=state.entities.map(item=>item.id===id?data:item);
+    setSave(room?'Entidade posicionada em '+room.name:'Posição da entidade salva');
+  };
+
+  document.addEventListener('pointermove',move);
+  document.addEventListener('pointerup',up,{once:true});
+}
+function startRoomDrag(e,el){
+  if(!canEdit()||state.tool!=='move'||e.target.closest('.roomResize'))return;
+  e.preventDefault();
+  e.stopPropagation();
+  const r=state.rooms.find(x=>x.id===el.dataset.roomId);
+  if(!r)return;
+  const board=$('board');
+  const rect=board.getBoundingClientRect();
+  const sx=e.clientX,sy=e.clientY,ox=Number(r.x),oy=Number(r.y);
+  const previous={x:ox,y:oy};
+  let latestX=ox,latestY=oy;
+
+  const move=ev=>{
+    latestX=Math.max(2,Math.min(98-Number(r.width),ox+((ev.clientX-sx)/rect.width)*100));
+    latestY=Math.max(5,Math.min(95-Number(r.height),oy+((ev.clientY-sy)/rect.height)*100));
+    state.rooms=state.rooms.map(item=>item.id===r.id?{...item,x:latestX,y:latestY}:item);
+    el.style.left=latestX+'%';
+    el.style.top=latestY+'%';
+    el.dataset.x=latestX;
+    el.dataset.y=latestY;
+  };
+
+  const up=async()=>{
+    document.removeEventListener('pointermove',move);
+    const {data,error}=await sb.from('rooms').update({x:latestX,y:latestY}).eq('id',r.id).select().single();
+    if(error){
+      state.rooms=state.rooms.map(item=>item.id===r.id?{...item,...previous}:item);
+      toast(error.message,'error');
+      renderTable();
+      return;
+    }
+    state.rooms=state.rooms.map(item=>item.id===r.id?data:item);
+    setSave('Cômodo reposicionado');
+  };
+
+  document.addEventListener('pointermove',move);
+  document.addEventListener('pointerup',up,{once:true});
+}
+function startRoomResize(e,el){
+  if(!canEdit()||state.tool!=='move')return;
+  e.preventDefault();
+  e.stopPropagation();
+  const r=state.rooms.find(x=>x.id===el.dataset.roomId);
+  if(!r)return;
+  const board=$('board');
+  const rect=board.getBoundingClientRect();
+  const sx=e.clientX,sy=e.clientY,ow=Number(r.width),oh=Number(r.height);
+  const previous={width:ow,height:oh};
+  let latestW=ow,latestH=oh;
+
+  const move=ev=>{
+    latestW=Math.max(10,Math.min(85,ow+((ev.clientX-sx)/rect.width)*100));
+    latestH=Math.max(8,Math.min(75,oh+((ev.clientY-sy)/rect.height)*100));
+    state.rooms=state.rooms.map(item=>item.id===r.id?{...item,width:latestW,height:latestH}:item);
+    el.style.width=latestW+'%';
+    el.style.height=latestH+'%';
+    el.dataset.w=latestW;
+    el.dataset.h=latestH;
+  };
+
+  const up=async()=>{
+    document.removeEventListener('pointermove',move);
+    const {data,error}=await sb.from('rooms').update({width:latestW,height:latestH}).eq('id',r.id).select().single();
+    if(error){
+      state.rooms=state.rooms.map(item=>item.id===r.id?{...item,...previous}:item);
+      toast(error.message,'error');
+      renderTable();
+      return;
+    }
+    state.rooms=state.rooms.map(item=>item.id===r.id?data:item);
+    setSave('Área do cômodo salva');
+  };
+
+  document.addEventListener('pointermove',move);
+  document.addEventListener('pointerup',up,{once:true});
+}
 function applyZoom(){ $('board').style.setProperty('--board-zoom',String(state.zoom/100));$('zoomValue').textContent=state.zoom+'%'; }
 
 function renderCharacters(){
