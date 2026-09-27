@@ -1,0 +1,19 @@
+# Dependencies / build output
+node_modules/
+.next/
+out/
+dist/
+
+# Local environment
+.env
+.env.local
+.env.*.local
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Prototype archives
+*.zip
