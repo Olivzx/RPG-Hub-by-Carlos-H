@@ -852,9 +852,229 @@ async function openCharacterModal(id){
   };
 }
 
+async function fieldTypeLabel(type){return ({text:'Texto curto',number:'Número',textarea:'Texto longo',select:'Seleção',checkbox:'Sim / não',url:'URL'})[type]||type;}
+function slugifyField(label){return normalizeFieldKey(label);}
+
+function renderCharacterFieldConfigGroup(items){
+  return items.map((f,index)=>{
+    const locked=f.field_key==='name';
+    return `<div class="fieldConfigCard" data-config-id="${f.id}">
+      <div class="fieldConfigCardHead">
+        <div class="fieldIdentity">
+          <span class="fieldOrder">${index+1}</span>
+          <div>
+            <b>${escapeHtml(f.label)}</b>
+            <small>${escapeHtml(fieldTypeLabel(f.field_type))}${locked?' · campo essencial':''}</small>
+          </div>
+        </div>
+        <label class="configSwitch"><input type="checkbox" data-field-enabled ${locked||f.enabled?'checked':''} ${locked?'disabled':''}><span></span><b>Ativo</b></label>
+      </div>
+      <div class="fieldConfigLabel">
+        <span>Nome exibido na ficha</span>
+        <input data-field-label value="${escapeHtml(f.label)}" ${locked?'readonly':''}>
+      </div>
+      <div class="fieldPermissionGrid">
+        <label class="permissionOption ${f.player_visible?'selected':''}">
+          <input type="checkbox" data-field-visible ${f.player_visible?'checked':''}>
+          <span class="permissionIcon">◉</span>
+          <span><b>Jogador vê</b><small>Mostra este campo para o jogador.</small></span>
+        </label>
+        <label class="permissionOption ${f.player_editable&&f.player_visible?'selected':''}">
+          <input type="checkbox" data-field-editable ${f.player_editable?'checked':''} ${!f.player_visible?'disabled':''}>
+          <span class="permissionIcon">✎</span>
+          <span><b>Jogador edita</b><small>Permite preencher e alterar o campo.</small></span>
+        </label>
+        <label class="permissionOption ${f.required?'selected':''}">
+          <input type="checkbox" data-field-required ${f.required?'checked':''} ${locked?'disabled':''}>
+          <span class="permissionIcon">!</span>
+          <span><b>Obrigatório</b><small>Exige preenchimento antes de salvar.</small></span>
+        </label>
+      </div>
+    </div>`;
+  }).join('');
+}
+async function openCharacterFieldConfig(){
+  if(!requireMaster())return;
+  const fields=[...(state.characterFields||[])].sort((a,b)=>Number(a.sort_order)-Number(b.sort_order));
+  const basic=fields.filter(f=>!String(f.field_key).startsWith('custom_'));
+  const custom=fields.filter(f=>String(f.field_key).startsWith('custom_'));
+  const basicRows=renderCharacterFieldConfigGroup(basic);
+  const customRows=renderCharacterFieldConfigGroup(custom);
+  showModal(`<div class="modalHeader"><div><div class="eyebrow">CONFIGURAÇÃO DA CAMPANHA</div><h3>Campos da ficha</h3></div><button class="closeButton" data-close>×</button></div>
+    <p class="modalHint">Você escolhe o que existe na ficha e o nível de acesso dos jogadores. O sistema não exige D&D, Ordem Paranormal ou qualquer outro conjunto de regras.</p>
+    <div class="fieldConfigLegend">
+      <div><span class="legendDot active"></span><b>Ativo</b><small>O campo aparece na ficha.</small></div>
+      <div><span class="legendDot"></span><b>Jogador vê</b><small>O jogador consegue visualizar.</small></div>
+      <div><span class="legendDot"></span><b>Jogador edita</b><small>O jogador consegue preencher.</small></div>
+      <div><span class="legendDot"></span><b>Obrigatório</b><small>Precisa ser preenchido.</small></div>
+    </div>
+    <div class="fieldConfigSection"><div class="fieldConfigSectionHead"><div><span class="eyebrow">BASE DA FICHA</span><h4>Campos disponíveis</h4></div><span class="fieldConfigCount">${basic.length}</span></div><div class="fieldConfigList">${basicRows||'<div class="emptyPanel">Nenhum campo base.</div>'}</div></div>
+    ${custom.length?`<div class="fieldConfigSection customFieldSection"><div class="fieldConfigSectionHead"><div><span class="eyebrow">PERSONALIZADOS</span><h4>Campos criados pelo mestre</h4></div><span class="fieldConfigCount">${custom.length}</span></div><div class="fieldConfigList">${customRows}</div></div>`:''}
+    <div class="configAddPanel"><div><b>Quer criar algo diferente?</b><small>Adicione campos como Sanidade, Fama, Profissão, Estresse, Poderes, Reputação ou qualquer outra informação.</small></div><button id="addCharacterField" class="softButton">+ Criar campo</button></div>
+    <div class="modalActions"><button class="softButton" data-close>Cancelar</button><button id="saveCharacterFields" class="primarySmall">Salvar configuração</button></div>`);
+  document.querySelectorAll('[data-field-visible]').forEach(cb=>cb.addEventListener('change',()=>{
+    const row=cb.closest('.fieldConfigCard');
+    const edit=row.querySelector('[data-field-editable]');
+    if(edit){edit.disabled=!cb.checked;if(!cb.checked)edit.checked=false;}
+    cb.closest('.permissionOption')?.classList.toggle('selected',cb.checked);
+    edit?.closest('.permissionOption')?.classList.toggle('selected',!!edit.checked&&!edit.disabled);
+  }));
+  document.querySelectorAll('[data-field-editable]').forEach(cb=>cb.addEventListener('change',()=>cb.closest('.permissionOption')?.classList.toggle('selected',cb.checked&&!cb.disabled)));
+  document.querySelectorAll('[data-field-required]').forEach(cb=>cb.addEventListener('change',()=>cb.closest('.permissionOption')?.classList.toggle('selected',cb.checked)));
+  document.querySelectorAll('[data-field-enabled]').forEach(cb=>cb.addEventListener('change',()=>cb.closest('.configSwitch')?.classList.toggle('checked',cb.checked)));
+  $('addCharacterField').onclick=()=>openAddCharacterFieldModal();
+  $('saveCharacterFields').onclick=async()=>{
+    try{
+      const updates=[...document.querySelectorAll('.fieldConfigCard')].map((row,index)=>{
+        const id=row.dataset.configId;
+        const f=fields.find(x=>String(x.id)===String(id));
+        const visible=row.querySelector('[data-field-visible]').checked;
+        const locked=f.field_key==='name';
+        return {id,label:row.querySelector('[data-field-label]').value.trim()||f.label,enabled:locked?true:row.querySelector('[data-field-enabled]').checked,player_visible:locked?true:visible,player_editable:locked?true:visible&&row.querySelector('[data-field-editable]').checked,required:locked?true:row.querySelector('[data-field-required]').checked,sort_order:index*10};
+      });
+      for(const u of updates){const {error}=await sb.from('character_field_definitions').update({label:u.label,enabled:u.enabled,player_visible:u.player_visible,player_editable:u.player_editable,required:u.required,sort_order:u.sort_order}).eq('id',u.id);if(error)throw error;}
+      const {data,error}=await sb.from('character_field_definitions').select('*').eq('campaign_id',state.campaign.id).order('sort_order');if(error)throw error;
+      state.characterFields=data||[];closeModal();renderAll();toast('Configuração da ficha salva');
+    }catch(e){toast(e.message||'Não foi possível salvar a configuração.','error');}
+  };
+}
+
+function openAddCharacterFieldModal(){
+  showModal(`<div class="modalHeader"><div><div class="eyebrow">NOVO CAMPO</div><h3>Campo personalizado</h3></div><button class="closeButton" data-close>×</button></div>
+    <label>Nome do campo<input id="newFieldLabel" maxlength="80" placeholder="Ex.: Fama"></label>
+    <label>Tipo<select id="newFieldType"><option value="text">Texto curto</option><option value="number">Número</option><option value="textarea">Texto longo</option><option value="select">Seleção</option><option value="checkbox">Sim / não</option><option value="url">URL</option></select></label>
+    <label id="newFieldOptionsWrap" class="hidden">Opções da seleção<input id="newFieldOptions" placeholder="Baixa, Média, Alta"></label>
+    <div class="configToggleGrid"><label><input id="newFieldEnabled" type="checkbox" checked> Ativo</label><label><input id="newFieldVisible" type="checkbox" checked> Jogador vê</label><label><input id="newFieldEditable" type="checkbox" checked> Jogador edita</label><label><input id="newFieldRequired" type="checkbox"> Obrigatório</label></div>
+    <p class="modalHint">O valor será armazenado na ficha da campanha e poderá ser usado independentemente do sistema de RPG.</p>
+    <div class="modalActions"><button class="softButton" data-close>Cancelar</button><button id="createCustomField" class="primarySmall">Adicionar campo</button></div>`);
+  $('newFieldType').onchange=()=>$('newFieldOptionsWrap').classList.toggle('hidden',$('newFieldType').value!=='select');
+  $('newFieldVisible').onchange=()=>{if(!$('newFieldVisible').checked)$('newFieldEditable').checked=false;$('newFieldEditable').disabled=!$('newFieldVisible').checked;};
+  $('createCustomField').onclick=async()=>{
+    try{
+      const label=$('newFieldLabel').value.trim();if(!label){toast('Informe o nome do campo.','error');return;}
+      const type=$('newFieldType').value;const key='custom_'+slugifyField(label)+'_'+Date.now().toString(36);
+      const options=type==='select'?$('newFieldOptions').value.split(',').map(x=>x.trim()).filter(Boolean):[];
+      const next=(state.characterFields||[]).reduce((m,f)=>Math.max(m,Number(f.sort_order)||0),0)+10;
+      const payload={campaign_id:state.campaign.id,field_key:key,label,field_type:type,data_key:'sheet_data.'+key,options,enabled:$('newFieldEnabled').checked,player_visible:$('newFieldVisible').checked,player_editable:$('newFieldEditable').checked,required:$('newFieldRequired').checked,sort_order:next};
+      const {data,error}=await sb.from('character_field_definitions').insert(payload).select().single();if(error)throw error;state.characterFields.push(data);closeModal();openCharacterFieldConfig();toast('Campo adicionado');
+    }catch(e){toast(e.message||'Não foi possível adicionar o campo.','error');}
+  };
+}
+function normalizeFieldKey(label){
+  return String(label||'campo').toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'').slice(0,48)||'campo';
+}
+function fieldValueFromCharacter(character,field){
+  const path=String(field.data_key||'').split('.');
+  if(path.length===1)return character?.[path[0]];
+  return character?.[path[0]]?.[path[1]];
+}
+function setFieldValue(payload,field,value){
+  const path=String(field.data_key||'').split('.');
+  if(path.length===1){payload[path[0]]=value;return;}
+  if(!payload[path[0]]||typeof payload[path[0]]!=='object')payload[path[0]]={};
+  payload[path[0]][path[1]]=value;
+}
+function fieldInputHtml(field,character,isMasterEditor){
+  const raw=fieldValueFromCharacter(character,field);
+  const value=raw===null||raw===undefined?'':raw;
+  const disabled=(!isMasterEditor && !field.player_editable)?'disabled':'';
+  const required=field.required?'required':'';
+  const req=field.required?'<span class="requiredMark">*</span>':'';
+  const id='field_'+field.id;
+  const options=Array.isArray(field.options)?field.options:[];
+  if(field.data_key==='avatar_url'){
+    return `<label class="dynamicField">${escapeHtml(field.label)} ${req}<input id="${id}" data-field-id="${field.id}" data-data-key="${escapeHtml(field.data_key)}" data-type="url" value="${escapeHtml(value)}" placeholder="https://.../imagem.webp" ${disabled} ${required}><input id="${id}_file" class="dynamicFile" type="file" accept="image/*" ${disabled}><small>URL ou envio de arquivo</small></label>`;
+  }
+  if(field.field_type==='textarea'){
+    return `<label class="dynamicField">${escapeHtml(field.label)} ${req}<textarea id="${id}" data-field-id="${field.id}" data-data-key="${escapeHtml(field.data_key)}" data-type="textarea" rows="6" ${disabled} ${required}>${escapeHtml(value)}</textarea>${disabled?'<small>Somente o mestre</small>':''}</label>`;
+  }
+  if(field.field_type==='number'){
+    return `<label class="dynamicField">${escapeHtml(field.label)} ${req}<input id="${id}" data-field-id="${field.id}" data-data-key="${escapeHtml(field.data_key)}" data-type="number" type="number" value="${escapeHtml(value)}" ${disabled} ${required}>${disabled?'<small>Somente o mestre</small>':''}</label>`;
+  }
+  if(field.field_type==='select'){
+    return `<label class="dynamicField">${escapeHtml(field.label)} ${req}<select id="${id}" data-field-id="${field.id}" data-data-key="${escapeHtml(field.data_key)}" data-type="select" ${disabled} ${required}><option value="">Selecione</option>${options.map(o=>`<option value="${escapeHtml(o)}" ${String(value)===String(o)?'selected':''}>${escapeHtml(o)}</option>`).join('')}</select>${disabled?'<small>Somente o mestre</small>':''}</label>`;
+  }
+  if(field.field_type==='checkbox'){
+    return `<label class="dynamicCheck"><input id="${id}" data-field-id="${field.id}" data-data-key="${escapeHtml(field.data_key)}" data-type="checkbox" type="checkbox" ${value?'checked':''} ${disabled}> <span>${escapeHtml(field.label)}</span>${field.required?'<span class="requiredMark">*</span>':''}</label>`;
+  }
+  return `<label class="dynamicField">${escapeHtml(field.label)} ${req}<input id="${id}" data-field-id="${field.id}" data-data-key="${escapeHtml(field.data_key)}" data-type="${field.field_type||'text'}" value="${escapeHtml(value)}" ${disabled} ${required}>${disabled?'<small>Somente o mestre</small>':''}</label>`;
+}
+function getDynamicFieldDefinitions(isMasterEditor){
+  return (state.characterFields||[]).filter(f=>f.enabled && (isMasterEditor || f.player_visible)).sort((a,b)=>Number(a.sort_order)-Number(b.sort_order));
+}
+function buildCharacterPayloadFromFields(formRoot){
+  const payload={campaign_id:state.campaign.id,attributes:{},sheet_data:{}};
+  formRoot.querySelectorAll('[data-field-id]').forEach(el=>{
+    const type=el.dataset.type;
+    let value;
+    if(type==='checkbox')value=el.checked;
+    else if(type==='number')value=el.value===''?null:Number(el.value);
+    else value=el.value;
+    const field=state.characterFields.find(f=>String(f.id)===String(el.dataset.fieldId));
+    if(field)setFieldValue(payload,field,value);
+  });
+  return payload;
+}
+async function openCharacterModal(id){
+  const existing=id?state.characters.find(x=>x.id===id):null;
+  if(existing && !canEdit() && existing.player_id!==state.user.id){toast('Você só pode editar sua própria ficha.','error');return;}
+  const isMasterEditor=canEdit();
+  const c=existing||{name:'',class_name:'',ancestry_name:'',level:1,hp_current:'',hp_max:'',armor_class:'',luck:0,luck_points:0,notes:'',attributes:{},sheet_data:{},avatar_url:''};
+  const defs=getDynamicFieldDefinitions(isMasterEditor);
+  const visibleFields=defs.length?defs:[{id:'fallback_name',label:'Nome do personagem',field_type:'text',data_key:'name',enabled:true,player_visible:true,player_editable:true,required:true,sort_order:0}];
+  const memberOptions=state.members.map(m=>{const p=profileFor(m.user_id);return `<option value="${m.user_id}" ${(c.player_id||state.user.id)===m.user_id?'selected':''}>${escapeHtml(p?.display_name||(m.user_id===state.user.id?'Você':'Jogador'))}</option>`;}).join('');
+  const fieldsHtml=visibleFields.map(f=>fieldInputHtml(f,c,isMasterEditor)).join('');
+  const playerFieldNote=isMasterEditor?'Você está visualizando a ficha como mestre. Campos podem ser exibidos ou limitados aos jogadores na configuração.':'Preencha somente os campos liberados pelo mestre desta campanha.';
+  showModal(`<div class="modalHeader"><div><div class="eyebrow">FICHA DA CAMPANHA</div><h3>${existing?'Editar personagem':'Novo personagem'}</h3></div><button class="closeButton" data-close>×</button></div>
+    <p class="modalHint">${playerFieldNote}</p>
+    ${isMasterEditor?`<div class="characterAssign"><label>Jogador responsável<select id="charPlayer">${memberOptions}</select></label></div>`:''}
+    <div id="dynamicCharacterFields" class="dynamicCharacterFields">${fieldsHtml}</div>
+    <div class="modalActions"><button class="softButton" data-close>Cancelar</button><button id="saveCharacter" class="primarySmall">Salvar ficha</button></div>`);
+  $('saveCharacter').onclick=async()=>{
+    try{
+      const payload=buildCharacterPayloadFromFields($('dynamicCharacterFields'));
+      payload.id=undefined;
+      payload.campaign_id=state.campaign.id;
+      if(isMasterEditor){payload.player_id=$('charPlayer')?.value||null;}else{payload.player_id=state.user.id;}
+      const name=payload.name?.trim?.()||'';
+      if(!name){toast('O nome do personagem é obrigatório.','error');return;}
+      const defsForValidation=getDynamicFieldDefinitions(isMasterEditor);
+      for(const f of defsForValidation){
+        if(!f.required||(!isMasterEditor&&!f.player_editable)||!f.enabled)continue;
+        const v=fieldValueFromCharacter(payload,f);
+        if(v===null||v===undefined||v===''||(f.field_type==='checkbox'&&v!==true)){toast('Preencha o campo obrigatório: '+f.label,'error');return;}
+      }
+      if(!payload.attributes)payload.attributes={};
+      if(!payload.sheet_data)payload.sheet_data={};
+      if(existing){
+        const updatePayload={...payload};delete updatePayload.id;
+        const {data,error}=await sb.from('characters').update(updatePayload).eq('id',existing.id).select().single();
+        if(error)throw error;
+        state.characters=state.characters.map(x=>x.id===existing.id?data:x);
+      }else{
+        const {data,error}=await sb.from('characters').insert(payload).select().single();
+        if(error)throw error;
+        state.characters.push(data);
+      }
+      const fileIds=visibleFields.filter(f=>f.data_key==='avatar_url').map(f=>f.id);
+      for(const fieldId of fileIds){
+        const file=$( 'field_'+fieldId+'_file')?.files?.[0];
+        if(file){
+          const avatar=await uploadMedia(file,'characters/'+(existing?.id||uid()));
+          const targetId=existing?.id||state.characters.at(-1).id;
+          const {data,error}=await sb.from('characters').update({avatar_url:avatar}).eq('id',targetId).select().single();
+          if(error)throw error;
+          state.characters=state.characters.map(x=>x.id===targetId?data:x);
+        }
+      }
+      closeModal();renderAll();toast('Ficha salva');
+    }catch(e){toast(e.message||'Não foi possível salvar a ficha.','error');}
+  };
+}
+
 async function openLocationModal(id){const l=state.locations.find(x=>x.id===id);if(!l)return;showModal(`<div class="modalHeader"><div><div class="eyebrow">LOCAL</div><h3>Editar local</h3></div><button class="closeButton" data-close>×</button></div><label>Nome<input id="locName" value="${escapeHtml(l.name)}"></label><label>Descrição<textarea id="locDesc" rows="4">${escapeHtml(l.description||'')}</textarea></label><div class="modalActions"><button class="softButton" data-close>Cancelar</button><button id="saveLocation" class="primarySmall">Salvar</button></div>`);$('saveLocation').onclick=async()=>{if(!requireMaster())return;const {data,error}=await sb.from('locations').update({name:$('locName').value.trim(),description:$('locDesc').value.trim()}).eq('id',id).select().single();if(error){toast(error.message,'error');return;}state.locations=state.locations.map(x=>x.id===id?data:x);closeModal();renderAll();toast('Local atualizado');};}
 
-$('newFloorBtn').onclick=()=>{if(!requireMaster())return;showModal(`<div class="modalHeader"><div><div class="eyebrow">MUNDO</div><h3>Novo andar</h3></div><button class="closeButton" data-close>×</button></div><div class="formGrid"><label>Nome<input id="floorName" placeholder="Ex.: Torre norte"></label><label>Número<input id="floorNum" type="number" value="3"></label></div><div class="modalActions"><button class="softButton" data-close>Cancelar</button><button id="saveFloor" class="primarySmall">Criar andar</button></div>`);$('saveFloor').onclick=async()=>{try{const {data,error}=await sb.from('floors').insert({location_id:currentLocation().id,name:$('floorName').value.trim(),floor_number:Number($('floorNum').value),sort_order:state.floors.length}).select().single();if(error)throw error;state.floors.push(data);state.floor=data.id;closeModal();renderAll();toast('Andar criado');}catch(e){toast(e.message,'error');}};};
+$('newFloorBtn').onclick=()=>openFloorModal(null,currentLocation()?.id);
 
 function openSessionModal(id){
   if(!canEdit()){toast('Apenas o mestre desta campanha pode criar ou editar sessões.','error');return;}
