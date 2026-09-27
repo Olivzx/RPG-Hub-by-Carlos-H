@@ -51,8 +51,12 @@ async function ensureProfile(){
 }
 
 async function loadCampaigns(){
-  const {data,error}=await sb.from('campaigns').select('*').order('created_at',{ascending:true}); if(error) throw error;
-  state.campaigns=data||[]; $('campaignSelect').innerHTML=state.campaigns.map(c=>`<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
+  const {data,error}=await sb.from('campaigns')
+    .select('id,owner_id,name,description,system_name,cover_url,discord_url,discord_guild_id,timezone,created_at,updated_at')
+    .order('created_at',{ascending:true});
+  if(error) throw error;
+  state.campaigns=data||[];
+  $('campaignSelect').innerHTML=state.campaigns.map(c=>`<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
   if(state.campaign && !state.campaigns.some(c=>c.id===state.campaign.id)) state.campaign=null;
   if(!state.campaign && state.campaigns[0]) state.campaign=state.campaigns[0];
   if(state.campaign) $('campaignSelect').value=state.campaign.id;
@@ -128,6 +132,8 @@ function renderShell(){
   $('newRoomBtn').disabled=!canEdit(); $('newFloorBtn').disabled=!canEdit(); $('newSessionBtn').disabled=!canEdit(); $('newNpcBtn').disabled=!canEdit(); $('newCharacterBtn').disabled=false;
   const active=currentSession(); $('activeSessionLabel').textContent=active?`Sessão #${active.session_number} · ${active.status.toUpperCase()}`:'Nenhuma sessão ativa'; $('activeSessionTitle').textContent=active?.title||'Crie uma sessão para começar';
   const list=state.campaigns.map(c=>`<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');$('campaignSelect').innerHTML=list; if(state.campaign)$('campaignSelect').value=state.campaign.id;
+  $('campaignInviteBtn').classList.toggle('hidden',!canEdit());
+  $('joinCampaignBtn').classList.toggle('hidden',canEdit() && !!state.campaign);
 }
 function renderView(){ document.querySelectorAll('.view').forEach(v=>v.classList.remove('active')); $(`view${state.view.charAt(0).toUpperCase()+state.view.slice(1)}`)?.classList.add('active'); document.querySelectorAll('#sideNav button').forEach(b=>b.classList.toggle('active',b.dataset.view===state.view)); }
 
@@ -320,10 +326,50 @@ function openNoCampaignState(){
 
 async function createCampaign(name,description){
   if(!canCreateCampaign()) throw new Error('Somente contas Mestre podem criar campanhas.');
-  const {data,error}=await sb.from('campaigns').insert({owner_id:state.user.id,name,description,system_name:'Sistema próprio',invite_code:Math.random().toString(36).slice(2,10).toUpperCase()}).select().single(); if(error) throw error;
+  const inviteCode=Math.random().toString(36).slice(2,12).toUpperCase();
+  const {data,error}=await sb.from('campaigns').insert({owner_id:state.user.id,name,description,system_name:'Sistema próprio',invite_code:inviteCode})
+    .select('id,owner_id,name,description,system_name,cover_url,discord_url,discord_guild_id,timezone,created_at,updated_at').single();
+  if(error) throw error;
   const {error:me}=await sb.from('campaign_members').insert({campaign_id:data.id,campaign_owner_id:state.user.id,user_id:state.user.id,role:'owner'}); if(me) throw me;
   state.campaign=data; await loadCampaigns(); await initializeWorld(); await loadCampaignData(); closeModal();toast('Campanha criada');
 }
+async function openCampaignInvite(){
+  if(!canEdit()||!state.campaign)return;
+  try{
+    const {data,error}=await sb.rpc('get_campaign_invite',{p_campaign_id:state.campaign.id});
+    if(error)throw error;
+    showModal(`<div class="modalHeader"><div><div class="eyebrow">ACESSO À CAMPANHA</div><h3>Código de convite</h3></div><button class="closeButton" data-close>×</button></div>
+      <p class="modalHint">Envie este código somente para as pessoas que você quer dentro da campanha. Quem não tiver o código não consegue solicitar entrada.</p>
+      <div class="inviteCodeBox"><span id="inviteCodeValue">${escapeHtml(data||'—')}</span><button id="copyInviteBtn" class="softButton">Copiar</button></div>
+      <div class="inviteWarning">Renovar o código invalida o código anterior imediatamente.</div>
+      <div class="modalActions"><button class="softButton" data-close>Fechar</button><button id="regenerateInviteBtn" class="primarySmall">Gerar novo código</button></div>`);
+    $('copyInviteBtn').onclick=async()=>{try{await navigator.clipboard.writeText(data);toast('Código copiado');}catch(e){toast('Não foi possível copiar automaticamente.','error');}};
+    $('regenerateInviteBtn').onclick=async()=>{try{if(!confirm('Gerar um novo código? O código atual deixará de funcionar.'))return;const {data:newCode,error}=await sb.rpc('regenerate_campaign_invite',{p_campaign_id:state.campaign.id});if(error)throw error;$('inviteCodeValue').textContent=newCode;toast('Novo código gerado');}catch(e){toast(e.message,'error');}};
+  }catch(e){toast(e.message||'Não foi possível consultar o código.','error');}
+}
+function openJoinCampaignModal(){
+  showModal(`<div class="modalHeader"><div><div class="eyebrow">ENTRAR NA CAMPANHA</div><h3>Usar código de convite</h3></div><button class="closeButton" data-close>×</button></div>
+    <p class="modalHint">Peça o código ao mestre da campanha. Você só entra depois que o código for validado pelo RPG HUB.</p>
+    <label>Código de convite<input id="joinCampaignCode" maxlength="24" autocomplete="off" autocapitalize="characters" placeholder="Ex.: 8F4B1A9C20"></label>
+    <div class="modalActions"><button class="softButton" data-close>Cancelar</button><button id="joinCampaignBtnConfirm" class="primarySmall">Entrar na campanha</button></div>`);
+  $('joinCampaignBtnConfirm').onclick=async()=>{
+    const code=$('joinCampaignCode').value.trim().toUpperCase();
+    if(!code){toast('Informe o código de convite.','error');return;}
+    try{
+      const {data,error}=await sb.rpc('join_campaign_by_code',{p_invite_code:code});
+      if(error)throw error;
+      const joined=Array.isArray(data)?data[0]:data;
+      if(!joined?.campaign_id)throw new Error('Não foi possível identificar a campanha.');
+      closeModal();
+      await loadCampaigns();
+      state.campaign=state.campaigns.find(c=>c.id===joined.campaign_id)||null;
+      state.floor=null; state.selected=null;
+      await loadCampaignData();
+      toast('Você entrou na campanha');
+    }catch(e){toast(e.message||'Código inválido ou campanha indisponível.','error');}
+  };
+}
+
 function openCampaignCreate(initial=false){
   showModal(`<div class="modalHeader"><div><div class="eyebrow">${initial?'PRIMEIRO PASSO':'NOVA CAMPANHA'}</div><h3>${initial?'Crie sua primeira campanha':'Nova campanha'}</h3></div></div><label>Nome<input id="mCampaignName" maxlength="120" placeholder="Ex.: Sombras de Valedorn"></label><label>Descrição<textarea id="mCampaignDesc" rows="4" placeholder="Uma frase sobre sua campanha."></textarea></label><div class="modalActions"><button class="softButton" data-close>Cancelar</button><button id="saveCampaign" class="primarySmall">Criar campanha</button></div>`);
   $('saveCampaign').onclick=async()=>{try{const n=$('mCampaignName').value.trim();if(!n){toast('Informe um nome.','error');return;}await createCampaign(n,$('mCampaignDesc').value.trim());}catch(e){toast(e.message,'error');}};
@@ -502,6 +548,8 @@ $('profileBtn').onclick=e=>{e.stopPropagation();toggleAccountMenu();};
 $('profileMenuBtn')?.addEventListener('click',()=>{toggleAccountMenu(false);profileModal();});
 $('signOutBtn').onclick=async()=>{toggleAccountMenu(false);await sb.auth.signOut();};
 document.addEventListener('click',e=>{if(accountMenuOpen&&!e.target.closest('#accountMenu'))toggleAccountMenu(false);});
+$('joinCampaignBtn').onclick=()=>openJoinCampaignModal();
+$('campaignInviteBtn').onclick=()=>openCampaignInvite();
 $('newCampaignBtn').onclick=()=>{if(!canCreateCampaign()){toast('Mude sua conta para Mestre no perfil para criar campanhas.','error');return;}openCampaignCreate(false);}; $('openSessionsBtn').onclick=()=>{state.view='sessions';renderView();}; $('openDiceBtn').onclick=()=>{state.view='dice';renderView();renderDice();setTimeout(wireAudioControls,0);};
 $('newRoomBtn').onclick=()=>{if(requireMaster())openRoomModal();};
 $('structureBtn').onclick=()=>{state.tool=state.tool==='draw'?'move':'draw';$('structureBtn').classList.toggle('chosen',state.tool==='draw');$('moveBtn').classList.toggle('chosen',state.tool==='move');$('board').classList.toggle('drawing',state.tool==='draw');$('boardHint').textContent=state.tool==='draw'?'Clique e arraste para desenhar um novo cômodo':'Arraste entidades e cômodos para reposicionar';};
