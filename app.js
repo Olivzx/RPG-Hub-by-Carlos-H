@@ -1829,19 +1829,12 @@ async function performRoll(notation,rule='normal'){
   if((rule==='advantage'||rule==='disadvantage')&&count===1&&sides===20){const a=rollOnce(1)[0],b=rollOnce(1)[0];base=[a,b];finalBase=[rule==='advantage'?Math.max(a,b):Math.min(a,b)];appliedRule=rule==='advantage'?'Vantagem (maior)':'Desvantagem (menor)';}else{base=rollOnce(count);finalBase=base;appliedRule='Normal';}
   const final=finalBase.reduce((a,b)=>a+b,0)+modifier;
   const payload={campaign_id:state.campaign.id,session_id:currentSession()?.id||null,roller_user_id:state.user.id,character_id:state.characters.find(c=>c.player_id===state.user.id)?.id||null,notation:notation.trim(),base_results:base,rule_results:{label:appliedRule,selected:finalBase,modifier},final_result:final,created_at:new Date().toISOString()};
-  if(canEdit()){
-    const {data,error}=await sb.from('dice_rolls').insert(payload).select().single();
-    if(error)throw error;
-    state.rolls=[data,...state.rolls];
-    renderDiceResult(data);
-    renderDice();
-    return data;
-  }
-  const {error}=await sb.from('dice_rolls').insert(payload);
+  const {data,error}=await sb.from('dice_rolls').insert(payload).select().single();
   if(error)throw error;
-  renderDiceResult(payload);
+  if(canEdit()) state.rolls=[data,...state.rolls];
+  renderDiceResult(data);
   renderDice();
-  return payload;
+  return data;
 }
 
 async function profileModal(){
