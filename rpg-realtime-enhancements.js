@@ -344,7 +344,7 @@
   }
 
   function init() {
-    if (!window.rpgSupabase || !window.state) {
+    if (!window.rpgSupabase || typeof state === 'undefined') {
       roomChannelState.poll = setTimeout(init, 250);
       return;
     }
