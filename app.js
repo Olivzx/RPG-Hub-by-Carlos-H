@@ -13,8 +13,10 @@ const state = {
   audioEnabled:false, presenceChannel:null, online:1, isLoading:true
 };
 
-function isMaster(){ return state.role === 'owner'; }
-function canEdit(){ return isMaster(); }
+function isMaster(){ return state.profile?.account_type === 'master'; }
+function isCampaignMaster(){ return !!state.campaign && state.campaign.owner_id === state.user?.id; }
+function canEdit(){ return isCampaignMaster(); }
+function canCreateCampaign(){ return isMaster(); }
 function toast(msg,type='ok'){ const el=$('toast'); el.textContent=(type==='error'?'! ':'✓ ')+msg; el.className=`toast show ${type}`; clearTimeout(window.__toast); window.__toast=setTimeout(()=>el.className='toast',2300); }
 function setSave(text='Salvo no Supabase',ok=true){ $('saveState').textContent=text; $('saveState').closest('.persistStatus').classList.toggle('bad',!ok); }
 function showModal(inner,wide=false){$('modalCard').className=wide?'modalCard wide':'modalCard';$('modalCard').innerHTML=inner;$('modalBackdrop').classList.add('open');$('modalBackdrop').setAttribute('aria-hidden','false');}
@@ -32,7 +34,7 @@ async function boot(){
     state.user=data.session.user;
     await ensureProfile();
     await loadCampaigns();
-    if(!state.campaign){ openCampaignCreate(true); }
+    if(!state.campaign){ if(canCreateCampaign()) openCampaignCreate(true); else openNoCampaignState(); }
     else { await loadCampaignData(); }
     attachAuthListener();
   }catch(err){console.error(err);toast(err.message||'Falha ao carregar a mesa.','error');setSave('Falha de conexão',false);} finally {state.isLoading=false;}
@@ -44,7 +46,7 @@ async function ensureProfile(){
   const {data,error}=await sb.from('profiles').select('*').eq('id',state.user.id).maybeSingle(); if(error) throw error;
   if(data){state.profile=data;return;}
   const display=state.user.user_metadata?.display_name || state.user.email?.split('@')[0] || 'Aventureiro';
-  const {data:created,error:insertError}=await sb.from('profiles').insert({id:state.user.id,display_name:display}).select('*').single();
+  const {data:created,error:insertError}=await sb.from('profiles').insert({id:state.user.id,display_name:display,account_type:state.user.user_metadata?.account_type==='master'?'master':'player'}).select('*').single();
   if(insertError) throw insertError; state.profile=created;
 }
 
@@ -74,7 +76,7 @@ async function loadCampaignData(){
   state.profiles=new Map();
   const ids=[...new Set(state.members.map(m=>m.user_id).filter(Boolean))];
   if(ids.length){ const {data:profiles}=await sb.from('profiles').select('id,display_name,avatar_url').in('id',ids); (profiles||[]).forEach(p=>state.profiles.set(p.id,p)); }
-  if(!state.locations.length && isMaster()) await initializeWorld();
+  if(!state.locations.length && canEdit()) await initializeWorld();
   else { await loadFloors(); }
   ensureFloor();
   state.selectedSessionId=currentSession()?.id||null;
@@ -120,10 +122,10 @@ function receiveRoll(payload){ state.rolls=[payload,...state.rolls].slice(0,30);
 
 function renderAll(){renderShell();renderTable();renderCharacters();renderWorld();renderSessions();renderNpcs();renderDice();renderView();}
 function renderShell(){
-  $('campaignRole').textContent=isMaster()?'Mestre da campanha':state.role==='co_master'?'Co-mestre':'Jogador'; $('masterBadge').classList.toggle('hidden',!isMaster());
+  $('campaignRole').textContent=isMaster()?'Conta mestre · '+(isCampaignMaster()?'Mestre da campanha':state.role==='co_master'?'Co-mestre':'membro'):'Conta jogador · '+(state.role==='player'?'Jogador':state.role); $('masterBadge').classList.toggle('hidden',!isCampaignMaster());
   $('workspaceTitle').textContent=state.campaign?.name||'RPG HUB'; $('workspaceSubtitle').textContent=state.campaign?.description||'Campanha persistente'; $('boardLocationName').textContent=currentLocation()?.name||'Sem local'; $('userName').textContent=state.profile?.display_name||state.user?.email?.split('@')[0]||'Aventureiro';
   $('userAvatar').innerHTML=state.profile?.avatar_url?`<img src="${escapeHtml(state.profile.avatar_url)}" alt="">`:'?';
-  $('newRoomBtn').disabled=!canEdit(); $('newFloorBtn').disabled=!canEdit(); $('newSessionBtn').disabled=!canEdit(); $('newNpcBtn').disabled=!canEdit(); $('newCharacterBtn').disabled=!canEdit();
+  $('newRoomBtn').disabled=!canEdit(); $('newFloorBtn').disabled=!canEdit(); $('newSessionBtn').disabled=!canEdit(); $('newNpcBtn').disabled=!canEdit(); $('newCharacterBtn').disabled=false;
   const active=currentSession(); $('activeSessionLabel').textContent=active?`Sessão #${active.session_number} · ${active.status.toUpperCase()}`:'Nenhuma sessão ativa'; $('activeSessionTitle').textContent=active?.title||'Crie uma sessão para começar';
   const list=state.campaigns.map(c=>`<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');$('campaignSelect').innerHTML=list; if(state.campaign)$('campaignSelect').value=state.campaign.id;
 }
@@ -163,7 +165,7 @@ function applyZoom(){ $('board').style.setProperty('--board-zoom',String(state.z
 
 function renderCharacters(){
   const grid=$('charactersGrid'); if(!state.characters.length){grid.innerHTML='<div class="emptyPanel">Ainda não existem personagens nesta campanha.<br><span>O primeiro personagem pode ser criado agora.</span></div>';return;}
-  grid.innerHTML=state.characters.map(c=>{const p=profileFor(c.player_id);const avatar=c.avatar_url||p?.avatar_url;return `<article class="dataCard"><div class="cardAvatar">${avatar?`<img src="${escapeHtml(avatar)}" alt="">`:'♙'}</div><div class="dataCardMain"><div class="cardKicker">NÍVEL ${c.level??0}</div><h3>${escapeHtml(c.name)}</h3><p>${escapeHtml(c.ancestry_name||'—')} · ${escapeHtml(c.class_name||'Classe não definida')}</p><div class="miniStats"><span>HP <b>${c.hp_current??'—'}/${c.hp_max??'—'}</b></span><span>CA <b>${c.armor_class??'—'}</b></span><span>SORTE <b>${c.luck??0}</b></span></div><small class="playerLine">Jogador: ${escapeHtml(p?.display_name || (c.player_id===state.user.id?'Você':'ID '+String(c.player_id||'—').slice(0,8)))}</small></div><div class="cardActions"><button data-edit-character="${c.id}">Abrir ficha</button>${isMaster()?`<button class="softButton" data-add-char="${c.id}">${state.entities.some(e=>e.character_id===c.id)?'Na mesa':'Colocar na mesa'}</button>`:''}</div></article>`;}).join('');
+  grid.innerHTML=state.characters.map(c=>{const p=profileFor(c.player_id);const avatar=c.avatar_url||p?.avatar_url;return `<article class="dataCard"><div class="cardAvatar">${avatar?`<img src="${escapeHtml(avatar)}" alt="">`:'♙'}</div><div class="dataCardMain"><div class="cardKicker">NÍVEL ${c.level??0}</div><h3>${escapeHtml(c.name)}</h3><p>${escapeHtml(c.ancestry_name||'—')} · ${escapeHtml(c.class_name||'Classe não definida')}</p><div class="miniStats"><span>HP <b>${c.hp_current??'—'}/${c.hp_max??'—'}</b></span><span>CA <b>${c.armor_class??'—'}</b></span><span>SORTE <b>${c.luck??0}</b></span></div><small class="playerLine">Jogador: ${escapeHtml(p?.display_name || (c.player_id===state.user.id?'Você':'ID '+String(c.player_id||'—').slice(0,8)))}</small></div><div class="cardActions"><button data-edit-character="${c.id}">Abrir ficha</button>${canEdit()?`<button class="softButton" data-add-char="${c.id}">${state.entities.some(e=>e.character_id===c.id)?'Na mesa':'Colocar na mesa'}</button>`:''}</div></article>`;}).join('');
   document.querySelectorAll('[data-edit-character]').forEach(b=>b.onclick=()=>openCharacterModal(b.dataset.editCharacter)); document.querySelectorAll('[data-add-char]').forEach(b=>b.onclick=()=>addCharacterToBoard(b.dataset.addChar));
 }
 
@@ -186,9 +188,17 @@ function renderDice(){
   setTimeout(wireAudioControls,0);
 }
 function renderDiceResult(payload){ if(!payload)return;$('bigRoll').textContent=payload.final_result;$('rollBreakdown').innerHTML=`<b>${escapeHtml(payload.notation)}</b> · base: [${(payload.base_results||[]).join(', ')}] · ${escapeHtml(payload.rule_results?.label||'normal')}`;$('rollResult').innerHTML=`<span>${escapeHtml(payload.notation)}</span><b>${payload.final_result}</b>`; }
-function audioPanel(){ if(!isMaster()){return `<div class="audioCard"><div class="eyebrow">SOM DA SESSÃO</div><h3>Áudio sincronizado pelo mestre</h3><p>Ative o áudio para receber músicas e efeitos durante a sessão.</p><button id="enableAudioBtn" class="primarySmall">${state.audioEnabled?'Áudio ativo':'Ativar áudio'}</button></div>`; } return `<div class="audioCard"><div class="eyebrow">PAINEL DO MESTRE</div><h3>Música & efeitos</h3><p>Envie um arquivo ou cole uma URL. Música fica em loop; efeitos tocam uma vez. Play/stop é transmitido em tempo real.</p><div class="audioForm"><input id="audioUrl" placeholder="https://.../audio.mp3"><input id="audioFile" type="file" accept="audio/*"><select id="audioKind"><option value="music">Música · loop</option><option value="effect">Efeito sonoro · uma vez</option></select><div class="audioActions"><input id="audioVolume" type="range" min="0" max="1" step="0.05" value="0.75"><button id="playAudioBtn" class="primarySmall">▶ Tocar</button><button id="stopAudioBtn" class="softButton">■ Parar</button></div></div></div>`; }
+function audioPanel(){ if(!canEdit()){return `<div class="audioCard"><div class="eyebrow">SOM DA SESSÃO</div><h3>Áudio sincronizado pelo mestre</h3><p>Ative o áudio para receber músicas e efeitos durante a sessão.</p><button id="enableAudioBtn" class="primarySmall">${state.audioEnabled?'Áudio ativo':'Ativar áudio'}</button></div>`; } return `<div class="audioCard"><div class="eyebrow">PAINEL DO MESTRE</div><h3>Música & efeitos</h3><p>Envie um arquivo ou cole uma URL. Música fica em loop; efeitos tocam uma vez. Play/stop é transmitido em tempo real.</p><div class="audioForm"><input id="audioUrl" placeholder="https://.../audio.mp3"><input id="audioFile" type="file" accept="audio/*"><select id="audioKind"><option value="music">Música · loop</option><option value="effect">Efeito sonoro · uma vez</option></select><div class="audioActions"><input id="audioVolume" type="range" min="0" max="1" step="0.05" value="0.75"><button id="playAudioBtn" class="primarySmall">▶ Tocar</button><button id="stopAudioBtn" class="softButton">■ Parar</button></div></div></div>`; }
+
+function openNoCampaignState(){
+  showModal(`<div class="modalHeader"><div><div class="eyebrow">PRIMEIRO PASSO</div><h3>Você ainda não participa de uma campanha</h3></div></div>
+  <p class="modalHint">Sua conta está configurada como Jogador. Para entrar em uma campanha, use um convite/código do mestre. Você também pode mudar seu tipo de conta para Mestre no seu perfil sem ganhar acesso às campanhas de outras pessoas.</p>
+  <div class="modalActions"><button class="primarySmall" id="openProfileFromEmpty">Abrir perfil</button><button class="softButton" data-close>Fechar</button></div>`);
+  $('openProfileFromEmpty').onclick=()=>{closeModal();profileModal();};
+}
 
 async function createCampaign(name,description){
+  if(!canCreateCampaign()) throw new Error('Somente contas Mestre podem criar campanhas.');
   const {data,error}=await sb.from('campaigns').insert({owner_id:state.user.id,name,description,system_name:'Sistema próprio',invite_code:Math.random().toString(36).slice(2,10).toUpperCase()}).select().single(); if(error) throw error;
   const {error:me}=await sb.from('campaign_members').insert({campaign_id:data.id,user_id:state.user.id,role:'owner'}); if(me) throw me;
   state.campaign=data; await loadCampaigns(); await initializeWorld(); await loadCampaignData(); closeModal();toast('Campanha criada');
@@ -216,7 +226,32 @@ async function openLocationModal(id){const l=state.locations.find(x=>x.id===id);
 
 $('newFloorBtn').onclick=()=>{if(!requireMaster())return;showModal(`<div class="modalHeader"><div><div class="eyebrow">MUNDO</div><h3>Novo andar</h3></div><button class="closeButton" data-close>×</button></div><div class="formGrid"><label>Nome<input id="floorName" placeholder="Ex.: Torre norte"></label><label>Número<input id="floorNum" type="number" value="3"></label></div><div class="modalActions"><button class="softButton" data-close>Cancelar</button><button id="saveFloor" class="primarySmall">Criar andar</button></div>`);$('saveFloor').onclick=async()=>{try{const {data,error}=await sb.from('floors').insert({location_id:currentLocation().id,name:$('floorName').value.trim(),floor_number:Number($('floorNum').value),sort_order:state.floors.length}).select().single();if(error)throw error;state.floors.push(data);state.floor=data.id;closeModal();renderAll();toast('Andar criado');}catch(e){toast(e.message,'error');}};};
 
-function openSessionModal(id){if(!requireMaster())return;const s=id?state.sessions.find(x=>x.id===id):null;const next=(state.sessions.reduce((m,x)=>Math.max(m,x.session_number||0),0)+1);showModal(`<div class="modalHeader"><div><div class="eyebrow">SESSÃO</div><h3>${s?'Editar sessão':'Nova sessão'}</h3></div><button class="closeButton" data-close>×</button></div><div class="formGrid"><label>Número<input id="sessNumber" type="number" value="${s?.session_number||next}"></label><label>Status<select id="sessStatus">${['planned','live','finished','cancelled'].map(x=>`<option ${s?.status===x?'selected':''}>${x}</option>`).join('')}</select></label><label>Título<input id="sessTitle" value="${escapeHtml(s?.title||'Nova sessão')}"></label><label>Data e hora<input id="sessStarts" type="datetime-local" value="${s?.starts_at?new Date(s.starts_at).toISOString().slice(0,16):''}"></label></div><label>Resumo<textarea id="sessSummary" rows="6">${escapeHtml(s?.summary||'')}</textarea></label><div class="modalActions"><button class="softButton" data-close>Cancelar</button><button id="saveSession" class="primarySmall">Salvar</button></div>`);$('saveSession').onclick=async()=>{try{const payload={campaign_id:state.campaign.id,session_number:Number($('sessNumber').value),title:$('sessTitle').value.trim(),summary:$('sessSummary').value.trim(),starts_at:$('sessStarts').value?new Date($('sessStarts').value).toISOString():null,status:$('sessStatus').value,created_by:state.user.id};if(!payload.title)throw new Error('Informe o título.');const result=s?await sb.from('sessions').update(payload).eq('id',s.id).select().single():await sb.from('sessions').insert(payload).select().single();if(result.error)throw result.error;if(s)state.sessions=state.sessions.map(x=>x.id===s.id?result.data:x);else state.sessions.push(result.data);state.selectedSessionId=result.data.id;closeModal();await subscribeRealtime();renderAll();toast('Sessão salva');}catch(e){toast(e.message,'error');}};}
+function openSessionModal(id){
+  if(!canEdit()){toast('Apenas o mestre desta campanha pode criar ou editar sessões.','error');return;}
+  const s=id?state.sessions.find(x=>x.id===id):null;
+  const next=state.sessions.reduce((m,x)=>Math.max(m,x.session_number||0),0)+1;
+  showModal(`<div class="modalHeader"><div><div class="eyebrow">SESSÃO</div><h3>${s?'Editar sessão':'Nova sessão'}</h3></div><button class="closeButton" data-close>×</button></div>
+  <div class="formGrid">
+    <label>Número<input id="sessNumber" type="number" min="1" value="${s?.session_number||next}"></label>
+    <label>Status<select id="sessStatus">${['planned','live','finished','cancelled'].map(x=>`<option value="${x}" ${s?.status===x?'selected':''}>${x}</option>`).join('')}</select></label>
+    <label>Título<input id="sessTitle" maxlength="160" value="${escapeHtml(s?.title||'Nova sessão')}" placeholder="Ex.: O Reino Submerso"></label>
+    <label>Data e hora <span class="optional">(opcional)</span><input id="sessStarts" type="datetime-local" value="${s?.starts_at?new Date(s.starts_at).toISOString().slice(0,16):''}"></label>
+  </div>
+  <label>Descrição da sessão <span class="optional">(opcional)</span><textarea id="sessSummary" rows="7" maxlength="4000" placeholder="Você pode deixar em branco e preencher depois.">${escapeHtml(s?.summary||'')}</textarea></label>
+  <p class="modalHint">A descrição não é obrigatória. Só o título é necessário para salvar a sessão.</p>
+  <div class="modalActions"><button class="softButton" data-close>Cancelar</button><button id="saveSession" class="primarySmall">${s?'Salvar alterações':'Criar sessão'}</button></div>`);
+  $('saveSession').onclick=async()=>{
+    try{
+      const title=$('sessTitle').value.trim();
+      if(!title){toast('Informe o título da sessão.','error');$('sessTitle').focus();return;}
+      const payload={campaign_id:state.campaign.id,session_number:Number($('sessNumber').value)||next,title,summary:$('sessSummary').value.trim(),starts_at:$('sessStarts').value?new Date($('sessStarts').value).toISOString():null,status:$('sessStatus').value,created_by:s?s.created_by:state.user.id};
+      const result=s?await sb.from('sessions').update(payload).eq('id',s.id).select().single():await sb.from('sessions').insert(payload).select().single();
+      if(result.error)throw result.error;
+      if(s)state.sessions=state.sessions.map(x=>x.id===s.id?result.data:x);else state.sessions.push(result.data);
+      state.selectedSessionId=result.data.id;closeModal();await subscribeRealtime();renderAll();toast(s?'Sessão atualizada':'Sessão criada');
+    }catch(e){toast(e.message||'Não foi possível salvar a sessão.','error');}
+  };
+}
 async function activateSession(id){if(!id)return;const session=state.sessions.find(x=>x.id===id);if(!session)return;state.selectedSessionId=id;state.floor=session.active_floor_id||state.floor;state.selected=null;renderAll();await subscribeRealtime();toast(`Sessão #${session.session_number} aberta`);}
 
 function openNpcModal(id){if(!requireMaster())return;const n=id?state.npcs.find(x=>x.id===id):null;const v=n||{name:'',description:'',notes_private:'',avatar_url:'',data:{}};showModal(`<div class="modalHeader"><div><div class="eyebrow">BESTIÁRIO</div><h3>${n?'Editar entidade':'Novo NPC / monstro'}</h3></div><button class="closeButton" data-close>×</button></div><label>Nome<input id="npcName" value="${escapeHtml(v.name)}"></label><label>Descrição<textarea id="npcDesc" rows="4">${escapeHtml(v.description||'')}</textarea></label><label>Notas privadas do mestre<textarea id="npcNotes" rows="5">${escapeHtml(v.notes_private||'')}</textarea></label><label>Avatar URL<input id="npcAvatar" value="${escapeHtml(v.avatar_url||'')}" placeholder="https://..."></label><label>Avatar do NPC<input id="npcFile" type="file" accept="image/*"></label><label>Dados / ficha (JSON)<textarea id="npcData" rows="6">${escapeHtml(JSON.stringify(v.data||{},null,2))}</textarea></label><div class="modalActions"><button class="softButton" data-close>Cancelar</button><button id="saveNpc" class="primarySmall">Salvar</button></div>`);$('saveNpc').onclick=async()=>{try{const payload={campaign_id:state.campaign.id,name:$('npcName').value.trim(),description:$('npcDesc').value.trim(),notes_private:$('npcNotes').value.trim(),avatar_url:$('npcAvatar').value.trim()||null,data:JSON.parse($('npcData').value||'{}')};if(!payload.name)throw new Error('Informe o nome.');const file=$('npcFile').files[0];if(file)payload.avatar_url=await uploadMedia(file,`npcs/${uid()}`);const result=n?await sb.from('npcs').update(payload).eq('id',n.id).select().single():await sb.from('npcs').insert(payload).select().single();if(result.error)throw result.error;if(n)state.npcs=state.npcs.map(x=>x.id===n.id?result.data:x);else state.npcs.push(result.data);closeModal();renderAll();toast('NPC salvo');}catch(e){toast(e.message,'error');}};}
@@ -228,7 +263,7 @@ function openEntityModal(id){const e=state.entities.find(x=>x.id===id);if(!e)ret
 async function uploadMedia(file,prefix){const ext=(file.name.split('.').pop()||'bin').toLowerCase().replace(/[^a-z0-9]/g,'');const path=`${state.user.id}/${prefix}-${Date.now()}.${ext}`;const {error}=await sb.storage.from('rpg-media').upload(path,file,{cacheControl:'3600',upsert:false,contentType:file.type||undefined});if(error)throw error;return sb.storage.from('rpg-media').getPublicUrl(path).data.publicUrl;}
 async function playLocalAudio(payload){ if(!state.audioEnabled) return; if(state.audio){state.audio.pause();state.audio=null;}if(payload.action==='stop')return;const audio=new Audio(payload.url);audio.volume=Number(payload.volume??0.75);audio.loop=payload.kind==='music';state.audio=audio;try{await audio.play();}catch(e){console.warn('Autoplay bloqueado',e);toast('Clique em “Ativar áudio” para ouvir o som da sessão.','error');} }
 function receiveAudio(payload){playLocalAudio(payload);}
-async function broadcastAudio(payload){if(!state.audioChannel)return;if(isMaster())state.audioEnabled=true;await state.audioChannel.send({type:'broadcast',event:'audio',payload:{...payload,user_id:state.user.id}});await playLocalAudio(payload);}
+async function broadcastAudio(payload){if(!state.audioChannel)return;if(canEdit())state.audioEnabled=true;await state.audioChannel.send({type:'broadcast',event:'audio',payload:{...payload,user_id:state.user.id}});await playLocalAudio(payload);}
 
 async function performRoll(notation,rule='normal'){
   const parsed=/^(\d+)d(\d+)([+-]\d+)?$/i.exec(notation.trim());if(!parsed)throw new Error('Use uma notação como 1d20 ou 2d6+3.');
@@ -241,14 +276,35 @@ async function performRoll(notation,rule='normal'){
   const {data,error}=await sb.from('dice_rolls').insert(payload).select().single();if(error)throw error;state.rolls=[data,...state.rolls].slice(0,30);renderDiceResult(data);renderDice();await state.audioChannel?.send({type:'broadcast',event:'dice_roll',payload:{...data,user_id:state.user.id}});return data;
 }
 
-async function profileModal(){showModal(`<div class="modalHeader"><div><div class="eyebrow">PERFIL</div><h3>Seu perfil de mesa</h3></div><button class="closeButton" data-close>×</button></div><div class="profileEditor"><div class="profilePreview">${state.profile?.avatar_url?`<img src="${escapeHtml(state.profile.avatar_url)}" alt="">`:'✦'}</div><label>Nome de exibição<input id="profileName" value="${escapeHtml(state.profile?.display_name||'')}"></label><label>Avatar<input id="profileUrl" value="${escapeHtml(state.profile?.avatar_url||'')}" placeholder="https://..."></label><label>Enviar foto<input id="profileFile" type="file" accept="image/*"></label><label>Bio<textarea id="profileBio" rows="4">${escapeHtml(state.profile?.bio||'')}</textarea></label></div><div class="modalActions"><button class="softButton" data-close>Cancelar</button><button id="saveProfile" class="primarySmall">Salvar perfil</button></div>`);$('saveProfile').onclick=async()=>{try{let avatar=$('profileUrl').value.trim()||null;const file=$('profileFile').files[0];if(file)avatar=await uploadMedia(file,'profile');const {data,error}=await sb.from('profiles').update({display_name:$('profileName').value.trim()||'Aventureiro',avatar_url:avatar,bio:$('profileBio').value.trim()}).eq('id',state.user.id).select().single();if(error)throw error;state.profile=data;closeModal();renderAll();toast('Perfil salvo');}catch(e){toast(e.message,'error');}};}
+async function profileModal(){
+  const current=state.profile?.account_type==='master'?'master':'player';
+  showModal(`<div class="modalHeader"><div><div class="eyebrow">PERFIL</div><h3>Sua conta de mesa</h3></div><button class="closeButton" data-close>×</button></div>
+  <div class="profileEditor">
+    <div class="profilePreview">${state.profile?.avatar_url?`<img src="${escapeHtml(state.profile.avatar_url)}" alt="">`:'✦'}</div>
+    <label>Nome de exibição<input id="profileName" value="${escapeHtml(state.profile?.display_name||'')}"></label>
+    <label>Tipo de conta<select id="profileAccountType"><option value="player" ${current==='player'?'selected':''}>Jogador</option><option value="master" ${current==='master'?'selected':''}>Mestre</option></select></label>
+    <p class="modalHint">Mudar para Mestre libera a criação de novas campanhas. Isso <strong>não</strong> transforma você em mestre de campanhas existentes: cada campanha continua protegida pelo dono e pelos vínculos dela.</p>
+    <label>Avatar<input id="profileUrl" value="${escapeHtml(state.profile?.avatar_url||'')}" placeholder="https://..."></label>
+    <label>Enviar foto<input id="profileFile" type="file" accept="image/*"></label>
+    <label>Bio<textarea id="profileBio" rows="4">${escapeHtml(state.profile?.bio||'')}</textarea></label>
+  </div>
+  <div class="modalActions"><button class="softButton" data-close>Cancelar</button><button id="saveProfile" class="primarySmall">Salvar perfil</button></div>`);
+  $('saveProfile').onclick=async()=>{
+    try{
+      let avatar=$('profileUrl').value.trim()||null;const file=$('profileFile').files[0];if(file)avatar=await uploadMedia(file,'profile');
+      const account_type=$('profileAccountType').value;
+      const {data,error}=await sb.from('profiles').update({display_name:$('profileName').value.trim()||'Aventureiro',account_type,avatar_url:avatar,bio:$('profileBio').value.trim()}).eq('id',state.user.id).select().single();
+      if(error)throw error;state.profile=data;closeModal();renderAll();toast(account_type==='master'?'Conta definida como Mestre':'Conta definida como Jogador');
+    }catch(e){toast(e.message||'Não foi possível salvar o perfil.','error');}
+  };
+}
 
 async function ensureActiveAudioHandlers(){ const active=currentSession(); if(!active)return; if(!$('enableAudioBtn'))return; $('enableAudioBtn').onclick=async()=>{try{state.audioEnabled=true;const ctx=new (window.AudioContext||window.webkitAudioContext)();if(ctx.state==='suspended')await ctx.resume();const osc=ctx.createOscillator();osc.connect(ctx.destination);osc.start();osc.stop(ctx.currentTime+0.01);renderDice();toast('Áudio ativado para esta mesa');}catch(e){toast('Não foi possível ativar o áudio.','error');}}; }
 
 // Navigation
 $('sideNav').querySelectorAll('button').forEach(b=>b.onclick=()=>{state.view=b.dataset.view;renderView();if(state.view==='dice'){renderDice();setTimeout(wireAudioControls,0);}});
 $('campaignSelect').onchange=async e=>{const next=state.campaigns.find(c=>c.id===e.target.value);if(!next)return;state.campaign=next;state.floor=null;state.selected=null;await loadCampaignData();};
-$('newCampaignBtn').onclick=()=>openCampaignCreate(false); $('profileBtn').onclick=profileModal; $('signOutBtn').onclick=async()=>{await sb.auth.signOut();}; $('openSessionsBtn').onclick=()=>{state.view='sessions';renderView();}; $('openDiceBtn').onclick=()=>{state.view='dice';renderView();renderDice();setTimeout(wireAudioControls,0);};
+$('newCampaignBtn').onclick=()=>{if(!canCreateCampaign()){toast('Mude sua conta para Mestre no perfil para criar campanhas.','error');return;}openCampaignCreate(false);}; $('profileBtn').onclick=profileModal; $('signOutBtn').onclick=async()=>{await sb.auth.signOut();}; $('openSessionsBtn').onclick=()=>{state.view='sessions';renderView();}; $('openDiceBtn').onclick=()=>{state.view='dice';renderView();renderDice();setTimeout(wireAudioControls,0);};
 $('newRoomBtn').onclick=()=>{if(requireMaster())openRoomModal();};
 $('structureBtn').onclick=()=>{state.tool=state.tool==='draw'?'move':'draw';$('structureBtn').classList.toggle('chosen',state.tool==='draw');$('moveBtn').classList.toggle('chosen',state.tool==='move');$('board').classList.toggle('drawing',state.tool==='draw');$('boardHint').textContent=state.tool==='draw'?'Clique e arraste para desenhar um novo cômodo':'Arraste entidades e cômodos para reposicionar';};
 $('moveBtn').onclick=()=>{state.tool='move';$('moveBtn').classList.add('chosen');$('structureBtn').classList.remove('chosen');$('board').classList.remove('drawing');};
