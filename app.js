@@ -134,6 +134,7 @@ function renderShell(){
   const list=state.campaigns.map(c=>`<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');$('campaignSelect').innerHTML=list; if(state.campaign)$('campaignSelect').value=state.campaign.id;
   $('campaignInviteBtn').classList.toggle('hidden',!canEdit());
   $('joinCampaignBtn').classList.remove('hidden');
+  const deleteCampaignBtn=$('deleteCampaignBtn'); if(deleteCampaignBtn)deleteCampaignBtn.classList.toggle('hidden',!canEdit());
 }
 function renderView(){ document.querySelectorAll('.view').forEach(v=>v.classList.remove('active')); $(`view${state.view.charAt(0).toUpperCase()+state.view.slice(1)}`)?.classList.add('active'); document.querySelectorAll('#sideNav button').forEach(b=>b.classList.toggle('active',b.dataset.view===state.view)); }
 
@@ -296,8 +297,25 @@ function renderWorld(){
   document.querySelectorAll('[data-edit-location]').forEach(b=>b.onclick=()=>openLocationModal(b.dataset.editLocation));document.querySelectorAll('[data-world-floor]').forEach(b=>b.onclick=()=>{state.floor=b.dataset.worldFloor;state.view='table';renderAll();});
 }
 function renderSessions(){
-  $('sessionsList').innerHTML=state.sessions.map(s=>`<article class="sessionCard"><div><div class="sessionNumber">SESSÃO #${s.session_number}</div><h3>${escapeHtml(s.title)}</h3><p>${escapeHtml(s.summary||'Sem resumo')}</p><small>${fmtDate(s.starts_at)}</small></div><div class="sessionStatus"><span class="status ${s.status}">${s.status}</span><div class="sessionCardActions"><button data-session-open="${s.id}">Abrir</button>${canEdit()?`<button class="softButton" data-session-edit="${s.id}">Editar</button>`:''}</div></div></article>`).join('') || '<div class="emptyPanel">Nenhuma sessão cadastrada.</div>';
-  document.querySelectorAll('[data-session-open]').forEach(b=>b.onclick=async()=>{await activateSession(b.dataset.sessionOpen);});document.querySelectorAll('[data-session-edit]').forEach(b=>b.onclick=()=>openSessionModal(b.dataset.sessionEdit));
+  $('sessionsList').innerHTML=state.sessions.map(s=>`<article class="sessionCard"><div><div class="sessionNumber">SESSÃO #${s.session_number}</div><h3>${escapeHtml(s.title)}</h3><p>${escapeHtml(s.summary||'Sem resumo')}</p><small>${fmtDate(s.starts_at)}</small></div><div class="sessionStatus"><span class="status ${s.status}">${s.status}</span><div class="sessionCardActions"><button data-session-open="${s.id}">Abrir</button>${canEdit()?`<button class="softButton" data-session-edit="${s.id}">Editar</button><button class="dangerGhost" data-session-delete="${s.id}">Excluir</button>`:''}</div></div></article>`).join('') || '<div class="emptyPanel">Nenhuma sessão cadastrada.</div>';
+  document.querySelectorAll('[data-session-open]').forEach(b=>b.onclick=async()=>{await activateSession(b.dataset.sessionOpen);});
+  document.querySelectorAll('[data-session-edit]').forEach(b=>b.onclick=()=>openSessionModal(b.dataset.sessionEdit));
+  document.querySelectorAll('[data-session-delete]').forEach(b=>b.onclick=()=>openDeleteSessionModal(b.dataset.sessionDelete));
+}
+
+function openDeleteSessionModal(id){
+  if(!canEdit())return;
+  const session=state.sessions.find(x=>x.id===id); if(!session)return;
+  showModal(`<div class="modalHeader"><div><div class="eyebrow dangerEyebrow">EXCLUSÃO</div><h3>Excluir sessão</h3></div><button class="closeButton" data-close>×</button></div><div class="dangerPanel"><strong>Esta ação não pode ser desfeita.</strong><p>A sessão será removida permanentemente. O histórico de rolagens associado também será apagado.</p></div><label>Digite o nome da sessão para confirmar <span class="requiredMark">*</span><input id="deleteSessionName" autocomplete="off" placeholder="${escapeHtml(session.title)}"></label><div class="modalActions"><button class="softButton" data-close>Cancelar</button><button id="confirmDeleteSession" class="dangerButton" disabled>Excluir sessão</button></div>`);
+  const input=$('deleteSessionName'),btn=$('confirmDeleteSession');
+  const sync=()=>{btn.disabled=input.value.trim()!==session.title.trim();};
+  input.addEventListener('input',sync);
+  btn.onclick=async()=>{
+    if(input.value.trim()!==session.title.trim())return;
+    btn.disabled=true;
+    try{const {error}=await sb.from('sessions').delete().eq('id',session.id);if(error)throw error;state.sessions=state.sessions.filter(x=>x.id!==session.id);if(state.selectedSessionId===session.id)state.selectedSessionId=currentSession()?.id||null;closeModal();await subscribeRealtime();renderAll();toast('Sessão excluída');}
+    catch(e){btn.disabled=false;toast(e.message||'Não foi possível excluir a sessão.','error');}
+  };
 }
 function renderNpcs(){
   $('npcsGrid').innerHTML=state.npcs.map(n=>`<article class="dataCard"><div class="cardAvatar npc">${n.avatar_url?`<img src="${escapeHtml(n.avatar_url)}" alt="">`:'♜'}</div><div class="dataCardMain"><div class="cardKicker">NPC / MONSTRO</div><h3>${escapeHtml(n.name)}</h3><p>${escapeHtml(n.description||'Sem descrição')}</p><small class="privateNote">Anotação do mestre: ${escapeHtml(n.notes_private||'—')}</small></div><div class="cardActions"><button data-edit-npc="${n.id}">Editar</button>${canEdit()?`<button class="softButton" data-add-npc="${n.id}">${state.entities.some(e=>e.npc_id===n.id)?'Na mesa':'Colocar na mesa'}</button>`:''}</div></article>`).join('') || '<div class="emptyPanel">Nenhum NPC ou monstro cadastrado.</div>';
@@ -332,6 +350,27 @@ async function createCampaign(name,description){
   if(error) throw error;
   const {error:me}=await sb.from('campaign_members').insert({campaign_id:data.id,campaign_owner_id:state.user.id,user_id:state.user.id,role:'owner'}); if(me) throw me;
   state.campaign=data; await loadCampaigns(); await initializeWorld(); await loadCampaignData(); closeModal();toast('Campanha criada');
+}
+function openDeleteCampaignModal(){
+  if(!canEdit()||!state.campaign)return;
+  const campaignName=state.campaign.name;
+  showModal(`<div class="modalHeader"><div><div class="eyebrow dangerEyebrow">ZONA DE RISCO</div><h3>Excluir campanha inteira</h3></div><button class="closeButton" data-close>×</button></div><div class="dangerPanel"><strong>ATENÇÃO: exclusão permanente.</strong><p>Serão removidos desta campanha os membros, personagens, NPCs, mapa, andares, cômodos, sessões e rolagens. Esta ação não pode ser desfeita.</p></div><label>Digite o nome da campanha <span class="requiredMark">*</span><input id="deleteCampaignName" autocomplete="off" placeholder="${escapeHtml(campaignName)}"></label><label>Digite <code>EXCLUIR CAMPANHA</code> <span class="requiredMark">*</span><input id="deleteCampaignPhrase" autocomplete="off" placeholder="EXCLUIR CAMPANHA"></label><div class="modalActions"><button class="softButton" data-close>Cancelar</button><button id="confirmDeleteCampaign" class="dangerButton" disabled>Excluir campanha definitivamente</button></div>`);
+  const name=$('deleteCampaignName'),phrase=$('deleteCampaignPhrase'),btn=$('confirmDeleteCampaign');
+  const sync=()=>{btn.disabled=name.value.trim()!==campaignName.trim()||phrase.value.trim().toUpperCase()!=='EXCLUIR CAMPANHA';};
+  name.addEventListener('input',sync);phrase.addEventListener('input',sync);
+  btn.onclick=async()=>{
+    if(btn.disabled)return;
+    btn.disabled=true;
+    try{
+      const campaignId=state.campaign.id; const {error}=await sb.from('campaigns').delete().eq('id',campaignId).eq('owner_id',state.user.id); if(error)throw error;
+      if(state.audioChannel)await sb.removeChannel(state.audioChannel).catch(()=>{}); if(state.presenceChannel)await sb.removeChannel(state.presenceChannel).catch(()=>{});
+      state.campaigns=state.campaigns.filter(x=>x.id!==campaignId); state.campaign=state.campaigns[0]||null;
+      state.location=null;state.floor=null;state.rooms=[];state.floors=[];state.characters=[];state.npcs=[];state.entities=[];state.sessions=[];state.rolls=[];state.selectedSessionId=null;state.selected=null;
+      closeModal();
+      if(state.campaign){await loadCampaignData();}else{renderAll();openCampaignCreate(true);}
+      toast('Campanha excluída definitivamente');
+    }catch(e){btn.disabled=false;toast(e.message||'Não foi possível excluir a campanha.','error');}
+  };
 }
 async function openCampaignInvite(){
   if(!canEdit()||!state.campaign)return;
@@ -548,6 +587,7 @@ $('profileBtn').onclick=e=>{e.stopPropagation();toggleAccountMenu();};
 $('profileMenuBtn')?.addEventListener('click',()=>{toggleAccountMenu(false);profileModal();});
 $('signOutBtn').onclick=async()=>{toggleAccountMenu(false);await sb.auth.signOut();};
 document.addEventListener('click',e=>{if(accountMenuOpen&&!e.target.closest('#accountMenu'))toggleAccountMenu(false);});
+$('deleteCampaignBtn').onclick=()=>openDeleteCampaignModal();
 $('joinCampaignBtn').onclick=()=>openJoinCampaignModal();
 $('campaignInviteBtn').onclick=()=>openCampaignInvite();
 $('newCampaignBtn').onclick=()=>{if(!canCreateCampaign()){toast('Mude sua conta para Mestre no perfil para criar campanhas.','error');return;}openCampaignCreate(false);}; $('openSessionsBtn').onclick=()=>{state.view='sessions';renderView();}; $('openDiceBtn').onclick=()=>{state.view='dice';renderView();renderDice();setTimeout(wireAudioControls,0);};
