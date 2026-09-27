@@ -1,5 +1,64 @@
-<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>RPG HUB — Mesa da Sessão</title><link rel="stylesheet" href="styles.css"></head><body>
-<main class="appShell"><aside class="sidebar"><div class="sideBrand"><span class="brandMark">✦</span><div><b>RPG</b> HUB</div></div><div class="campaignBadge"><div class="miniCrest">☽</div><div><strong>Sombras de Valedorn</strong><span>Campanha ativa</span></div></div><nav class="sideNav"><a>◫ Visão geral</a><a class="active">♧ Campanha</a><a>♙ Personagens</a><a>◇ Mundo</a><a>✦ Sessões</a><a>♜ NPCs</a><a>⌁ Missões</a></nav><div class="discordCard"><div class="discordIcon">◖◗</div><div><b>Discord</b><span>Call da sessão</span></div><button id="discordBtn">↗</button></div><div class="sideBottom"><a href="index.html">← Sair da campanha</a><div class="userPill"><div class="avatar">CH</div><span>Capitão</span><span>⌄</span></div></div></aside>
-<section class="workspace"><header class="workspaceTop"><div><div class="eyebrow">MESA DA SESSÃO</div><h1>Sombras de Valedorn</h1></div><div class="topActions"><button class="softButton" id="saveBtn">◌ Salvar</button><button class="discordButton" id="discordTop">◖◗ Entrar na call</button><div class="sessionOnline"><i></i>4 online</div></div></header><div class="sessionMeta"><div><b>Sessão #18</b><span>O Reino Submerso</span></div><div>⌁ 20:00</div><div>◉ 3 jogadores</div><div>◈ Tarde</div></div>
-<div class="tableLayout"><section class="boardPanel"><div class="boardToolbar"><div class="toolbarBlock"><span class="toolbarCaption">ANDAR</span><div class="floorSwitch" id="floorSwitch"></div></div><div class="toolbarActions"><div class="toolGroup"><button id="moveBtn" class="toolButton chosen"><span>↖</span> Mover</button><button id="structureBtn" class="toolButton"><span>⌗</span> Estrutura</button></div><button id="zoomOut" class="iconButton">−</button><span id="zoomValue" class="zoomValue">100%</span><button id="zoomIn" class="iconButton">+</button></div></div><div class="boardFrame"><div class="boardGrid" id="board"><div class="boardTopline"><div><span>LOCAL</span><b>🏰 Castelo de Arken</b></div><div><span>ANDAR</span><b id="floorName">2º ANDAR</b></div></div><div id="roomLayer"></div><div id="tokenLayer"></div><div class="staircase">↕ <span>Trocar de andar</span></div><div class="boardHint" id="boardHint">Arraste um personagem para reposicionar</div></div></div><div class="boardFooter"><div class="legend"><span><i class="dot player"></i>Jogador</span><span><i class="dot npc"></i>NPC</span><span><i class="dot enemy"></i>Criatura</span></div><div class="persistStatus"><i></i><span id="saveState">Estado salvo localmente</span></div></div></section>
-<aside class="contextPanel"><div class="contextHead"><div><div class="eyebrow">CONTROLE</div><h2 id="contextFloor">2º andar</h2></div><button>•••</button></div><div class="contextSection"><div class="sectionTitle"><span>Cômodos</span><button id="newRoom">+ Novo</button></div><div id="roomList"></div></div><div class="contextSection"><div class="sectionTitle"><span>Entidades no andar</span><span id="entityCount">0</span></div><div id="entityList"></div></div><div class="contextSection quickRollSection"><div class="sectionTitle"><span>Rolagem rápida</span><span class="muted">1d20</span></div><div class="rollRow"><button class="rollDie" data-die="4">d4</button><button class="rollDie" data-die="6">d6</button><button class="rollDie" data-die="8">d8</button><button class="rollDie" data-die="10">d10</button><button class="rollDie hot" data-die="20">d20</button><button class="rollDie" data-die="100">d100</button></div><div class="rollResult" id="rollResult"><span>Resultado</span><b>—</b></div></div><div class="selectedCard" id="selectedCard"><div class="emptySelect">Selecione uma entidade na mesa para ver detalhes.</div></div></aside></div><div class="toast" id="toast"></div></section></main><script src="app.js"></script></body></html>
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#080a0f">
+  <title>RPG HUB — Mesa</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2"></script>
+  <script src="supabase.js"></script>
+</head>
+<body class="appBody">
+  <main class="appShell">
+    <aside class="sidebar">
+      <a class="sideBrand brand" href="index.html"><span class="brandMark">✦</span><div><b>RPG</b> HUB</div></a>
+      <div class="campaignSwitcher"><div class="eyebrow">CAMPANHA</div><div class="campaignSelectWrap"><select id="campaignSelect"></select><button id="newCampaignBtn" class="iconButton" title="Nova campanha">+</button></div><small id="campaignRole">Carregando…</small></div>
+      <nav class="sideNav" id="sideNav">
+        <button data-view="table" class="active">◫ <span>Mesa</span></button>
+        <button data-view="characters">♙ <span>Personagens</span></button>
+        <button data-view="world">◇ <span>Mundo</span></button>
+        <button data-view="sessions">✦ <span>Sessões</span></button>
+        <button data-view="npcs">♜ <span>NPCs & monstros</span></button>
+        <button data-view="dice">⚄ <span>Dados</span></button>
+      </nav>
+      <div class="sideBottom"><button id="profileBtn" class="userPill"><div id="userAvatar" class="avatar">?</div><span id="userName">Usuário</span><span>⌄</span></button><button id="signOutBtn" class="logoutButton">Sair</button></div>
+    </aside>
+
+    <section class="workspace">
+      <header class="workspaceTop">
+        <div><div class="eyebrow" id="workspaceEyebrow">MESA DA CAMPANHA</div><h1 id="workspaceTitle">Carregando…</h1><p id="workspaceSubtitle" class="workspaceSubtitle">Preparando sua mesa.</p></div>
+        <div class="topActions"><button class="softButton" id="saveBtn">Salvar</button><div class="sessionOnline"><i></i><span id="onlineCount">1 online</span></div></div>
+      </header>
+
+      <section id="viewTable" class="view active">
+        <div class="sessionMetaBar"><div><b id="activeSessionLabel">Nenhuma sessão ativa</b><span id="activeSessionTitle">Crie uma sessão para começar</span></div><button id="openSessionsBtn" class="softButton">Gerenciar sessões</button></div>
+        <div class="tableLayout">
+          <section class="boardPanel">
+            <div class="boardToolbar"><div class="toolbarBlock"><span class="toolbarCaption">ANDAR</span><div class="floorSwitch" id="floorSwitch"></div></div><div class="toolbarActions"><div class="toolGroup"><button id="moveBtn" class="toolButton chosen">↖ Mover</button><button id="structureBtn" class="toolButton">⌗ Estrutura</button></div><button id="zoomOut" class="iconButton">−</button><span id="zoomValue" class="zoomValue">100%</span><button id="zoomIn" class="iconButton">+</button></div></div>
+            <div class="boardFrame"><div class="boardGrid" id="board"><div class="boardTopline"><div><span>LOCAL</span><b id="boardLocationName">—</b></div><div><span>ANDAR</span><b id="boardFloorName">—</b></div></div><div id="roomLayer"></div><div id="tokenLayer"></div><div class="staircase">↕ <span>Troque de andar no topo</span></div><div class="boardHint" id="boardHint">Arraste entidades e cômodos para reposicionar</div></div></div>
+            <div class="boardFooter"><div class="legend"><span><i class="dot player"></i>Jogador</span><span><i class="dot npc"></i>NPC</span><span><i class="dot enemy"></i>Criatura</span></div><div class="persistStatus"><i></i><span id="saveState">Conectado ao banco</span></div></div>
+          </section>
+          <aside class="contextPanel">
+            <div class="contextHead"><div><div class="eyebrow">CONTROLE</div><h2 id="contextFloor">—</h2></div><span id="masterBadge" class="masterBadge hidden">MESTRE</span></div>
+            <div class="contextSection"><div class="sectionTitle"><span>Cômodos</span><button id="newRoomBtn">+ Novo</button></div><div id="roomList"></div></div>
+            <div class="contextSection"><div class="sectionTitle"><span>Entidades no andar</span><span id="entityCount">0</span></div><div id="entityList"></div></div>
+            <div class="contextSection quickRollSection"><div class="sectionTitle"><span>Rolagem rápida</span><button id="openDiceBtn" class="textButton">Abrir dados</button></div><div class="rollQuickRow"><button data-quick-die="20">d20</button><button data-quick-die="6">d6</button><button data-quick-die="8">d8</button></div><div class="rollResult" id="rollResult"><span>Última rolagem</span><b>—</b></div></div>
+            <div class="selectedCard" id="selectedCard"><div class="emptySelect">Selecione uma entidade ou cômodo.</div></div>
+          </aside>
+        </div>
+      </section>
+
+      <section id="viewCharacters" class="view"><div class="sectionTop"><div><div class="eyebrow">FICHAS</div><h2>Personagens da campanha</h2><p>O mestre visualiza as fichas vinculadas aos jogadores.</p></div><button id="newCharacterBtn" class="primarySmall">+ Novo personagem</button></div><div id="charactersGrid" class="cardGrid"></div></section>
+      <section id="viewWorld" class="view"><div class="sectionTop"><div><div class="eyebrow">MUNDO PERSISTENTE</div><h2>Locais, andares e cômodos</h2><p>Edite a estrutura sem recriar o mapa a cada cena.</p></div><button id="newFloorBtn" class="primarySmall">+ Novo andar</button></div><div class="worldLayout"><div id="worldLocations" class="stack"></div><div id="worldStats" class="statsPanel"></div></div></section>
+      <section id="viewSessions" class="view"><div class="sectionTop"><div><div class="eyebrow">HISTÓRICO</div><h2>Sessões</h2><p>Crie, edite e altere o estado da aventura.</p></div><button id="newSessionBtn" class="primarySmall">+ Nova sessão</button></div><div id="sessionsList" class="stack"></div></section>
+      <section id="viewNpcs" class="view"><div class="sectionTop"><div><div class="eyebrow">BESTIÁRIO</div><h2>NPCs & monstros</h2><p>Cadastre aliados, inimigos, criaturas e informações privadas do mestre.</p></div><button id="newNpcBtn" class="primarySmall">+ Novo NPC / monstro</button></div><div id="npcsGrid" class="cardGrid"></div></section>
+      <section id="viewDice" class="view"><div class="sectionTop"><div><div class="eyebrow">SISTEMA DE DADOS</div><h2>Rolagens da sessão</h2><p>Resultados salvos no banco e sincronizados em tempo real.</p></div></div><div class="diceLayout"><div class="diceCard"><div class="diceControls"><label>Notação<input id="diceNotation" value="1d20" inputmode="text" placeholder="1d20+3"></label><label>Regra<select id="diceRule"><option value="normal">Normal</option><option value="advantage">Vantagem</option><option value="disadvantage">Desvantagem</option></select></label><button id="rollBtn" class="primarySmall">Rolar dados</button></div><div class="bigRoll" id="bigRoll">—</div><div class="rollBreakdown" id="rollBreakdown">Nenhuma rolagem ainda.</div></div><div><div class="sessionAudioCard" id="sessionAudioCard"></div><div id="rollHistory" class="stack compact"></div></div></div></section>
+    </section>
+  </main>
+
+  <div id="modalBackdrop" class="modalBackdrop" aria-hidden="true"><div class="modalCard" id="modalCard"></div></div>
+  <div id="toast" class="toast"></div>
+  <script src="app.js"></script>
+</body>
+</html>
