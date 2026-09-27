@@ -409,7 +409,7 @@ function renderWorld(){
   </div>
   <div class="worldActionsCard">
     <div><span class="eyebrow">GERENCIAMENTO</span><b>Seu mundo continua salvo entre as sessões.</b><small>Crie locais, organize andares e edite cada cômodo sem precisar reconstruir a mesa.</small></div>
-    ${canEdit()?'<button id="newLocationWorldBtn" class="primarySmall">+ Novo local</button>':''}
+    ${canEdit()?'<button id="newLocationWorldBtn" class="primarySmall">+ Novo cenário</button>':''}
   </div>`;
 
   const locations=state.locations.map(l=>{
@@ -523,29 +523,51 @@ function openDeleteLocationModal(id){
   btn.onclick=async()=>{try{const {error}=await sb.from('locations').delete().eq('id',id);if(error)throw error;state.locations=state.locations.filter(x=>x.id!==id);state.floors=state.floors.filter(x=>x.location_id!==id);state.rooms=state.rooms.filter(r=>state.floors.some(f=>f.id===r.floor_id));state.location=state.locations[0]||null;state.floor=state.floors[0]?.id||null;closeModal();renderAll();toast('Local excluído');}catch(e){toast(e.message||'Não foi possível excluir o local.','error');}};
 }
 
+function readWorldNumber(id,label,min,max){
+  const el=$(id);
+  if(!el)throw new Error('Campo '+label+' não encontrado.');
+  const raw=String(el.value??'').trim().replace(/\s+/g,'').replace(',','.');
+  if(raw==='')throw new Error('Informe '+label+'.');
+  const value=Number(raw);
+  if(!Number.isFinite(value))throw new Error(label+' inválido. Use apenas números, por exemplo 20 ou 20,5.');
+  if(min!==undefined&&value<min)throw new Error(label+' deve ser no mínimo '+min+'.');
+  if(max!==undefined&&value>max)throw new Error(label+' deve ser no máximo '+max+'.');
+  return Math.round(value*100)/100;
+}
+function readWorldInteger(id,label,min,max){
+  const value=readWorldNumber(id,label,min,max);
+  if(!Number.isInteger(value))throw new Error(label+' deve ser um número inteiro.');
+  return value;
+}
+
 function openFloorModal(id,locationId){
   if(!requireMaster())return;
   const floor=id?state.floors.find(x=>x.id===id):null;
   const defaultLocation=locationId||floor?.location_id||currentLocation()?.id||state.locations[0]?.id;
+  if(!defaultLocation){toast('Crie um local/cenário antes de adicionar um andar.','error');return;}
   const f=floor||{name:'Novo andar',floor_number:0,description:'',notes:'',location_id:defaultLocation,sort_order:state.floors.length};
   const locationOptions=state.locations.map(l=>`<option value="${l.id}" ${l.id===f.location_id?'selected':''}>${escapeHtml(l.name)}</option>`).join('');
   showModal(`<div class="modalHeader"><div><div class="eyebrow">MUNDO</div><h3>${floor?'Editar andar':'Novo andar'}</h3></div><button class="closeButton" data-close>×</button></div>
     <div class="formGrid">
       <label>Nome do andar<input id="floorName" maxlength="120" value="${escapeHtml(f.name)}" placeholder="Ex.: Subsolo"></label>
-      <label>Número<input id="floorNum" type="number" min="-50" max="100" value="${Number(f.floor_number)}"></label>
+      <label>Número<input id="floorNum" type="number" inputmode="numeric" min="-50" max="100" step="1" value="${Number(f.floor_number)}"></label>
       <label>Local<select id="floorLocation">${locationOptions}</select></label>
     </div>
     <label>Descrição <span class="optional">(opcional)</span><textarea id="floorDesc" rows="4">${escapeHtml(f.description||'')}</textarea></label>
     <label>Anotações do mestre <span class="optional">(opcional)</span><textarea id="floorNotes" rows="4">${escapeHtml(f.notes||'')}</textarea></label>
+    <div class="modalHint">O número do andar aceita valores negativos para subsolos.</div>
     <div class="modalActions"><button class="softButton" data-close>Cancelar</button><button id="saveFloor" class="primarySmall">${floor?'Salvar alterações':'Criar andar'}</button></div>`);
   $('saveFloor').onclick=async()=>{
     try{
-      const name=$('floorName').value.trim();if(!name){toast('Informe o nome do andar.','error');return;}
-      const payload={location_id:$('floorLocation').value,name,floor_number:Number($('floorNum').value),description:$('floorDesc').value.trim(),notes:$('floorNotes').value.trim()||null,sort_order:floor?.sort_order??state.floors.filter(x=>x.location_id===$('floorLocation').value).length};
+      const name=$('floorName').value.trim();if(!name){toast('Informe o nome do andar.','error');$('floorName').focus();return;}
+      const selectedLocation=$('floorLocation').value;
+      if(!selectedLocation){toast('Selecione o local/cenário do andar.','error');$('floorLocation').focus();return;}
+      const floorNumber=readWorldInteger('floorNum','Número do andar',-50,100);
+      const payload={location_id:selectedLocation,name,floor_number:floorNumber,description:$('floorDesc').value.trim(),notes:$('floorNotes').value.trim()||null,sort_order:floor?.sort_order??state.floors.filter(x=>x.location_id===selectedLocation).length};
       const result=f?await sb.from('floors').update(payload).eq('id',f.id).select().single():await sb.from('floors').insert(payload).select().single();
       if(result.error)throw result.error;
       if(f)state.floors=state.floors.map(x=>x.id===f.id?result.data:x);else state.floors.push(result.data);
-      state.floor=result.data.id;closeModal();renderAll();toast(floor?'Andar atualizado':'Andar criado');
+      state.floor=result.data.id;state.location=state.locations.find(x=>x.id===selectedLocation)||state.location;closeModal();renderAll();toast(floor?'Andar atualizado':'Andar criado');
     }catch(e){toast(e.message||'Não foi possível salvar o andar.','error');}
   };
 }
@@ -564,32 +586,40 @@ function openDeleteFloorModal(id){
 
 function openRoomModal(id,floorId){
   if(!requireMaster())return;
+  if(!state.floors.length){toast('Crie um andar primeiro para adicionar um cômodo/cenário à mesa.','error');return;}
   const room=id?state.rooms.find(x=>x.id===id):null;
   const g=window.__roomGeom;
-  const r=room||{name:'Novo cômodo',description:'',notes:'',image_url:'',x:g?.x??20,y:g?.y??20,width:g?.width??30,height:g?.height??25,floor_id:floorId||state.floor};
+  const selectedFloor=floorId||state.floor||state.floors[0]?.id;
+  const r=room||{name:'Novo cômodo',description:'',notes:'',image_url:'',x:g?.x??20,y:g?.y??20,width:g?.width??30,height:g?.height??25,floor_id:selectedFloor};
   const floorOptions=state.floors.map(f=>`<option value="${f.id}" ${f.id===r.floor_id?'selected':''}>${escapeHtml(f.name)}</option>`).join('');
-  showModal(`<div class="modalHeader"><div><div class="eyebrow">CÔMODO</div><h3>${room?'Editar cômodo':'Novo cômodo'}</h3></div><button class="closeButton" data-close>×</button></div>
+  showModal(`<div class="modalHeader"><div><div class="eyebrow">MUNDO · CENÁRIO</div><h3>${room?'Editar cômodo':'Novo cômodo do cenário'}</h3></div><button class="closeButton" data-close>×</button></div>
     <div class="formGrid">
-      <label>Nome<input id="roomName" maxlength="120" value="${escapeHtml(r.name)}"></label>
+      <label>Nome<input id="roomName" maxlength="120" value="${escapeHtml(r.name)}" placeholder="Ex.: Salão principal"></label>
       <label>Andar<select id="roomFloor">${floorOptions}</select></label>
-      <label>Posição X %<input id="roomX" type="number" min="0" max="100" step="0.5" value="${r.x}"></label>
-      <label>Posição Y %<input id="roomY" type="number" min="0" max="100" step="0.5" value="${r.y}"></label>
-      <label>Largura %<input id="roomW" type="number" min="5" max="95" step="0.5" value="${r.width}"></label>
-      <label>Altura %<input id="roomH" type="number" min="5" max="90" step="0.5" value="${r.height}"></label>
+      <label>Posição X %<input id="roomX" type="text" inputmode="decimal" min="0" max="100" value="${r.x}" placeholder="20 ou 20,5"></label>
+      <label>Posição Y %<input id="roomY" type="text" inputmode="decimal" min="0" max="100" value="${r.y}" placeholder="20 ou 20,5"></label>
+      <label>Largura %<input id="roomW" type="text" inputmode="decimal" min="5" max="95" value="${r.width}" placeholder="30 ou 30,5"></label>
+      <label>Altura %<input id="roomH" type="text" inputmode="decimal" min="5" max="90" value="${r.height}" placeholder="25 ou 25,5"></label>
     </div>
     <label>Descrição <span class="optional">(opcional)</span><textarea id="roomDesc" rows="4">${escapeHtml(r.description||'')}</textarea></label>
     <label>Imagem do cômodo <span class="optional">(opcional)</span><input id="roomImage" value="${escapeHtml(r.image_url||'')}" placeholder="https://..."></label>
     <label>Anotações do mestre <span class="optional">(opcional)</span><textarea id="roomNotes" rows="4">${escapeHtml(r.notes||'')}</textarea></label>
-    <div class="modalHint">A posição e o tamanho podem ser ajustados tanto aqui quanto diretamente na mesa visual.</div>
+    <div class="modalHint">Use ponto ou vírgula nos valores decimais. Ex.: <strong>20,5</strong> ou <strong>20.5</strong>. A posição e o tamanho também podem ser ajustados diretamente na mesa visual.</div>
     <div class="modalActions"><button class="softButton" data-close>Cancelar</button><button id="saveRoom" class="primarySmall">Salvar cômodo</button></div>`);
   $('saveRoom').onclick=async()=>{
     try{
-      const name=$('roomName').value.trim();if(!name){toast('Informe o nome do cômodo.','error');return;}
-      const payload={floor_id:$('roomFloor').value,name,description:$('roomDesc').value.trim(),image_url:$('roomImage').value.trim()||null,notes:$('roomNotes').value.trim()||null,x:Number($('roomX').value),y:Number($('roomY').value),width:Number($('roomW').value),height:Number($('roomH').value)};
-      const result=room?await sb.from('rooms').update(payload).eq('id',room.id).select().single():await sb.from('rooms').insert({...payload,sort_order:state.rooms.filter(x=>x.floor_id===payload.floor_id).length}).select().single();
+      const name=$('roomName').value.trim();if(!name){toast('Informe o nome do cômodo.','error');$('roomName').focus();return;}
+      const selectedFloor=$('roomFloor').value;
+      if(!selectedFloor){toast('Selecione o andar do cômodo.','error');$('roomFloor').focus();return;}
+      const x=readWorldNumber('roomX','Posição X',0,100);
+      const y=readWorldNumber('roomY','Posição Y',0,100);
+      const width=readWorldNumber('roomW','Largura',5,95);
+      const height=readWorldNumber('roomH','Altura',5,90);
+      const payload={floor_id:selectedFloor,name,description:$('roomDesc').value.trim(),image_url:$('roomImage').value.trim()||null,notes:$('roomNotes').value.trim()||null,x,y,width,height};
+      const result=room?await sb.from('rooms').update(payload).eq('id',room.id).select().single():await sb.from('rooms').insert({...payload,sort_order:state.rooms.filter(x=>x.floor_id===selectedFloor).length}).select().single();
       if(result.error)throw result.error;
       if(room)state.rooms=state.rooms.map(x=>x.id===room.id?result.data:x);else state.rooms.push(result.data);
-      state.floor=result.data.floor_id;state.selected={type:'room',id:result.data.id};closeModal();renderAll();setSave('Cômodo salvo');toast(room?'Cômodo atualizado':'Cômodo criado');
+      state.floor=result.data.floor_id;state.location=state.locations.find(l=>state.floors.find(f=>f.id===result.data.floor_id)?.location_id===l.id)||state.location;state.selected={type:'room',id:result.data.id};closeModal();renderAll();setSave('Cômodo salvo');toast(room?'Cômodo atualizado':'Cômodo criado');
     }catch(e){toast(e.message||'Não foi possível salvar o cômodo.','error');}
   };
 }
