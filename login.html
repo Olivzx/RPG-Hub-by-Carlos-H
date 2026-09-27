@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#080a0f">
+  <title>RPG HUB — Entrar</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2"></script>
+  <script src="supabase.js"></script>
+</head>
+<body class="authBody">
+  <main class="authShell">
+    <a class="brand authBrand" href="index.html"><span class="brandMark">✦</span><span>RPG <b>HUB</b></span></a>
+    <section class="authCard">
+      <div class="authHeader"><div class="eyebrow">ACESSO À CAMPANHA</div><h1 id="authTitle">Entrar no RPG HUB</h1><p id="authSubtitle">Entre para continuar sua campanha.</p></div>
+      <div class="authTabs"><button id="loginTab" class="active">Entrar</button><button id="registerTab">Criar conta</button></div>
+      <form id="authForm">
+        <label id="displayNameField" class="hidden">Nome de exibição<input id="displayName" maxlength="80" placeholder="Como você quer aparecer na mesa?"></label>
+        <label>E-mail<input id="email" type="email" autocomplete="email" required placeholder="voce@email.com"></label>
+        <label>Senha<input id="password" type="password" autocomplete="current-password" minlength="6" required placeholder="••••••••"></label>
+        <button class="primaryButton full" id="submitBtn" type="submit"><span id="submitText">Entrar</span><span>→</span></button>
+      </form>
+      <div id="authMessage" class="formMessage" role="status"></div>
+      <div class="authFoot"><a href="index.html">← Voltar para o início</a><button id="forgotBtn" class="textButton">Esqueci minha senha</button></div>
+    </section>
+  </main>
+  <script>
+    (() => {
+      const sb = window.rpgSupabase;
+      let mode = new URLSearchParams(location.search).get('mode') === 'register' ? 'register' : 'login';
+      const $ = id => document.getElementById(id);
+      const render = () => {
+        const isRegister = mode === 'register';
+        $('loginTab').classList.toggle('active', !isRegister); $('registerTab').classList.toggle('active', isRegister);
+        $('displayNameField').classList.toggle('hidden', !isRegister);
+        $('authTitle').textContent = isRegister ? 'Criar sua conta' : 'Entrar no RPG HUB';
+        $('authSubtitle').textContent = isRegister ? 'Crie sua identidade e entre na primeira campanha.' : 'Entre para continuar sua campanha.';
+        $('submitText').textContent = isRegister ? 'Criar conta' : 'Entrar';
+      };
+      $('loginTab').onclick = () => { mode='login'; render(); };
+      $('registerTab').onclick = () => { mode='register'; render(); };
+      $('authForm').onsubmit = async e => {
+        e.preventDefault();
+        const email=$('email').value.trim(), password=$('password').value, display=$('displayName').value.trim();
+        $('submitBtn').disabled=true; $('authMessage').className='formMessage'; $('authMessage').textContent='Processando…';
+        try {
+          if (mode==='register') {
+            const {data,error}=await sb.auth.signUp({email,password,options:{data:{display_name:display}}});
+            if(error) throw error;
+            if(data.session){ location.href='mesa.html'; return; }
+            $('authMessage').classList.add('success'); $('authMessage').textContent='Conta criada. Confira seu e-mail para confirmar o acesso.';
+          } else {
+            const {data,error}=await sb.auth.signInWithPassword({email,password});
+            if(error) throw error;
+            if(data.session) location.href='mesa.html';
+          }
+        } catch(err) { $('authMessage').classList.add('error'); $('authMessage').textContent=err.message || 'Não foi possível concluir o acesso.'; }
+        finally { $('submitBtn').disabled=false; }
+      };
+      $('forgotBtn').onclick=async()=>{
+        const email=$('email').value.trim(); if(!email){$('authMessage').className='formMessage error';$('authMessage').textContent='Digite seu e-mail primeiro.';return;}
+        const {error}=await sb.auth.resetPasswordForEmail(email,{redirectTo:location.origin+location.pathname});
+        $('authMessage').className='formMessage '+(error?'error':'success'); $('authMessage').textContent=error?.message || 'Se o e-mail existir, o link de redefinição foi enviado.';
+      };
+      sb.auth.getSession().then(({data})=>{if(data.session) location.href='mesa.html';});
+      render();
+    })();
+  </script>
+</body>
+</html>
