@@ -8,7 +8,7 @@ const colors = ['#9487ff','#6ee7b7','#e8c986','#7dd3fc','#f3a8ca','#fb7185','#f5
 
 const state = {
   user:null, profile:null, campaigns:[], campaign:null, role:'player', members:[], profiles:new Map(),
-  locations:[], floors:[], rooms:[], characters:[], characterFields:[], npcs:[], entities:[], sessions:[], rolls:[],
+  locations:[], floors:[], rooms:[], characters:[], characterFields:[], npcs:[], entities:[], sessions:[], rolls:[], audioAssets:[], audioPlaylists:[], audioPlaylistItems:[],
   location:null, floor:null, selected:null, view:'table', tool:'move', zoom:100, audioChannel:null, audio:null,
   audioEnabled:false, presenceChannel:null, online:1, isLoading:true
 };
@@ -65,7 +65,7 @@ async function loadCampaigns(){
 async function loadCampaignData(){
   if(!state.campaign)return;
   const campaignId=state.campaign.id;
-  const [{data:members,error:me},{data:locations,error:le},{data:characters,error:ce},{data:characterFields,error:cfe},{data:npcs,error:ne},{data:entities,error:ee},{data:sessions,error:se},{data:rolls,error:re}]=await Promise.all([
+  const [{data:members,error:me},{data:locations,error:le},{data:characters,error:ce},{data:characterFields,error:cfe},{data:npcs,error:ne},{data:entities,error:ee},{data:sessions,error:se},{data:rolls,error:re},{data:audioAssets,error:aae},{data:audioPlaylists,error:ape}]=await Promise.all([
     sb.from('campaign_members').select('*').eq('campaign_id',campaignId),
     sb.from('locations').select('*').eq('campaign_id',campaignId).order('sort_order'),
     sb.from('characters').select('*').eq('campaign_id',campaignId).order('name'),
@@ -73,10 +73,12 @@ async function loadCampaignData(){
     sb.from('npcs').select('*').eq('campaign_id',campaignId).order('name'),
     sb.from('world_entities').select('*').eq('campaign_id',campaignId).order('created_at'),
     sb.from('sessions').select('*').eq('campaign_id',campaignId).order('session_number',{ascending:false}),
-    sb.from('dice_rolls').select('*').eq('campaign_id',campaignId).order('created_at',{ascending:false}).limit(30)
+    sb.from('dice_rolls').select('*').eq('campaign_id',campaignId).order('created_at',{ascending:false}).limit(30),
+    sb.from('audio_assets').select('*').eq('campaign_id',campaignId).order('created_at',{ascending:true}),
+    sb.from('audio_playlists').select('*').eq('campaign_id',campaignId).order('created_at',{ascending:true})
   ]);
-  if(me||le||ce||ne||ee||se||re) throw (me||le||ce||ne||ee||se||re);
-  state.members=members||[]; state.locations=locations||[]; state.characters=characters||[]; state.characterFields=characterFields||[]; state.npcs=npcs||[]; state.entities=entities||[]; state.sessions=sessions||[]; state.rolls=rolls||[];
+  if(me||le||ce||ne||ee||se||re||aae||ape) throw (me||le||ce||ne||ee||se||re||aae||ape);
+  state.members=members||[]; state.locations=locations||[]; state.characters=characters||[]; state.characterFields=characterFields||[]; state.npcs=npcs||[]; state.entities=entities||[]; state.sessions=sessions||[]; state.rolls=rolls||[]; state.audioAssets=audioAssets||[]; state.audioPlaylists=audioPlaylists||[]; state.audioPlaylistItems=[];
   const mine=state.members.find(m=>m.user_id===state.user.id); state.role=state.campaign.owner_id===state.user.id?'owner':(mine?.role||'player');
   state.profiles=new Map();
   const ids=[...new Set(state.members.map(m=>m.user_id).filter(Boolean))];
