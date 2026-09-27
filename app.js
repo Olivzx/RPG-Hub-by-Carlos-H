@@ -145,6 +145,7 @@ async function subscribeRealtime(){
     channel.on('broadcast',{event:'entity_move'},({payload})=>{if(payload?.user_id!==state.user.id)receiveEntityMove(payload);});
     channel.on('broadcast',{event:'room_move'},({payload})=>{if(payload?.user_id!==state.user.id)receiveRoomMove(payload);});
     channel.on('broadcast',{event:'room_resize'},({payload})=>{if(payload?.user_id!==state.user.id)receiveRoomResize(payload);});
+    channel.on('broadcast',{event:'room_rotate'},({payload})=>{if(payload?.user_id!==state.user.id)receiveRoomRotate(payload);});
     channel.on('postgres_changes',{event:'UPDATE',schema:'public',table:'sessions',filter:`id=eq.${sid}`},payload=>{const row=payload.new;if(!row)return;state.sessions=state.sessions.map(x=>x.id===row.id?row:x);if(row.id===currentSession()?.id && row.active_floor_id!==state.floor && !canEdit())receiveSceneChange({floor_id:row.active_floor_id,room_id:row.active_room_id,room_name:state.rooms.find(r=>r.id===row.active_room_id)?.name});});
     channel.on('postgres_changes',{event:'UPDATE',schema:'public',table:'world_entities',filter:`campaign_id=eq.${state.campaign.id}`},payload=>{const row=payload.new;if(!row||payload.old?.updated_at===row.updated_at)return;receiveEntityMove({entity_id:row.id,x:row.x,y:row.y,room_id:row.room_id,floor_id:row.floor_id});});
     channel.on('postgres_changes',{event:'UPDATE',schema:'public',table:'rooms'},payload=>{const row=payload.new;if(row?.id)receiveRoomMove({room_id:row.id,x:row.x,y:row.y});});
@@ -206,6 +207,8 @@ async function setActiveScene(floorId,roomId=null){
 async function broadcastEntityMove(payload){if(!state.audioChannel||!canEdit())return;await state.audioChannel.send({type:"broadcast",event:"entity_move",payload:{...payload,user_id:state.user.id}});}
 async function broadcastRoomMove(payload){if(!state.audioChannel||!canEdit())return;await state.audioChannel.send({type:"broadcast",event:"room_move",payload:{...payload,user_id:state.user.id}});}
 async function broadcastRoomResize(payload){if(!state.audioChannel||!canEdit())return;await state.audioChannel.send({type:"broadcast",event:"room_resize",payload:{...payload,user_id:state.user.id}});}
+function receiveRoomRotate(payload){if(!payload?.room_id)return;state.rooms=state.rooms.map(r=>r.id===payload.room_id?{...r,rotation:Number(payload.rotation)||0}:r);renderTable();}
+async function broadcastRoomRotate(payload){if(!state.audioChannel||!canEdit())return;await state.audioChannel.send({type:"broadcast",event:"room_rotate",payload:{...payload,user_id:state.user.id}});}
 
 function receiveRoll(payload){ state.rolls=[payload,...state.rolls].slice(0,30); renderDiceResult(payload); if(state.view!=='dice') $('rollResult').classList.add('rollPulse'); setTimeout(()=>$('rollResult')?.classList.remove('rollPulse'),280); }
 
@@ -232,22 +235,68 @@ function renderShell(){
 }
 function renderView(){ if(state.view==='chronicle'&&!canEdit())state.view='table'; document.querySelectorAll('.view').forEach(v=>v.classList.remove('active')); $(`view${state.view.charAt(0).toUpperCase()+state.view.slice(1)}`)?.classList.add('active'); document.querySelectorAll('#sideNav button, #mobileBottomNav button').forEach(b=>b.classList.toggle('active',b.dataset.view===state.view)); }
 
+function entityAvatarUrl(entity){
+  if(!entity)return null;
+  const character=entity.character_id?state.characters.find(x=>x.id===entity.character_id):null;
+  const npc=entity.npc_id?state.npcs.find(x=>x.id===entity.npc_id):null;
+  const player=character?profileFor(character.player_id):null;
+  return character?.avatar_url||player?.avatar_url||npc?.avatar_url||null;
+}
+function entityFallbackIcon(entity){
+  return entity?.icon || (entity?.entity_kind==='character'?'♙':entity?.entity_kind==='npc'?'♜':'◆');
+}
+function entityAvatarMarkup(entity,small=false){
+  const avatar=entityAvatarUrl(entity);
+  const icon=escapeHtml(entityFallbackIcon(entity));
+  return avatar
+    ? '<span class="'+(small?'entityAvatar entityAvatarWithImage':'tokenAvatar')+'"><img src="'+escapeHtml(avatar)+'" alt="" loading="lazy"><span class="tokenFallback">'+icon+'</span></span>'
+    : '<span class="'+(small?'entityAvatar':'tokenAvatar')+'"><span class="tokenFallback">'+icon+'</span></span>';
+}
+function pointInsideRoom(x,y,r){
+  const w=Number(r.width),h=Number(r.height),cx=Number(r.x)+w/2,cy=Number(r.y)+h/2;
+  const angle=-(Number(r.rotation)||0)*Math.PI/180;
+  const dx=x-cx,dy=y-cy;
+  const lx=dx*Math.cos(angle)-dy*Math.sin(angle);
+  const ly=dx*Math.sin(angle)+dy*Math.cos(angle);
+  return Math.abs(lx)<=w/2&&Math.abs(ly)<=h/2;
+}
+async function moveEntityToFloor(id,floorId){
+  if(!requireMaster())return;
+  const entity=state.entities.find(x=>x.id===id);
+  const floor=state.floors.find(x=>x.id===floorId);
+  if(!entity||!floor){toast('Personagem ou andar não encontrado.','error');return;}
+  if(entity.floor_id===floor.id){toast('O personagem já está neste andar.');return;}
+  const x=Math.max(3,Math.min(97,Number(entity.x)||50));
+  const y=Math.max(7,Math.min(93,Number(entity.y)||50));
+  const room=roomAtPosition(x,y,floor.id);
+  const {data,error}=await sb.from('world_entities').update({floor_id:floor.id,room_id:room?.id||null,x,y}).eq('id',id).select().single();
+  if(error){toast(error.message||'Não foi possível mudar o personagem de andar.','error');return;}
+  state.entities=state.entities.map(e=>e.id===id?data:e);
+  state.floor=floor.id;
+  state.location=state.locations.find(l=>l.id===floor.location_id)||state.location;
+  state.selected={type:'entity',id};
+  await broadcastEntityMove({entity_id:id,x,y,room_id:room?.id||null,floor_id:floor.id});
+  renderAll();
+  setSave('Personagem movido para '+floor.name);
+  toast(room?entity.display_name+' movido para '+floor.name+' · '+room.name:entity.display_name+' movido para '+floor.name);
+}
+
 function renderTable(){
   const f=currentFloor(); $('contextFloor').textContent=f?.name||'Sem andar'; $('boardFloorName').textContent=f?.name?.toUpperCase()||'—'; ensureFloor();
   $('floorSwitch').innerHTML=state.floors.map(x=>`<button class="${x.id===state.floor?'chosen':''}" data-floor="${x.id}">${escapeHtml(x.name)}</button>`).join('') || '<span class="muted">Nenhum andar</span>';
   document.querySelectorAll('[data-floor]').forEach(b=>b.onclick=async()=>{const id=b.dataset.floor;if(canEdit())await setActiveScene(id,null);else{state.floor=id;state.selected=null;renderTable();}});
   const rooms=state.rooms.filter(r=>r.floor_id===state.floor); const entities=state.entities.filter(e=>e.floor_id===state.floor && e.visible!==false);
-  $('roomLayer').innerHTML=rooms.map(r=>`<div class="room ${state.selected?.type==='room'&&state.selected.id===r.id?'roomSelected':''}" data-room-id="${r.id}" style="left:${r.x}%;top:${r.y}%;width:${r.width}%;height:${r.height}%"><span>${escapeHtml(r.name)}</span><div class="roomResize" title="Redimensionar"></div></div>`).join('');
+  $('roomLayer').innerHTML=rooms.map(r=>`<div class="room ${state.selected?.type==='room'&&state.selected.id===r.id?'roomSelected':''}" data-room-id="${r.id}" style="left:${r.x}%;top:${r.y}%;width:${r.width}%;height:${r.height}%;transform:rotate(${Number(r.rotation)||0}deg)"><span>${escapeHtml(r.name)}</span><div class="roomResize" title="Redimensionar"></div></div>`).join('');
   $('roomList').innerHTML=rooms.map(r=>`<button class="roomItem ${state.selected?.type==='room'&&state.selected.id===r.id?'roomChosen':''}" data-room-list="${r.id}"><span class="roomIcon">▧</span><div><b>${escapeHtml(r.name)}</b><small>${escapeHtml(r.description||'Sem descrição')}</small></div><span>›</span></button>`).join('') || '<div class="emptySelect">Nenhum cômodo neste andar.</div>';
   $('entityCount').textContent=entities.length;
-  $('tokenLayer').innerHTML=entities.map(e=>`<div class="tokenBig ${state.selected?.type==='entity'&&state.selected.id===e.id?'selected':''}" data-entity-id="${e.id}" style="left:${e.x}%;top:${e.y}%;--token-color:${escapeHtml(e.color||'#9487ff')}"><div>${escapeHtml(e.icon||'◆')}</div><span>${escapeHtml(e.display_name)}</span></div>`).join('');
-  $('entityList').innerHTML=entities.map(e=>`<button class="entityItem ${state.selected?.type==='entity'&&state.selected.id===e.id?'entityChosen':''}" data-entity-list="${e.id}"><span class="entityAvatar">${escapeHtml(e.icon||'◆')}</span><div><b>${escapeHtml(e.display_name)}</b><small>${escapeHtml(e.entity_kind)}</small></div><span>›</span></button>`).join('') || '<div class="emptySelect">Nenhuma entidade neste andar.</div>';
+  $('tokenLayer').innerHTML=entities.map(e=>`<div class="tokenBig ${state.selected?.type==='entity'&&state.selected.id===e.id?'selected':''}" data-entity-id="${e.id}" style="left:${e.x}%;top:${e.y}%;--token-color:${escapeHtml(e.color||'#9487ff')}">${entityAvatarMarkup(e)}<span>${escapeHtml(e.display_name)}</span></div>`).join('');
+  $('entityList').innerHTML=entities.map(e=>`<button class="entityItem ${state.selected?.type==='entity'&&state.selected.id===e.id?'entityChosen':''}" data-entity-list="${e.id}">${entityAvatarMarkup(e,true)}<div><b>${escapeHtml(e.display_name)}</b><small>${escapeHtml(e.entity_kind)}</small></div><span>›</span></button>`).join('') || '<div class="emptySelect">Nenhuma entidade neste andar.</div>';
   $('selectedCard').innerHTML=renderSelection(); bindTableInteractions(); applyZoom();
 }
 function renderSelection(){
   if(!state.selected)return '<div class="emptySelect">Selecione uma entidade ou cômodo.</div>';
   if(state.selected.type==='room'){const r=state.rooms.find(x=>x.id===state.selected.id);if(!r)return '';return `<div class="eyebrow">CÔMODO</div><div class="selectedRow"><div class="selectedEmoji">▧</div><div><h3>${escapeHtml(r.name)}</h3><p>${escapeHtml(r.description||'Sem descrição')}</p></div></div><div class="selectionActions"><button data-edit-room="${r.id}">Editar</button>${canEdit()?`<button data-broadcast-room="${r.id}" class="primarySmall">Transmitir cena</button><button class="dangerGhost" data-delete-room="${r.id}">Excluir</button>`:''} </div>`;}
-  const e=state.entities.find(x=>x.id===state.selected.id);if(!e)return ''; const character=e.character_id?state.characters.find(x=>x.id===e.character_id):null; const npc=e.npc_id?state.npcs.find(x=>x.id===e.npc_id):null; const source=character||npc; return `<div class="eyebrow">ENTIDADE</div><div class="selectedRow"><div class="selectedEmoji">${escapeHtml(e.icon||'◆')}</div><div><h3>${escapeHtml(e.display_name)}</h3><p>${escapeHtml(e.entity_kind)} · posição salva</p></div></div><div class="statGrid"><div><span>HP</span><b>${character?.hp_current!=null?`${character.hp_current}/${character.hp_max??'—'}`:'—'}</b></div><div><span>ORIGEM</span><b>${source?escapeHtml(source.name):'—'}</b></div></div><div class="selectionActions"><button data-edit-entity="${e.id}">Detalhes</button></div>`;
+  const e=state.entities.find(x=>x.id===state.selected.id);if(!e)return ''; const character=e.character_id?state.characters.find(x=>x.id===e.character_id):null; const npc=e.npc_id?state.npcs.find(x=>x.id===e.npc_id):null; const source=character||npc; const moveOptions=state.floors.map(f=>`<option value="${f.id}" ${f.id===e.floor_id?'selected':''}>${escapeHtml(f.name)}</option>`).join(''); return `<div class="eyebrow">ENTIDADE</div><div class="selectedRow"><div class="selectedEmoji">${entityAvatarMarkup(e)}</div><div><h3>${escapeHtml(e.display_name)}</h3><p>${escapeHtml(e.entity_kind)} · posição salva</p></div></div><div class="statGrid"><div><span>HP</span><b>${character?.hp_current!=null?`${character.hp_current}/${character.hp_max??'—'}`:'—'}</b></div><div><span>ORIGEM</span><b>${source?escapeHtml(source.name):'—'}</b></div></div>${canEdit()?`<div class="selectionMoveFloor"><label>Transferir para<select data-selected-entity-floor>${moveOptions}</select></label><button class="primarySmall" data-move-entity="${e.id}">Mover</button></div>`:''}<div class="selectionActions"><button data-edit-entity="${e.id}">Detalhes</button></div>`;
 }
 function bindTableInteractions(){
   document.querySelectorAll('[data-room-list]').forEach(b=>b.onclick=()=>{state.selected={type:'room',id:b.dataset.roomList};renderTable();});
@@ -256,6 +305,7 @@ function bindTableInteractions(){
   document.querySelectorAll('[data-broadcast-room]').forEach(b=>b.onclick=()=>setActiveScene(state.floor,b.dataset.broadcastRoom));
   document.querySelectorAll('[data-delete-room]').forEach(b=>b.onclick=()=>deleteRoom(b.dataset.deleteRoom));
   document.querySelectorAll('[data-edit-entity]').forEach(b=>b.onclick=()=>openEntityModal(b.dataset.editEntity));
+  document.querySelectorAll('[data-move-entity]').forEach(b=>b.onclick=()=>{const select=b.closest('.selectionMoveFloor')?.querySelector('[data-selected-entity-floor]');moveEntityToFloor(b.dataset.moveEntity,select?.value);});
   document.querySelectorAll('.tokenBig').forEach(el=>{el.onpointerdown=e=>startEntityDrag(e,el);el.onclick=e=>{e.stopPropagation();state.selected={type:'entity',id:el.dataset.entityId};renderTable();};});
   document.querySelectorAll('.room').forEach(el=>{el.onclick=e=>{if(e.target.closest('.roomResize'))return;state.selected={type:'room',id:el.dataset.roomId};renderTable();};el.onpointerdown=e=>startRoomDrag(e,el);});
   document.querySelectorAll('.roomResize').forEach(el=>el.onpointerdown=e=>startRoomResize(e,el.parentElement));
@@ -445,7 +495,7 @@ function renderWorld(){
               <div class="worldRoomList">
                 ${floorRooms.map(r=>`<div class="worldRoomCard">
                   <div class="worldRoomMain"><div class="roomMiniIcon">▧</div><div><b>${escapeHtml(r.name)}</b><small>${escapeHtml(r.description||'Sem descrição')}</small></div></div>
-                  <div class="worldRoomMeta"><span>${Number(r.width).toFixed(1)} × ${Number(r.height).toFixed(1)}%</span><span>${Number(r.x).toFixed(1)}, ${Number(r.y).toFixed(1)}%</span></div>
+                  <div class="worldRoomMeta"><span>${Number(r.width).toFixed(1)} × ${Number(r.height).toFixed(1)}%</span><span>${Number(r.x).toFixed(1)}, ${Number(r.y).toFixed(1)}%</span><span>Rotação ${Number(r.rotation||0).toFixed(0)}°</span></div>
                   ${canEdit()?'<div class="worldRoomActions"><button class="miniAction" data-edit-room-world="'+r.id+'">Editar</button><button class="miniAction danger" data-delete-room-world="'+r.id+'">Excluir</button></div>':''}
                 </div>`).join('')||'<div class="emptySelect">Nenhum cômodo neste andar.</div>'}
               </div>
@@ -590,22 +640,25 @@ function openRoomModal(id,floorId){
   const room=id?state.rooms.find(x=>x.id===id):null;
   const g=window.__roomGeom;
   const selectedFloor=floorId||state.floor||state.floors[0]?.id;
-  const r=room||{name:'Novo cômodo',description:'',notes:'',image_url:'',x:g?.x??20,y:g?.y??20,width:g?.width??30,height:g?.height??25,floor_id:selectedFloor};
+  const r=room||{name:'Novo cômodo',description:'',notes:'',image_url:'',x:g?.x??20,y:g?.y??20,width:g?.width??30,height:g?.height??25,rotation:0,floor_id:selectedFloor};
   const floorOptions=state.floors.map(f=>`<option value="${f.id}" ${f.id===r.floor_id?'selected':''}>${escapeHtml(f.name)}</option>`).join('');
   showModal(`<div class="modalHeader"><div><div class="eyebrow">MUNDO · CENÁRIO</div><h3>${room?'Editar cômodo':'Novo cômodo do cenário'}</h3></div><button class="closeButton" data-close>×</button></div>
     <div class="formGrid">
       <label>Nome<input id="roomName" maxlength="120" value="${escapeHtml(r.name)}" placeholder="Ex.: Salão principal"></label>
       <label>Andar<select id="roomFloor">${floorOptions}</select></label>
-      <label>Posição X %<input id="roomX" type="text" inputmode="decimal" min="0" max="100" value="${r.x}" placeholder="20 ou 20,5"></label>
-      <label>Posição Y %<input id="roomY" type="text" inputmode="decimal" min="0" max="100" value="${r.y}" placeholder="20 ou 20,5"></label>
-      <label>Largura %<input id="roomW" type="text" inputmode="decimal" min="5" max="95" value="${r.width}" placeholder="30 ou 30,5"></label>
-      <label>Altura %<input id="roomH" type="text" inputmode="decimal" min="5" max="90" value="${r.height}" placeholder="25 ou 25,5"></label>
+      <label>Posição X %<input id="roomX" type="text" inputmode="decimal" value="${r.x}" placeholder="20 ou 20,5"></label>
+      <label>Posição Y %<input id="roomY" type="text" inputmode="decimal" value="${r.y}" placeholder="20 ou 20,5"></label>
+      <label>Largura %<input id="roomW" type="text" inputmode="decimal" value="${r.width}" placeholder="30 ou 30,5"></label>
+      <label>Altura %<input id="roomH" type="text" inputmode="decimal" value="${r.height}" placeholder="25 ou 25,5"></label>
+      <label>Rotação °<input id="roomRotation" type="text" inputmode="decimal" value="${Number(r.rotation||0)}" placeholder="Ex.: 45"></label>
     </div>
     <label>Descrição <span class="optional">(opcional)</span><textarea id="roomDesc" rows="4">${escapeHtml(r.description||'')}</textarea></label>
     <label>Imagem do cômodo <span class="optional">(opcional)</span><input id="roomImage" value="${escapeHtml(r.image_url||'')}" placeholder="https://..."></label>
     <label>Anotações do mestre <span class="optional">(opcional)</span><textarea id="roomNotes" rows="4">${escapeHtml(r.notes||'')}</textarea></label>
-    <div class="modalHint">Use ponto ou vírgula nos valores decimais. Ex.: <strong>20,5</strong> ou <strong>20.5</strong>. A posição e o tamanho também podem ser ajustados diretamente na mesa visual.</div>
+    <div class="rotationPresets"><span>Atalhos</span><button type="button" data-room-rotation="0">0°</button><button type="button" data-room-rotation="15">15°</button><button type="button" data-room-rotation="30">30°</button><button type="button" data-room-rotation="45">45°</button><button type="button" data-room-rotation="-45">−45°</button><button type="button" data-room-rotation="90">90°</button></div>
+    <div class="modalHint">Use ponto ou vírgula nos valores decimais. A rotação permite criar cômodos diagonais, por exemplo <strong>45°</strong>. A posição e o tamanho também podem ser ajustados diretamente na mesa visual.</div>
     <div class="modalActions"><button class="softButton" data-close>Cancelar</button><button id="saveRoom" class="primarySmall">Salvar cômodo</button></div>`);
+  document.querySelectorAll('[data-room-rotation]').forEach(b=>b.onclick=()=>{$('roomRotation').value=b.dataset.roomRotation;});
   $('saveRoom').onclick=async()=>{
     try{
       const name=$('roomName').value.trim();if(!name){toast('Informe o nome do cômodo.','error');$('roomName').focus();return;}
@@ -615,7 +668,8 @@ function openRoomModal(id,floorId){
       const y=readWorldNumber('roomY','Posição Y',0,100);
       const width=readWorldNumber('roomW','Largura',5,95);
       const height=readWorldNumber('roomH','Altura',5,90);
-      const payload={floor_id:selectedFloor,name,description:$('roomDesc').value.trim(),image_url:$('roomImage').value.trim()||null,notes:$('roomNotes').value.trim()||null,x,y,width,height};
+      const rotation=readWorldNumber('roomRotation','Rotação',-180,180);
+      const payload={floor_id:selectedFloor,name,description:$('roomDesc').value.trim(),image_url:$('roomImage').value.trim()||null,notes:$('roomNotes').value.trim()||null,x,y,width,height,rotation};
       const result=room?await sb.from('rooms').update(payload).eq('id',room.id).select().single():await sb.from('rooms').insert({...payload,sort_order:state.rooms.filter(x=>x.floor_id===selectedFloor).length}).select().single();
       if(result.error)throw result.error;
       if(room)state.rooms=state.rooms.map(x=>x.id===room.id?result.data:x);else state.rooms.push(result.data);
@@ -1471,7 +1525,7 @@ function openNpcModal(id){if(!requireMaster())return;const n=id?state.npcs.find(
 async function addCharacterToBoard(id){if(!requireMaster())return;const c=state.characters.find(x=>x.id===id);if(!c)return;if(state.entities.some(e=>e.character_id===id)){toast('Esse personagem já está na mesa.');return;}const payload={campaign_id:state.campaign.id,character_id:id,entity_kind:'character',display_name:c.name,icon:'♙',color:colors[state.entities.length%colors.length],floor_id:state.floor,x:50,y:50,room_id:null,visible:true,metadata:{}};const {data,error}=await sb.from('world_entities').insert(payload).select().single();if(error){toast(error.message,'error');return;}state.entities.push(data);renderAll();toast(`${c.name} entrou na mesa`);}
 async function addNpcToBoard(id){if(!requireMaster())return;const n=state.npcs.find(x=>x.id===id);if(!n)return;if(state.entities.some(e=>e.npc_id===id)){toast('Essa entidade já está na mesa.');return;}const payload={campaign_id:state.campaign.id,npc_id:id,entity_kind:'npc',display_name:n.name,icon:'♜',color:colors[state.entities.length%colors.length],floor_id:state.floor,x:50,y:50,room_id:null,visible:true,metadata:{}};const {data,error}=await sb.from('world_entities').insert(payload).select().single();if(error){toast(error.message,'error');return;}state.entities.push(data);renderAll();toast(`${n.name} entrou na mesa`);}
 function roomAtPosition(x,y,floorId){
-  return state.rooms.find(r=>{const rx=Number(r.x),ry=Number(r.y),rw=Number(r.width),rh=Number(r.height);return r.floor_id===floorId&&x>=rx&&x<=rx+rw&&y>=ry&&y<=ry+rh;})||null;
+  return state.rooms.find(r=>r.floor_id===floorId&&pointInsideRoom(x,y,r))||null;
 }
 function renderEntityAttributes(character){
   const attrs=character?.attributes||{};
