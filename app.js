@@ -814,22 +814,22 @@ function renderNpcs(){
 }
 function renderDice(){
   const history=$('rollHistory');
-  if(history){
-    if(!canEdit()){
-      history.innerHTML='<div class="diceHistoryPrivate"><span>🔒</span><b>Histórico reservado ao mestre</b><small>As rolagens dos jogadores não ficam visíveis aqui.</small></div>';
-    }else{
-      const rows=state.rolls.map(r=>{
-        const roller=profileFor(r.roller_user_id)?.display_name||'Jogador';
-        const character=state.characters.find(c=>c.id===r.character_id);
-        const session=state.sessions.find(s=>s.id===r.session_id);
-        const values=Array.isArray(r.base_results)?r.base_results.join(' · '):'—';
-        const modifier=Number(r.rule_results?.modifier||0);
-        const modifierText=modifier?' '+(modifier>0?'+':'')+modifier:'';
-        const sessionText=session?'Sessão #'+session.session_number:'Sem sessão';
-        return '<article class="rollLog masterRollLog"><div class="rollLogIdentity"><b>'+escapeHtml(roller)+'</b><small>'+escapeHtml(character?.name||'Sem personagem')+' · '+escapeHtml(sessionText)+'</small><span>'+escapeHtml(r.notation||'Rolagem')+' · dados: '+escapeHtml(values)+escapeHtml(modifierText)+'</span><em>'+escapeHtml(fmtDate(r.created_at))+'</em></div><strong>'+escapeHtml(r.final_result)+'</strong></article>';
-      }).join('') || '<div class="emptyPanel">Nenhuma rolagem registrada.</div>';
-      history.innerHTML=rows;
-    }
+  const historyPanel=history?.closest('.diceHistoryPanel');
+  if(historyPanel) historyPanel.hidden=!canEdit();
+  if(history && canEdit()){
+    const rows=state.rolls.map(r=>{
+      const roller=r.roller_display_name||profileFor(r.roller_user_id)?.display_name||'Jogador';
+      const character=state.characters.find(c=>c.id===r.character_id);
+      const session=state.sessions.find(s=>s.id===r.session_id);
+      const values=Array.isArray(r.base_results)?r.base_results.join(' · '):'—';
+      const modifier=Number(r.rule_results?.modifier||0);
+      const modifierText=modifier?' '+(modifier>0?'+':'')+modifier:'';
+      const sessionText=session?'Sessão #'+session.session_number:'Sem sessão';
+      return '<article class="rollLog masterRollLog"><div class="rollLogIdentity"><b>'+escapeHtml(roller)+'</b><small>'+escapeHtml(character?.name||'Sem personagem')+' · '+escapeHtml(sessionText)+'</small><span>'+escapeHtml(r.notation||'Rolagem')+' · dados: '+escapeHtml(values)+escapeHtml(modifierText)+'</span><em>'+escapeHtml(fmtDate(r.created_at))+'</em></div><strong>'+escapeHtml(r.final_result)+'</strong></article>';
+    }).join('') || '<div class="emptyPanel">Nenhuma rolagem registrada.</div>';
+    history.innerHTML=rows;
+  }else if(history){
+    history.innerHTML='';
   }
   const active=currentSession(); $('sessionAudioCard').innerHTML=audioPanel(active);
   setTimeout(wireAudioControls,0);
@@ -1828,7 +1828,7 @@ async function performRoll(notation,rule='normal'){
   let base=[];let finalBase=[];let appliedRule='Normal';
   if((rule==='advantage'||rule==='disadvantage')&&count===1&&sides===20){const a=rollOnce(1)[0],b=rollOnce(1)[0];base=[a,b];finalBase=[rule==='advantage'?Math.max(a,b):Math.min(a,b)];appliedRule=rule==='advantage'?'Vantagem (maior)':'Desvantagem (menor)';}else{base=rollOnce(count);finalBase=base;appliedRule='Normal';}
   const final=finalBase.reduce((a,b)=>a+b,0)+modifier;
-  const payload={campaign_id:state.campaign.id,session_id:currentSession()?.id||null,roller_user_id:state.user.id,character_id:state.characters.find(c=>c.player_id===state.user.id)?.id||null,notation:notation.trim(),base_results:base,rule_results:{label:appliedRule,selected:finalBase,modifier},final_result:final,created_at:new Date().toISOString()};
+  const payload={campaign_id:state.campaign.id,session_id:currentSession()?.id||null,roller_user_id:state.user.id,roller_display_name:state.profile?.display_name||state.user?.email?.split('@')[0]||'Jogador',character_id:state.characters.find(c=>c.player_id===state.user.id)?.id||null,notation:notation.trim(),base_results:base,rule_results:{label:appliedRule,selected:finalBase,modifier},final_result:final,created_at:new Date().toISOString()};
   const {data,error}=await sb.from('dice_rolls').insert(payload).select().single();
   if(error)throw error;
   if(canEdit()) state.rolls=[data,...state.rolls];
