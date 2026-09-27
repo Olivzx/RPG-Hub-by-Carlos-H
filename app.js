@@ -133,7 +133,7 @@ function renderShell(){
   const active=currentSession(); $('activeSessionLabel').textContent=active?`Sessão #${active.session_number} · ${active.status.toUpperCase()}`:'Nenhuma sessão ativa'; $('activeSessionTitle').textContent=active?.title||'Crie uma sessão para começar';
   const list=state.campaigns.map(c=>`<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');$('campaignSelect').innerHTML=list; if(state.campaign)$('campaignSelect').value=state.campaign.id;
   $('campaignInviteBtn').classList.toggle('hidden',!canEdit());
-  $('joinCampaignBtn').classList.toggle('hidden',canEdit() && !!state.campaign);
+  $('joinCampaignBtn').classList.remove('hidden');
 }
 function renderView(){ document.querySelectorAll('.view').forEach(v=>v.classList.remove('active')); $(`view${state.view.charAt(0).toUpperCase()+state.view.slice(1)}`)?.classList.add('active'); document.querySelectorAll('#sideNav button').forEach(b=>b.classList.toggle('active',b.dataset.view===state.view)); }
 
