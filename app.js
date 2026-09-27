@@ -174,15 +174,25 @@ function receiveRoomResize(payload){
 async function broadcastScene(payload){if(!state.sceneChannel||!canEdit())return;await state.sceneChannel.send({type:"broadcast",event:"scene_change",payload:{...payload,user_id:state.user.id}});}
 async function setActiveScene(floorId,roomId=null){
   if(!canEdit())return;
-  const session=currentSession();if(!session){toast("Abra uma sessão antes de transmitir a cena.","error");return;}
-  const {data,error}=await sb.from("sessions").update({active_floor_id:floorId||null,active_room_id:roomId||null}).eq("id",session.id).select().single();
-  if(error){toast(error.message||"Não foi possível atualizar a cena.","error");return;}
-  state.sessions=state.sessions.map(x=>x.id===session.id?data:x);
-  const floor=state.floors.find(f=>f.id===floorId);if(floor){state.floor=floor.id;state.location=state.locations.find(l=>l.id===floor.location_id)||state.location;}
+  const floor=state.floors.find(f=>f.id===floorId);
+  if(!floor){toast("Andar não encontrado.","error");return;}
+  state.floor=floor.id;
+  state.location=state.locations.find(l=>l.id===floor.location_id)||state.location;
   state.selected=roomId?{type:"room",id:roomId}:null;
-  await broadcastScene({floor_id:floorId,room_id:roomId,room_name:roomId?state.rooms.find(r=>r.id===roomId)?.name:null});
-  renderAll();setSave(roomId?'Cena transmitida aos jogadores':'Andar transmitido aos jogadores');
+
+  const session=currentSession();
+  if(session){
+    const {data,error}=await sb.from("sessions").update({active_floor_id:floor.id,active_room_id:roomId||null}).eq("id",session.id).select().single();
+    if(error){toast(error.message||"Não foi possível salvar a cena.","error");return;}
+    state.sessions=state.sessions.map(x=>x.id===session.id?data:x);
+    await broadcastScene({floor_id:floor.id,room_id:roomId,room_name:roomId?state.rooms.find(r=>r.id===roomId)?.name:null});
+    setSave(roomId?'Cena transmitida aos jogadores':'Andar transmitido aos jogadores');
+  }else{
+    setSave('Andar selecionado · sem sessão ativa');
+  }
+  renderAll();
 }
+async function broadcastEntityMove
 async function broadcastEntityMove(payload){if(!state.audioChannel||!canEdit())return;await state.audioChannel.send({type:"broadcast",event:"entity_move",payload:{...payload,user_id:state.user.id}});}
 async function broadcastRoomMove(payload){if(!state.audioChannel||!canEdit())return;await state.audioChannel.send({type:"broadcast",event:"room_move",payload:{...payload,user_id:state.user.id}});}
 async function broadcastRoomResize(payload){if(!state.audioChannel||!canEdit())return;await state.audioChannel.send({type:"broadcast",event:"room_resize",payload:{...payload,user_id:state.user.id}});}
