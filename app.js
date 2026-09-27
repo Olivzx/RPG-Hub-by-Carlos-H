@@ -1843,9 +1843,9 @@ document.querySelectorAll("[data-quick-die]").forEach(b=>b.onclick=async()=>{try
 $('saveBtn').onclick=()=>{setSave('Conexão ativa · alterações salvas automaticamente');toast('Tudo que foi alterado já foi para o Supabase.');};
 
 function wireAudioControls(){
-  $('enablePlayerAudioBtn')?.onclick=async()=>{try{await unlockAudio();toast('Sons da campanha ativados');}catch(e){toast('Não foi possível ativar os sons.','error');}};
+  if($('enablePlayerAudioBtn'))$('enablePlayerAudioBtn').onclick=async()=>{try{await unlockAudio();toast('Sons da campanha ativados');}catch(e){toast('Não foi possível ativar os sons.','error');}};
 
-  $('enableAudioBtn')?.onclick=async()=>{try{await unlockAudio();renderDice();toast('Áudio ativado para a campanha');}catch(e){toast(e.message||'Não foi possível ativar o áudio.','error');}};
+  if($('enableAudioBtn'))$('enableAudioBtn').onclick=async()=>{try{await unlockAudio();renderDice();toast('Áudio ativado para a campanha');}catch(e){toast(e.message||'Não foi possível ativar o áudio.','error');}};
   $('playAudioBtn')?.addEventListener('click',async()=>{try{let url=$('audioUrl').value.trim();const file=$('audioFile').files[0];const kind=$('audioKind').value;let name=$('audioName').value.trim();let storagePath=null;if(file){url=await uploadMedia(file,'audio');storagePath=uploadMedia.lastPath||null;}if(!url)throw new Error('Cole uma URL ou selecione um arquivo.');if(!name)name=file?.name||audioKindLabel(kind);const volume=Number($('audioVolume').value)||0.75;const loop=['music','ambient'].includes(kind);let asset=null;if($('audioSaveLibrary')?.checked)asset=await saveAudioAsset({name,kind,url,volume,loop,storagePath});await unlockAudio();await playAudioLayer({action:'play-layer',url,name,kind,loop,volume,asset_id:asset?.id||null});$('audioUrl').value='';$('audioFile').value='';$('audioName').value='';toast(asset?'Áudio salvo e tocando':'Áudio tocando');}catch(e){toast(e.message||'Não foi possível tocar o áudio.','error');}});
   $('stopAllAudioBtn')?.addEventListener('click',async()=>{await stopAllAudioLayers();toast('Todas as camadas foram interrompidas');});
   $('openAudioLibraryBtn')?.addEventListener('click',openAudioLibraryModal);
