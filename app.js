@@ -191,7 +191,7 @@ function renderDiceResult(payload){
   if(!payload)return;
   const results=(payload.base_results||[]).map((n,i)=>`<span class="dieResultChip"><small>dado ${i+1}</small><b>${n}</b></span>`).join("");
   $("bigRoll").textContent=payload.final_result;
-  $("rollBreakdown").innerHTML=`<div class="rollBreakdownHead"><b>${escapeHtml(payload.notation)}</b><span>${escapeHtml(payload.rule_results?.label||"Normal")}</span></div><div class="dieResults">${results||"<span class="muted">Sem resultados individuais.</span>"}</div><div class="rollSummary">Total <strong>${payload.final_result}</strong>${Number(payload.rule_results?.modifier||0)?`<small>modificador ${payload.rule_results.modifier>0?"+":""}${payload.rule_results.modifier}</small>`:""}</div>`;
+  $("rollBreakdown").innerHTML=`<div class="rollBreakdownHead"><b>${escapeHtml(payload.notation)}</b><span>${escapeHtml(payload.rule_results?.label||"Normal")}</span></div><div class="dieResults">${results||'<span class="muted">Sem resultados individuais.</span>'}</div><div class="rollSummary">Total <strong>${payload.final_result}</strong>${Number(payload.rule_results?.modifier||0)?`<small>modificador ${payload.rule_results.modifier>0?"+":""}${payload.rule_results.modifier}</small>`:""}</div>`;
   $("rollResult").innerHTML=`<span>${escapeHtml(payload.notation)}</span><b>${payload.final_result}</b>`;
 }
 function audioPanel(){ if(!canEdit()){return `<div class="audioCard"><div class="eyebrow">SOM DA SESSÃO</div><h3>Áudio sincronizado pelo mestre</h3><p>Ative o áudio para receber músicas e efeitos durante a sessão.</p><button id="enableAudioBtn" class="primarySmall">${state.audioEnabled?'Áudio ativo':'Ativar áudio'}</button></div>`; } return `<div class="audioCard"><div class="eyebrow">PAINEL DO MESTRE</div><h3>Música & efeitos</h3><p>Envie um arquivo ou cole uma URL. Música fica em loop; efeitos tocam uma vez. Play/stop é transmitido em tempo real.</p><div class="audioForm"><input id="audioUrl" placeholder="https://.../audio.mp3"><input id="audioFile" type="file" accept="audio/*"><select id="audioKind"><option value="music">Música · loop</option><option value="effect">Efeito sonoro · uma vez</option></select><div class="audioActions"><input id="audioVolume" type="range" min="0" max="1" step="0.05" value="0.75"><button id="playAudioBtn" class="primarySmall">▶ Tocar</button><button id="stopAudioBtn" class="softButton">■ Parar</button></div></div></div>`; }
@@ -337,6 +337,36 @@ function getDiceBuilderNotation(){
   return String(count)+"d"+String(sides)+(modifier>0?"+":"")+(modifier||"");
 }
 function syncDiceBuilder(){const el=$("diceNotationPreview");if(el)el.textContent=getDiceBuilderNotation();}
+function setDiceBuilderPreset(notation){const m=/^(\d+)d(\d+)([+-]\d+)?$/i.exec(notation);if(!m)return;$("diceCount").value=m[1];$("diceSides").value=m[2];$("diceModifier").value=m[3]||0;$("diceRule").value="normal";syncDiceBuilder();}
+document.querySelectorAll("#diceCount,#diceSides,#diceModifier").forEach(el=>el.addEventListener("input",syncDiceBuilder));
+document.querySelectorAll("[data-dice-preset]").forEach(b=>b.onclick=async()=>{try{setDiceBuilderPreset(b.dataset.dicePreset);state.view="dice";renderView();await performRoll(getDiceBuilderNotation(),"normal");renderDice();}catch(e){toast(e.message,"error");}});
+$("diceRule").addEventListener("change",syncDiceBuilder);
+$("rollBtn").onclick=async()=>{try{const notation=getDiceBuilderNotation();await performRoll(notation,$("diceRule").value);renderDice();}catch(e){toast(e.message,"error");}};
+document.querySelectorAll("[data-quick-die]").forEach(b=>b.onclick=async()=>{try{setDiceBuilderPreset("1d"+b.dataset.quickDie);state.view="dice";renderView();await performRoll(getDiceBuilderNotation(),"normal");renderDice();}catch(e){toast(e.message,"error");}});
+$('saveBtn').onclick=()=>{setSave('Conexão ativa · alterações salvas automaticamente');toast('Tudo que foi alterado já foi para o Supabase.');};
+
+function wireAudioControls(){
+  $('enableAudioBtn')?.addEventListener('click',async()=>{state.audioEnabled=true;try{const ctx=new (window.AudioContext||window.webkitAudioContext)();if(ctx.state==='suspended')await ctx.resume();const o=ctx.createOscillator();o.connect(ctx.destination);o.start();o.stop(ctx.currentTime+0.01);renderDice();toast('Áudio ativado');}catch(e){toast('Não foi possível ativar o áudio.','error');}});
+  $('playAudioBtn')?.addEventListener('click',async()=>{try{let url=$('audioUrl').value.trim();const file=$('audioFile').files[0];if(file)url=await uploadMedia(file,`audio/${uid()}`);if(!url)throw new Error('Cole uma URL ou selecione um arquivo.');await broadcastAudio({action:'play',url,volume:Number($('audioVolume').value),kind:$('audioKind')?.value||'music',name:file?.name||($('audioKind')?.value==='effect'?'Efeito sonoro':'Música')});toast('Áudio enviado para a sessão');}catch(e){toast(e.message,'error');}});
+  $('stopAudioBtn')?.addEventListener('click',async()=>{await broadcastAudio({action:'stop'});toast('Áudio interrompido');});
+}
+$('modalBackdrop').addEventListener('click',e=>{if(e.target===$('modalBackdrop'))closeModal();});document.addEventListener('click',e=>{if(e.target.closest('[data-close]'))closeModal();});
+
+// Drawing tool: create room based on the dragged area.
+let drawStart=null;$('board').addEventListener('pointerdown',e=>{if(state.tool!=='draw'||e.target.closest('.tokenBig')||e.target.closest('.room'))return;const r=$('board').getBoundingClientRect();drawStart={x:e.clientX-r.left,y:e.clientY-r.top};});$('board').addEventListener('pointerup',e=>{if(state.tool!=='draw'||!drawStart)return;const r=$('board').getBoundingClientRect();const x=Math.min(drawStart.x,e.clientX-r.left)/r.width*100,y=Math.min(drawStart.y,e.clientY-r.top)/r.height*100,w=Math.max(10,Math.abs(e.clientX-r.left-drawStart.x)/r.width*100),h=Math.max(8,Math.abs(e.clientY-r.top-drawStart.y)/r.height*100);drawStart=null;openRoomModalWithGeometry({x,y,width:w,height:h});});
+function openRoomModalWithGeometry(g){const oldOpen=window.__roomGeom;window.__roomGeom=g;openRoomModal();setTimeout(()=>{if(window.__roomGeom){$('roomX').value=g.x.toFixed(1);$('roomY').value=g.y.toFixed(1);$('roomW').value=g.width.toFixed(1);$('roomH').value=g.height.toFixed(1);window.__roomGeom=null;}},0);}
+const originalOpenRoom=openRoomModal;
+
+boot()function syncDiceBuilder(){
+  const el=$("diceNotationPreview");
+  const count=Math.min(50,Math.max(1,Number($("diceCount").value)||1));
+  const sides=Math.min(1000,Math.max(2,Number($("diceSides").value)||20));
+  const ruleSelect=$("diceRule");
+  const limited=!(count===1&&sides===20);
+  if(limited&&ruleSelect.value!=="normal")ruleSelect.value="normal";
+  [...ruleSelect.options].forEach(o=>o.disabled=o.value!=="normal"&&limited);
+  if(el)el.textContent=getDiceBuilderNotation();
+}
 function setDiceBuilderPreset(notation){const m=/^(\d+)d(\d+)([+-]\d+)?$/i.exec(notation);if(!m)return;$("diceCount").value=m[1];$("diceSides").value=m[2];$("diceModifier").value=m[3]||0;$("diceRule").value="normal";syncDiceBuilder();}
 document.querySelectorAll("#diceCount,#diceSides,#diceModifier").forEach(el=>el.addEventListener("input",syncDiceBuilder));
 document.querySelectorAll("[data-dice-preset]").forEach(b=>b.onclick=async()=>{try{setDiceBuilderPreset(b.dataset.dicePreset);state.view="dice";renderView();await performRoll(getDiceBuilderNotation(),"normal");renderDice();}catch(e){toast(e.message,"error");}});
