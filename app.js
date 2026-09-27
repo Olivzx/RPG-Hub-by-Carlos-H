@@ -74,7 +74,7 @@ async function loadCampaignData(){
     sb.from('npcs').select('*').eq('campaign_id',campaignId).order('name'),
     sb.from('world_entities').select('*').eq('campaign_id',campaignId).order('created_at'),
     sb.from('sessions').select('*').eq('campaign_id',campaignId).order('session_number',{ascending:false}),
-    sb.from('dice_rolls').select('*').eq('campaign_id',campaignId).order('created_at',{ascending:false}).limit(30),
+    canEdit()?sb.from('dice_rolls').select('*').eq('campaign_id',campaignId).order('created_at',{ascending:false}):Promise.resolve({data:[],error:null}),
     sb.from('audio_assets').select('*').eq('campaign_id',campaignId).order('created_at',{ascending:true}),
     sb.from('audio_playlists').select('*').eq('campaign_id',campaignId).order('created_at',{ascending:true})
   ]);
@@ -154,6 +154,17 @@ async function subscribeRealtime(){
     campaign.on('broadcast',{event:'room_rotate'},({payload})=>{if(payload?.user_id!==state.user.id)receiveRoomRotate(payload);});
     campaign.on('broadcast',{event:'scene_change'},({payload})=>{if(payload?.user_id!==state.user.id)receiveSceneChange(payload);});
     campaign.on('broadcast',{event:'audio'},({payload})=>{if(payload?.user_id!==state.user.id)receiveAudio(payload);});
+    if(canEdit()){
+      campaign.on('postgres_changes',{event:'INSERT',schema:'public',table:'dice_rolls',filter:`campaign_id=eq.${campaignId}`},payload=>{
+        const row=payload?.new;
+        if(!row?.id)return;
+        if(!state.rolls.some(r=>r.id===row.id)) state.rolls=[row,...state.rolls];
+        renderDice();
+        renderDiceResult(row);
+        const roller=profileFor(row.roller_user_id)?.display_name||'Jogador';
+        toast('Rolagem de '+roller+': '+row.final_result);
+      });
+    }
     campaign.on('postgres_changes',{event:'*',schema:'public',table:'characters',filter:`campaign_id=eq.${campaignId}`},payload=>{receiveCharacterChange(payload);});
     campaign.subscribe((status,err)=>{if(status==='CHANNEL_ERROR'||status==='TIMED_OUT')console.warn('Campanha realtime:',status,err);});
     state.campaignChannel=campaign;
@@ -162,7 +173,6 @@ async function subscribeRealtime(){
   const sid=currentSession()?.id;
   if(sid){
     const session=sb.channel(`rpg-hub-session-${sid}`,{config:{private:true}});
-    session.on('broadcast',{event:'dice_roll'},({payload})=>{if(payload?.user_id!==state.user.id)receiveRoll(payload);});
     session.on('postgres_changes',{event:'UPDATE',schema:'public',table:'sessions',filter:`id=eq.${sid}`},payload=>{
       const row=payload.new;if(!row)return;
       state.sessions=state.sessions.map(x=>x.id===row.id?row:x);
@@ -803,7 +813,24 @@ function renderNpcs(){
   document.querySelectorAll('[data-edit-npc]').forEach(b=>b.onclick=()=>openNpcModal(b.dataset.editNpc));document.querySelectorAll('[data-add-npc]').forEach(b=>b.onclick=()=>addNpcToBoard(b.dataset.addNpc));
 }
 function renderDice(){
-  const recent=state.rolls.slice(0,12); $('rollHistory').innerHTML=recent.map(r=>`<article class="rollLog"><div><b>${escapeHtml(r.notation)}</b><small>${fmtDate(r.created_at)}</small></div><strong>${r.final_result}</strong></article>`).join('') || '<div class="emptyPanel">Nenhuma rolagem ainda.</div>';
+  const history=$('rollHistory');
+  if(history){
+    if(!canEdit()){
+      history.innerHTML='<div class="diceHistoryPrivate"><span>🔒</span><b>Histórico reservado ao mestre</b><small>As rolagens dos jogadores não ficam visíveis aqui.</small></div>';
+    }else{
+      const rows=state.rolls.map(r=>{
+        const roller=profileFor(r.roller_user_id)?.display_name||'Jogador';
+        const character=state.characters.find(c=>c.id===r.character_id);
+        const session=state.sessions.find(s=>s.id===r.session_id);
+        const values=Array.isArray(r.base_results)?r.base_results.join(' · '):'—';
+        const modifier=Number(r.rule_results?.modifier||0);
+        const modifierText=modifier?' '+(modifier>0?'+':'')+modifier:'';
+        const sessionText=session?'Sessão #'+session.session_number:'Sem sessão';
+        return '<article class="rollLog masterRollLog"><div class="rollLogIdentity"><b>'+escapeHtml(roller)+'</b><small>'+escapeHtml(character?.name||'Sem personagem')+' · '+escapeHtml(sessionText)+'</small><span>'+escapeHtml(r.notation||'Rolagem')+' · dados: '+escapeHtml(values)+escapeHtml(modifierText)+'</span><em>'+escapeHtml(fmtDate(r.created_at))+'</em></div><strong>'+escapeHtml(r.final_result)+'</strong></article>';
+      }).join('') || '<div class="emptyPanel">Nenhuma rolagem registrada.</div>';
+      history.innerHTML=rows;
+    }
+  }
   const active=currentSession(); $('sessionAudioCard').innerHTML=audioPanel(active);
   setTimeout(wireAudioControls,0);
 }
@@ -1802,7 +1829,19 @@ async function performRoll(notation,rule='normal'){
   if((rule==='advantage'||rule==='disadvantage')&&count===1&&sides===20){const a=rollOnce(1)[0],b=rollOnce(1)[0];base=[a,b];finalBase=[rule==='advantage'?Math.max(a,b):Math.min(a,b)];appliedRule=rule==='advantage'?'Vantagem (maior)':'Desvantagem (menor)';}else{base=rollOnce(count);finalBase=base;appliedRule='Normal';}
   const final=finalBase.reduce((a,b)=>a+b,0)+modifier;
   const payload={campaign_id:state.campaign.id,session_id:currentSession()?.id||null,roller_user_id:state.user.id,character_id:state.characters.find(c=>c.player_id===state.user.id)?.id||null,notation:notation.trim(),base_results:base,rule_results:{label:appliedRule,selected:finalBase,modifier},final_result:final,created_at:new Date().toISOString()};
-  const {data,error}=await sb.from('dice_rolls').insert(payload).select().single();if(error)throw error;state.rolls=[data,...state.rolls].slice(0,30);renderDiceResult(data);renderDice();await state.sessionChannel?.send({type:'broadcast',event:'dice_roll',payload:{...data,user_id:state.user.id}});return data;
+  if(canEdit()){
+    const {data,error}=await sb.from('dice_rolls').insert(payload).select().single();
+    if(error)throw error;
+    state.rolls=[data,...state.rolls];
+    renderDiceResult(data);
+    renderDice();
+    return data;
+  }
+  const {error}=await sb.from('dice_rolls').insert(payload);
+  if(error)throw error;
+  renderDiceResult(payload);
+  renderDice();
+  return payload;
 }
 
 async function profileModal(){
