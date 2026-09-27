@@ -355,12 +355,14 @@
     if (typeof renderDice === 'function') renderDice();
 
     try {
-      if (forceUnlock && typeof unlockAudio === 'function') {
-        await unlockAudio();
-        // unlockAudio não restaura novamente quando o estado já estava armado.
-        if (typeof restoreCampaignAudioState === 'function') await restoreCampaignAudioState();
-      } else if (typeof restoreCampaignAudioState === 'function') {
-        await restoreCampaignAudioState();
+      // Em uma interação do usuário, chama a reprodução dos áudios imediatamente
+      // para aproveitar o user activation do navegador.
+      if (typeof restoreCampaignAudioState === 'function') {
+        const restoring = restoreCampaignAudioState();
+        if (forceUnlock) await restoring;
+        else restoring.catch(function (error) {
+          console.warn('RPG HUB audio restore:', error);
+        });
       }
       if (typeof renderDice === 'function') renderDice();
     } catch (error) {
