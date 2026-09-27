@@ -29,7 +29,7 @@
         <button data-view="sessions">✦ <span>Sessões</span></button>
         <button data-view="npcs">♜ <span>NPCs & monstros</span></button>
         <button data-view="dice">⚄ <span>Utilitários</span></button>
-        <button data-view="rollhistory" id="rollHistoryNav" class="masterOnly hidden">◴ <span>Histórico de rolagens</span></button>
+        <button data-view="masterdashboard" id="masterDashboardNav" class="masterOnly hidden">♛ <span>Painel do mestre</span></button>
         <button data-view="chronicle" id="chronicleNav" class="masterOnly hidden">▤ <span>Crônica da mesa</span></button>
       </nav>
       <div class="sideBottom">
@@ -84,10 +84,51 @@
   <div class="diceCard"><div class="diceControls diceBuilder"><label>Quantidade<input id="diceCount" type="number" min="1" max="50" value="1"></label><label>Tipo de dado<select id="diceSides"><option value="4">d4</option><option value="6">d6</option><option value="8">d8</option><option value="10">d10</option><option value="12">d12</option><option value="20" selected>d20</option><option value="100">d100</option></select></label><label>Modificador<input id="diceModifier" type="number" value="0" step="1" placeholder="+3"></label><label>Regra<select id="diceRule"><option value="normal">Normal</option><option value="advantage">Vantagem</option><option value="disadvantage">Desvantagem</option></select></label><button id="rollBtn" class="primarySmall">Rolar <span id="diceNotationPreview">1d20</span></button></div><div class="dicePresetRow"><button data-dice-preset="1d20">1d20</button><button data-dice-preset="2d20">2d20</button><button data-dice-preset="1d6">1d6</button><button data-dice-preset="2d6">2d6</button><button data-dice-preset="2d8">2d8</button><button data-dice-preset="3d6">3d6</button></div><div class="bigRoll" id="bigRoll">—</div><div class="rollBreakdown" id="rollBreakdown">Nenhuma rolagem ainda.</div></div>
   <div class="sessionAudioCard" id="sessionAudioCard"></div>
 </div></section>
-      <section id="viewRollhistory" class="view masterOnly hidden">
-        <div class="sectionTop"><div><div class="eyebrow">ÁREA PRIVADA DO MESTRE</div><h2>Histórico de rolagens</h2><p>Todas as rolagens da campanha ficam registradas aqui. Jogadores não têm acesso a esta área.</p></div></div>
-        <div class="diceHistoryPanel diceHistoryStandalone"><div class="diceHistoryHeader"><div><div class="eyebrow">REGISTRO DA MESA</div><h3>Resultados dos jogadores</h3><p>Veja quem rolou, qual personagem usou, os dados tirados e o resultado final.</p></div><span class="diceHistoryBadge">Privado</span></div><div id="rollHistory" class="stack compact"></div></div>
-      </section>      
+      <section id="viewMasterdashboard" class="view masterOnly hidden">
+        <div class="sectionTop masterDashboardTop">
+          <div>
+            <div class="eyebrow">ÁREA PRIVADA DO MESTRE</div>
+            <h2>Painel do Mestre</h2>
+            <p>Centralize as rolagens dos jogadores, o som da mesa e a consulta rápida das fichas.</p>
+          </div>
+          <div class="masterDashboardStatus"><span class="masterLiveDot"></span><span id="masterDashboardSessionStatus">Mesa conectada</span></div>
+        </div>
+        <div class="masterDashboardGrid">
+          <section class="masterDashboardCard masterRollsCard">
+            <div class="masterCardHeader">
+              <div>
+                <div class="eyebrow">DADOS DA MESA</div>
+                <h3>Histórico de rolagens</h3>
+                <p>Veja em tempo real quem rolou, o personagem usado e o resultado.</p>
+              </div>
+              <span class="masterCardBadge">PRIVADO</span>
+            </div>
+            <div id="masterDashboardRollHistory" class="masterRollHistory"></div>
+          </section>
+          <section class="masterDashboardCard masterAudioDashboardCard">
+            <div class="masterCardHeader">
+              <div>
+                <div class="eyebrow">ÁUDIO DA SESSÃO</div>
+                <h3>Som da mesa</h3>
+                <p>Controle a música, ambientes, efeitos e volume da campanha.</p>
+              </div>
+              <span class="masterCardBadge" id="masterDashboardAudioStatus">AO VIVO</span>
+            </div>
+            <div id="masterDashboardAudio"></div>
+          </section>
+        </div>
+        <section class="masterDashboardCard masterCharactersDashboardCard">
+          <div class="masterCardHeader">
+            <div>
+              <div class="eyebrow">FICHAS DA CAMPANHA</div>
+              <h3>Personagens</h3>
+              <p>Confira rapidamente as fichas vinculadas aos jogadores e abra qualquer uma para revisão.</p>
+            </div>
+            <button id="openMasterCharactersBtn" class="softButton">Ver todas as fichas</button>
+          </div>
+          <div id="masterDashboardCharacters" class="masterCharactersGrid"></div>
+        </section>
+      </section>
       <section id="viewChronicle" class="view">
         <div class="sectionTop">
           <div><div class="eyebrow">ÁREA PRIVADA DO MESTRE</div><h2>Crônica da mesa</h2><p>Escreva a história da campanha como um documento vivo. Só o mestre dono desta campanha pode visualizar ou editar este conteúdo.</p></div>
@@ -107,7 +148,7 @@
   <button data-view="sessions"><span>✦</span><small>Sessões</small></button>
   <button data-view="npcs"><span>♜</span><small>NPCs</small></button>
   <button data-view="dice"><span>⚄</span><small >Utilitários</small></button>
-  <button data-view="rollhistory" id="mobileRollHistoryNav" class="masterOnly hidden"><span>◴</span><small>Rolagens</small></button>
+  <button data-view="masterdashboard" id="mobileMasterDashboardNav" class="masterOnly hidden"><span>♛</span><small>Mestre</small></button>
   <button data-view="chronicle" id="mobileChronicleNav" class="masterOnly hidden"><span>▤</span><small>Crônica</small></button>
 </nav>
   </main>
