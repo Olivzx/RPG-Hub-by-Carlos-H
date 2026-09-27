@@ -32,6 +32,7 @@ async function boot(){
     const {data,error}=await sb.auth.getSession(); if(error) throw error;
     if(!data.session){location.href='login.html';return;}
     state.user=data.session.user;
+    if(data.session.access_token && sb.realtime?.setAuth) await sb.realtime.setAuth(data.session.access_token);
     await ensureProfile();
     await loadCampaigns();
     if(!state.campaign){ if(canCreateCampaign()) openCampaignCreate(true); else openNoCampaignState(); }
@@ -40,7 +41,7 @@ async function boot(){
   }catch(err){console.error(err);toast(err.message||'Falha ao carregar a mesa.','error');setSave('Falha de conexão',false);} finally {state.isLoading=false;}
 }
 
-function attachAuthListener(){ sb.auth.onAuthStateChange((event,session)=>{ if(event==='SIGNED_OUT'){location.href='login.html';} else if(session?.user && !state.user){state.user=session.user;} }); }
+function attachAuthListener(){ sb.auth.onAuthStateChange((event,session)=>{ if(event==='SIGNED_OUT'){location.href='login.html';} else if(session?.user){state.user=session.user;if(session.access_token&&sb.realtime?.setAuth)sb.realtime.setAuth(session.access_token);} }); }
 
 async function ensureProfile(){
   const {data,error}=await sb.from('profiles').select('*').eq('id',state.user.id).maybeSingle(); if(error) throw error;
