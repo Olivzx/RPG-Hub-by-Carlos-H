@@ -138,10 +138,16 @@ function renderShell(){
   $('userAvatar').innerHTML=state.profile?.avatar_url?`<img src="${escapeHtml(state.profile.avatar_url)}" alt="">`:'?';
   $('newRoomBtn').disabled=!canEdit(); $('newFloorBtn').disabled=!canEdit(); $('newSessionBtn').disabled=!canEdit(); $('newNpcBtn').disabled=!canEdit(); $('newCharacterBtn').disabled=false;
   const active=currentSession(); $('activeSessionLabel').textContent=active?`Sessão #${active.session_number} · ${active.status.toUpperCase()}`:'Nenhuma sessão ativa'; $('activeSessionTitle').textContent=active?.title||'Crie uma sessão para começar';
-  const list=state.campaigns.map(c=>`<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');$('campaignSelect').innerHTML=list; if(state.campaign)$('campaignSelect').value=state.campaign.id;
+  const list=state.campaigns.map(c=>`<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
+  $('campaignSelect').innerHTML=list;
+  const mobileSelect=$('mobileCampaignSelect');
+  if(mobileSelect)mobileSelect.innerHTML=list;
+  if(state.campaign){$('campaignSelect').value=state.campaign.id;if(mobileSelect)mobileSelect.value=state.campaign.id;}
   $('campaignInviteBtn').classList.toggle('hidden',!canEdit());
   $('joinCampaignBtn').classList.remove('hidden');
-  const deleteCampaignBtn=$('deleteCampaignBtn'); if(deleteCampaignBtn)deleteCampaignBtn.classList.toggle('hidden',!canEdit());
+  const deleteCampaignBtn=$('deleteCampaignBtn');if(deleteCampaignBtn)deleteCampaignBtn.classList.toggle('hidden',!canEdit());
+  $('mobileNewCampaignBtn')?.classList.toggle('hidden',!canCreateCampaign());
+  $('mobileJoinCampaignBtn')?.classList.remove('hidden');
 }
 function renderView(){ document.querySelectorAll('.view').forEach(v=>v.classList.remove('active')); $(`view${state.view.charAt(0).toUpperCase()+state.view.slice(1)}`)?.classList.add('active'); document.querySelectorAll('#sideNav button').forEach(b=>b.classList.toggle('active',b.dataset.view===state.view)); }
 
@@ -790,8 +796,9 @@ function openJoinCampaignModal(){
 }
 
 function openCampaignCreate(initial=false){
-  showModal(`<div class="modalHeader"><div><div class="eyebrow">${initial?'PRIMEIRO PASSO':'NOVA CAMPANHA'}</div><h3>${initial?'Crie sua primeira campanha':'Nova campanha'}</h3></div></div><label>Nome<input id="mCampaignName" maxlength="120" placeholder="Ex.: Sombras de Valedorn"></label><label>Descrição<textarea id="mCampaignDesc" rows="4" placeholder="Uma frase sobre sua campanha."></textarea></label><div class="modalActions"><button class="softButton" data-close>Cancelar</button><button id="saveCampaign" class="primarySmall">Criar campanha</button></div>`);
-  $('saveCampaign').onclick=async()=>{try{const n=$('mCampaignName').value.trim();if(!n){toast('Informe um nome.','error');return;}await createCampaign(n,$('mCampaignDesc').value.trim());}catch(e){toast(e.message,'error');}};
+  const intro=initial?'Crie sua primeira campanha':'Nova campanha';
+  showModal(`<div class="mobileCreateWizard"><div class="modalHeader"><div><div class="eyebrow">${initial?'PRIMEIRO PASSO':'NOVA CAMPANHA'}</div><h3>${intro}</h3></div><button class="closeButton" data-close>×</button></div><div class="wizardIntro"><span class="wizardStep active">1</span><div><b>Comece pelo nome</b><small>A descrição é opcional e pode ser adicionada depois.</small></div></div><label>Nome da campanha <span class="requiredMark">*</span><input id="mCampaignName" maxlength="120" autocomplete="off" placeholder="Ex.: Sombras de Valedorn"></label><label>Descrição <span class="optional">(opcional)</span><textarea id="mCampaignDesc" rows="5" maxlength="2000" placeholder="Você pode explicar o cenário, sistema ou proposta da campanha — mas não é obrigatório."></textarea><div class="wizardFeatureGrid"><div><span>✓</span><b>Código de convite</b><small>Gerado automaticamente.</small></div><div><span>✓</span><b>Mundo persistente</b><small>Monte locais e cômodos depois.</small></div><div><span>✓</span><b>Ficha configurável</b><small>Defina os campos dos jogadores.</small></div><div><span>✓</span><b>Áudio em tempo real</b><small>Use música e efeitos na mesa.</small></div></div><div class="modalActions"><button class="softButton" data-close>Cancelar</button><button id="saveCampaign" class="primarySmall">Criar campanha</button></div></div>`);
+  $('saveCampaign').onclick=async()=>{const btn=$('saveCampaign');try{const n=$('mCampaignName').value.trim();if(!n){toast('Informe o nome da campanha.','error');$('mCampaignName').focus();return;}btn.disabled=true;btn.textContent='Criando…';await createCampaign(n,$('mCampaignDesc').value.trim());}catch(e){btn.disabled=false;btn.textContent='Criar campanha';toast(e.message||'Não foi possível criar a campanha.','error');}};
 }
 async function deleteRoom(id){if(!requireMaster())return; if(!confirm('Excluir este cômodo? Entidades vinculadas serão mantidas, mas sem o cômodo.'))return;const {error}=await sb.from('rooms').delete().eq('id',id);if(error){toast(error.message,'error');return;}state.rooms=state.rooms.filter(r=>r.id!==id);state.selected=null;renderAll();toast('Cômodo excluído');}
 
@@ -1396,6 +1403,9 @@ $('deleteCampaignBtn').onclick=()=>openDeleteCampaignModal();
 $('joinCampaignBtn').onclick=()=>openJoinCampaignModal();
 $('campaignInviteBtn').onclick=()=>openCampaignInvite();
 $('newLocationTopBtn')?.addEventListener('click',openLocationCreateModal);
+$('mobileNewCampaignBtn')?.addEventListener('click',()=>{if(canCreateCampaign())openCampaignCreate(false);else toast('Mude sua conta para Mestre no perfil para criar campanhas.','error');});
+$('mobileJoinCampaignBtn')?.addEventListener('click',openJoinCampaignModal);
+$('mobileCampaignSelect')?.addEventListener('change',async()=>{state.campaign=state.campaigns.find(c=>c.id===$('mobileCampaignSelect').value)||null;state.floor=null;state.selected=null;await loadCampaignData();});
 $('newCampaignBtn').onclick=()=>{if(!canCreateCampaign()){toast('Mude sua conta para Mestre no perfil para criar campanhas.','error');return;}openCampaignCreate(false);}; $('openSessionsBtn').onclick=()=>{state.view='sessions';renderView();}; $('openDiceBtn').onclick=()=>{state.view='dice';renderView();renderDice();setTimeout(wireAudioControls,0);};
 $('newRoomBtn').onclick=()=>{if(requireMaster())openRoomModal();};
 $('structureBtn').onclick=()=>{state.tool=state.tool==='draw'?'move':'draw';$('structureBtn').classList.toggle('chosen',state.tool==='draw');$('moveBtn').classList.toggle('chosen',state.tool==='move');$('board').classList.toggle('drawing',state.tool==='draw');$('boardHint').textContent=state.tool==='draw'?'Clique e arraste para desenhar um novo cômodo':'Arraste entidades e cômodos para reposicionar';};
