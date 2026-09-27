@@ -9,7 +9,7 @@ const colors = ['#9487ff','#6ee7b7','#e8c986','#7dd3fc','#f3a8ca','#fb7185','#f5
 const state = {
   user:null, profile:null, campaigns:[], campaign:null, role:'player', members:[], profiles:new Map(),
   locations:[], floors:[], rooms:[], characters:[], characterFields:[], npcs:[], entities:[], sessions:[], rolls:[], audioAssets:[], audioPlaylists:[], audioPlaylistItems:[],
-  location:null, floor:null, selected:null, view:'table', tool:'move', zoom:100, audioChannel:null, audioPlayers:new Map(), audioLayers:new Map(),
+  location:null, floor:null, selected:null, view:'table', tool:'move', zoom:100, audioChannel:null, sceneChannel:null, audioPlayers:new Map(), audioLayers:new Map(),
   audioEnabled:false, presenceChannel:null, online:1, isLoading:true
 };
 
@@ -91,6 +91,10 @@ async function loadCampaignData(){
   else { await loadFloors(); }
   ensureFloor();
   state.selectedSessionId=currentSession()?.id||null;
+  const active=currentSession();
+  if(active?.active_floor_id && state.floors.some(f=>f.id===active.active_floor_id))state.floor=active.active_floor_id;
+  if(active?.active_room_id && state.rooms.some(r=>r.id===active.active_room_id))state.selected={type:'room',id:active.active_room_id};else state.selected=null;
+  const activeFloor=state.floors.find(f=>f.id===state.floor);if(activeFloor)state.location=state.locations.find(l=>l.id===activeFloor.location_id)||state.location;
   renderAll(); await subscribeRealtime();
 }
 
@@ -117,18 +121,67 @@ async function loadFloors(){
 function ensureFloor(){ if(!state.floor || !state.floors.some(f=>f.id===state.floor)) state.floor=state.floors[0]?.id||null; }
 
 async function subscribeRealtime(){
-  if(state.audioChannel) await sb.removeChannel(state.audioChannel).catch(()=>{});
-  if(state.presenceChannel) await sb.removeChannel(state.presenceChannel).catch(()=>{});
-  const sid=currentSession()?.id || state.campaign.id;
-  const channel=sb.channel(`rpg-hub-session-${sid}`);
-  channel.on('broadcast',{event:'dice_roll'},({payload})=>{ if(payload?.user_id!==state.user.id) receiveRoll(payload); });
-  channel.on('broadcast',{event:'audio'},({payload})=>{ if(payload?.user_id!==state.user.id) receiveAudio(payload); });
-  channel.subscribe(); state.audioChannel=channel;
-  const presence=sb.channel(`rpg-hub-presence-${state.campaign.id}`,{config:{presence:{key:state.user.id}}});
-  presence.on('presence',{event:'sync'},()=>{state.online=Object.keys(presence.presenceState()).length; $('onlineCount').textContent=`${Math.max(1,state.online)} online`;});
-  presence.subscribe(async status=>{if(status==='SUBSCRIBED')await presence.track({user_id:state.user.id,display_name:state.profile?.display_name||'Aventureiro'});});
+  if(state.audioChannel)await sb.removeChannel(state.audioChannel).catch(()=>{});
+  if(state.sceneChannel)await sb.removeChannel(state.sceneChannel).catch(()=>{});
+  if(state.presenceChannel)await sb.removeChannel(state.presenceChannel).catch(()=>{});
+  const sid=currentSession()?.id;
+  if(sid){
+    const channel=sb.channel(`rpg-hub-session-${sid}`,{config:{private:true}});
+    channel.on('broadcast',{event:'dice_roll'},({payload})=>{if(payload?.user_id!==state.user.id)receiveRoll(payload);});
+    channel.on('broadcast',{event:'audio'},({payload})=>{if(payload?.user_id!==state.user.id)receiveAudio(payload);});
+    channel.on('broadcast',{event:'entity_move'},({payload})=>{if(payload?.user_id!==state.user.id)receiveEntityMove(payload);});
+    channel.on('broadcast',{event:'room_move'},({payload})=>{if(payload?.user_id!==state.user.id)receiveRoomMove(payload);});
+    channel.on('broadcast',{event:'room_resize'},({payload})=>{if(payload?.user_id!==state.user.id)receiveRoomResize(payload);});
+    channel.subscribe((status,err)=>{if(status==='CHANNEL_ERROR'||status==='TIMED_OUT')console.warn('Sessão realtime:',status,err);});
+    state.audioChannel=channel;
+    const scene=sb.channel(`rpg-hub-scene-${sid}`,{config:{private:true}});
+    scene.on('broadcast',{event:'scene_change'},({payload})=>{if(payload?.user_id!==state.user.id)receiveSceneChange(payload);});
+    scene.subscribe((status,err)=>{if(status==='CHANNEL_ERROR'||status==='TIMED_OUT')console.warn('Cena realtime:',status,err);});
+    state.sceneChannel=scene;
+  }
+  const presence=sb.channel(`rpg-hub-presence-${state.campaign.id}`,{config:{private:true,presence:{key:state.user.id}}});
+  presence.on('presence',{event:'sync'},()=>{state.online=Object.keys(presence.presenceState()).length;$('onlineCount').textContent=`${Math.max(1,state.online)} online`;});
+  presence.subscribe(async status=>{if(status==='SUBSCRIBED')await presence.track({user_id:state.user.id,display_name:state.profile?.display_name||'Aventureiro'});else if(status==='CHANNEL_ERROR'||status==='TIMED_OUT')console.warn('Presença realtime:',status);});
   state.presenceChannel=presence;
 }
+function receiveSceneChange(payload){
+  if(!payload)return;
+  const floor=state.floors.find(f=>f.id===payload.floor_id);
+  if(floor){state.floor=floor.id;state.location=state.locations.find(l=>l.id===floor.location_id)||state.location;}
+  state.selected=payload.room_id?{type:"room",id:payload.room_id}:null;
+  state.view='table';renderAll();toast(payload.room_name?`Cena: ${payload.room_name}`:'Cena atualizada');
+}
+function receiveEntityMove(payload){
+  if(!payload?.entity_id)return;
+  state.entities=state.entities.map(e=>e.id===payload.entity_id?{...e,x:Number(payload.x),y:Number(payload.y),room_id:payload.room_id??null,floor_id:payload.floor_id??e.floor_id}:e);
+  renderTable();
+}
+function receiveRoomMove(payload){
+  if(!payload?.room_id)return;
+  state.rooms=state.rooms.map(r=>r.id===payload.room_id?{...r,x:Number(payload.x),y:Number(payload.y)}:r);
+  renderTable();
+}
+function receiveRoomResize(payload){
+  if(!payload?.room_id)return;
+  state.rooms=state.rooms.map(r=>r.id===payload.room_id?{...r,width:Number(payload.width),height:Number(payload.height)}:r);
+  renderTable();
+}
+async function broadcastScene(payload){if(!state.sceneChannel||!canEdit())return;await state.sceneChannel.send({type:"broadcast",event:"scene_change",payload:{...payload,user_id:state.user.id}});}
+async function setActiveScene(floorId,roomId=null){
+  if(!canEdit())return;
+  const session=currentSession();if(!session){toast("Abra uma sessão antes de transmitir a cena.","error");return;}
+  const {data,error}=await sb.from("sessions").update({active_floor_id:floorId||null,active_room_id:roomId||null}).eq("id",session.id).select().single();
+  if(error){toast(error.message||"Não foi possível atualizar a cena.","error");return;}
+  state.sessions=state.sessions.map(x=>x.id===session.id?data:x);
+  const floor=state.floors.find(f=>f.id===floorId);if(floor){state.floor=floor.id;state.location=state.locations.find(l=>l.id===floor.location_id)||state.location;}
+  state.selected=roomId?{type:"room",id:roomId}:null;
+  await broadcastScene({floor_id:floorId,room_id:roomId,room_name:roomId?state.rooms.find(r=>r.id===roomId)?.name:null});
+  renderAll();setSave(roomId?'Cena transmitida aos jogadores':'Andar transmitido aos jogadores');
+}
+async function broadcastEntityMove(payload){if(!state.audioChannel||!canEdit())return;await state.audioChannel.send({type:"broadcast",event:"entity_move",payload:{...payload,user_id:state.user.id}});}
+async function broadcastRoomMove(payload){if(!state.audioChannel||!canEdit())return;await state.audioChannel.send({type:"broadcast",event:"room_move",payload:{...payload,user_id:state.user.id}});}
+async function broadcastRoomResize(payload){if(!state.audioChannel||!canEdit())return;await state.audioChannel.send({type:"broadcast",event:"room_resize",payload:{...payload,user_id:state.user.id}});}
+
 function receiveRoll(payload){ state.rolls=[payload,...state.rolls].slice(0,30); renderDiceResult(payload); if(state.view!=='dice') $('rollResult').classList.add('rollPulse'); setTimeout(()=>$('rollResult')?.classList.remove('rollPulse'),280); }
 
 function renderAll(){renderShell();renderTable();renderCharacters();renderWorld();renderSessions();renderNpcs();renderDice();renderView();}
@@ -154,7 +207,7 @@ function renderView(){ document.querySelectorAll('.view').forEach(v=>v.classList
 function renderTable(){
   const f=currentFloor(); $('contextFloor').textContent=f?.name||'Sem andar'; $('boardFloorName').textContent=f?.name?.toUpperCase()||'—'; ensureFloor();
   $('floorSwitch').innerHTML=state.floors.map(x=>`<button class="${x.id===state.floor?'chosen':''}" data-floor="${x.id}">${escapeHtml(x.name)}</button>`).join('') || '<span class="muted">Nenhum andar</span>';
-  document.querySelectorAll('[data-floor]').forEach(b=>b.onclick=()=>{state.floor=b.dataset.floor;state.selected=null;renderTable();});
+  document.querySelectorAll('[data-floor]').forEach(b=>b.onclick=async()=>{const id=b.dataset.floor;if(canEdit())await setActiveScene(id,null);else{state.floor=id;state.selected=null;renderTable();}});
   const rooms=state.rooms.filter(r=>r.floor_id===state.floor); const entities=state.entities.filter(e=>e.floor_id===state.floor && e.visible!==false);
   $('roomLayer').innerHTML=rooms.map(r=>`<div class="room ${state.selected?.type==='room'&&state.selected.id===r.id?'roomSelected':''}" data-room-id="${r.id}" style="left:${r.x}%;top:${r.y}%;width:${r.width}%;height:${r.height}%"><span>${escapeHtml(r.name)}</span><div class="roomResize" title="Redimensionar"></div></div>`).join('');
   $('roomList').innerHTML=rooms.map(r=>`<button class="roomItem ${state.selected?.type==='room'&&state.selected.id===r.id?'roomChosen':''}" data-room-list="${r.id}"><span class="roomIcon">▧</span><div><b>${escapeHtml(r.name)}</b><small>${escapeHtml(r.description||'Sem descrição')}</small></div><span>›</span></button>`).join('') || '<div class="emptySelect">Nenhum cômodo neste andar.</div>';
@@ -165,13 +218,14 @@ function renderTable(){
 }
 function renderSelection(){
   if(!state.selected)return '<div class="emptySelect">Selecione uma entidade ou cômodo.</div>';
-  if(state.selected.type==='room'){const r=state.rooms.find(x=>x.id===state.selected.id);if(!r)return '';return `<div class="eyebrow">CÔMODO</div><div class="selectedRow"><div class="selectedEmoji">▧</div><div><h3>${escapeHtml(r.name)}</h3><p>${escapeHtml(r.description||'Sem descrição')}</p></div></div><div class="selectionActions"><button data-edit-room="${r.id}">Editar</button>${canEdit()?`<button class="dangerGhost" data-delete-room="${r.id}">Excluir</button>`:''}</div>`;}
+  if(state.selected.type==='room'){const r=state.rooms.find(x=>x.id===state.selected.id);if(!r)return '';return `<div class="eyebrow">CÔMODO</div><div class="selectedRow"><div class="selectedEmoji">▧</div><div><h3>${escapeHtml(r.name)}</h3><p>${escapeHtml(r.description||'Sem descrição')}</p></div></div><div class="selectionActions"><button data-edit-room="${r.id}">Editar</button>${canEdit()?`<button data-broadcast-room="${r.id}" class="primarySmall">Transmitir cena</button><button class="dangerGhost" data-delete-room="${r.id}">Excluir</button>`:''} </div>`;}
   const e=state.entities.find(x=>x.id===state.selected.id);if(!e)return ''; const character=e.character_id?state.characters.find(x=>x.id===e.character_id):null; const npc=e.npc_id?state.npcs.find(x=>x.id===e.npc_id):null; const source=character||npc; return `<div class="eyebrow">ENTIDADE</div><div class="selectedRow"><div class="selectedEmoji">${escapeHtml(e.icon||'◆')}</div><div><h3>${escapeHtml(e.display_name)}</h3><p>${escapeHtml(e.entity_kind)} · posição salva</p></div></div><div class="statGrid"><div><span>HP</span><b>${character?.hp_current!=null?`${character.hp_current}/${character.hp_max??'—'}`:'—'}</b></div><div><span>ORIGEM</span><b>${source?escapeHtml(source.name):'—'}</b></div></div><div class="selectionActions"><button data-edit-entity="${e.id}">Detalhes</button></div>`;
 }
 function bindTableInteractions(){
   document.querySelectorAll('[data-room-list]').forEach(b=>b.onclick=()=>{state.selected={type:'room',id:b.dataset.roomList};renderTable();});
   document.querySelectorAll('[data-entity-list]').forEach(b=>b.onclick=()=>{state.selected={type:'entity',id:b.dataset.entityList};renderTable();});
   document.querySelectorAll('[data-edit-room]').forEach(b=>b.onclick=()=>openRoomModal(b.dataset.editRoom));
+  document.querySelectorAll('[data-broadcast-room]').forEach(b=>b.onclick=()=>setActiveScene(state.floor,b.dataset.broadcastRoom));
   document.querySelectorAll('[data-delete-room]').forEach(b=>b.onclick=()=>deleteRoom(b.dataset.deleteRoom));
   document.querySelectorAll('[data-edit-entity]').forEach(b=>b.onclick=()=>openEntityModal(b.dataset.editEntity));
   document.querySelectorAll('.tokenBig').forEach(el=>{el.onpointerdown=e=>startEntityDrag(e,el);el.onclick=e=>{e.stopPropagation();state.selected={type:'entity',id:el.dataset.entityId};renderTable();};});
@@ -214,6 +268,7 @@ function startEntityDrag(e,el){
       return;
     }
     state.entities=state.entities.map(item=>item.id===id?data:item);
+    await broadcastEntityMove({entity_id:id,x:latestX,y:latestY,room_id:room?.id||null,floor_id:current.floor_id});
     setSave(room?'Entidade posicionada em '+room.name:'Posição da entidade salva');
   };
 
@@ -252,6 +307,7 @@ function startRoomDrag(e,el){
       return;
     }
     state.rooms=state.rooms.map(item=>item.id===r.id?data:item);
+    await broadcastRoomMove({room_id:r.id,x:latestX,y:latestY});
     setSave('Cômodo reposicionado');
   };
 
@@ -290,6 +346,7 @@ function startRoomResize(e,el){
       return;
     }
     state.rooms=state.rooms.map(item=>item.id===r.id?data:item);
+    await broadcastRoomResize({room_id:r.id,width:latestW,height:latestH});
     setSave('Área do cômodo salva');
   };
 
@@ -1275,7 +1332,7 @@ function openSessionModal(id){
     }catch(e){toast(e.message||'Não foi possível salvar a sessão.','error');}
   };
 }
-async function activateSession(id){if(!id)return;const session=state.sessions.find(x=>x.id===id);if(!session)return;state.selectedSessionId=id;state.floor=session.active_floor_id||state.floor;state.selected=null;renderAll();await subscribeRealtime();toast(`Sessão #${session.session_number} aberta`);}
+async function activateSession(id){if(!id)return;const session=state.sessions.find(x=>x.id===id);if(!session)return;state.selectedSessionId=id;state.floor=session.active_floor_id||state.floor;state.selected=session.active_room_id?{type:'room',id:session.active_room_id}:null;const af=state.floors.find(f=>f.id===state.floor);if(af)state.location=state.locations.find(l=>l.id===af.location_id)||state.location;renderAll();await subscribeRealtime();toast(`Sessão #${session.session_number} aberta`);}
 
 function openNpcModal(id){if(!requireMaster())return;const n=id?state.npcs.find(x=>x.id===id):null;const v=n||{name:'',description:'',notes_private:'',avatar_url:'',data:{}};showModal(`<div class="modalHeader"><div><div class="eyebrow">BESTIÁRIO</div><h3>${n?'Editar entidade':'Novo NPC / monstro'}</h3></div><button class="closeButton" data-close>×</button></div><label>Nome<input id="npcName" value="${escapeHtml(v.name)}"></label><label>Descrição<textarea id="npcDesc" rows="4">${escapeHtml(v.description||'')}</textarea></label><label>Notas privadas do mestre<textarea id="npcNotes" rows="5">${escapeHtml(v.notes_private||'')}</textarea></label><label>Avatar URL<input id="npcAvatar" value="${escapeHtml(v.avatar_url||'')}" placeholder="https://..."></label><label>Avatar do NPC<input id="npcFile" type="file" accept="image/*"></label><label>Dados / ficha (JSON)<textarea id="npcData" rows="6">${escapeHtml(JSON.stringify(v.data||{},null,2))}</textarea></label><div class="modalActions"><button class="softButton" data-close>Cancelar</button><button id="saveNpc" class="primarySmall">Salvar</button></div>`);$('saveNpc').onclick=async()=>{try{const payload={campaign_id:state.campaign.id,name:$('npcName').value.trim(),description:$('npcDesc').value.trim(),notes_private:$('npcNotes').value.trim(),avatar_url:$('npcAvatar').value.trim()||null,data:JSON.parse($('npcData').value||'{}')};if(!payload.name)throw new Error('Informe o nome.');const file=$('npcFile').files[0];if(file)payload.avatar_url=await uploadMedia(file,`npcs/${uid()}`);const result=n?await sb.from('npcs').update(payload).eq('id',n.id).select().single():await sb.from('npcs').insert(payload).select().single();if(result.error)throw result.error;if(n)state.npcs=state.npcs.map(x=>x.id===n.id?result.data:x);else state.npcs.push(result.data);closeModal();renderAll();toast('NPC salvo');}catch(e){toast(e.message,'error');}};}
 
