@@ -1,10 +1,10 @@
-/* Theme accent overrides */
-:root { --rpg-accent:#8b5cf6; --rpg-accent-strong:#6d4ad8; --rpg-accent-rgb:139,92,246; }
-.navItem.active { border-color:var(--rpg-accent)!important; background:rgba(var(--rpg-accent-rgb),.12)!important; color:#fff!important; box-shadow:inset 2px 0 0 var(--rpg-accent),0 0 20px rgba(var(--rpg-accent-rgb),.08); }
-.navItem:hover { color:var(--rpg-accent)!important; }
-.primaryButton { background:linear-gradient(135deg,var(--rpg-accent),var(--rpg-accent-strong))!important; border-color:var(--rpg-accent)!important; box-shadow:0 8px 24px rgba(var(--rpg-accent-rgb),.18); }
-.primaryButton:hover { filter:brightness(1.08); box-shadow:0 10px 30px rgba(var(--rpg-accent-rgb),.28); }
-.brandMark { background:rgba(var(--rpg-accent-rgb),.16)!important; color:var(--rpg-accent)!important; box-shadow:0 0 20px rgba(var(--rpg-accent-rgb),.16); }
-input:focus,select:focus,textarea:focus { border-color:var(--rpg-accent)!important; box-shadow:0 0 0 3px rgba(var(--rpg-accent-rgb),.12)!important; }
-.statusPill.live { border-color:rgba(var(--rpg-accent-rgb),.38)!important; color:var(--rpg-accent)!important; }
-@media (max-width:900px){.rpg-theme-panel{max-height:calc(100vh - 24px);overflow:auto;}}
+@import url("https://raw.githubusercontent.com/Olivzx/RPG-Hub-by-Carlos-H/d105e395f1c67508aed725a5013333a5e12cb8e4/styles.css");
+
+/* RPG HUB theme accents */
+:root{--rpg-accent:#8b5cf6;--rpg-accent-strong:#6d4ad8;--rpg-accent-rgb:139,92,246}
+.navItem.active{border-color:var(--rpg-accent)!important;background:rgba(var(--rpg-accent-rgb),.12)!important;color:#fff!important;box-shadow:inset 2px 0 0 var(--rpg-accent),0 0 20px rgba(var(--rpg-accent-rgb),.08)}
+.navItem:hover{color:var(--rpg-accent)!important}
+.primaryButton,.primarySmall{background:linear-gradient(135deg,var(--rpg-accent),var(--rpg-accent-strong))!important;border-color:var(--rpg-accent)!important;box-shadow:0 8px 24px rgba(var(--rpg-accent-rgb),.18)}
+.primaryButton:hover,.primarySmall:hover{filter:brightness(1.08);box-shadow:0 10px 30px rgba(var(--rpg-accent-rgb),.28)}
+.brandMark{background:rgba(var(--rpg-accent-rgb),.16)!important;color:var(--rpg-accent)!important;box-shadow:0 0 20px rgba(var(--rpg-accent-rgb),.16)}
+input:focus,select:focus,textarea:focus{border-color:var(--rpg-accent)!important;box-shadow:0 0 0 3px rgba(var(--rpg-accent-rgb),.12)!important}
