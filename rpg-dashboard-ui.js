@@ -5,9 +5,22 @@
 (() => {
   'use strict';
 
+  function activateView(view){
+    if(typeof state !== 'undefined') state.view = view;
+    if(typeof renderView === 'function') renderView();
+    else {
+      document.querySelectorAll('.view').forEach(el => el.classList.toggle('active', el.id === `view${view.charAt(0).toUpperCase()}${view.slice(1)}`));
+      document.querySelectorAll('#sideNav [data-view]').forEach(btn => btn.classList.toggle('active', btn.dataset.view === view));
+    }
+  }
+
   function goTo(view){
     const button = document.querySelector(`#sideNav [data-view="${view}"]`);
-    if(button) button.click();
+    if(button && !button.classList.contains('rpg-dashboard-nav')){
+      button.click();
+      return;
+    }
+    activateView(view);
   }
 
   function build(){
@@ -15,7 +28,7 @@
     const tableView = document.getElementById('viewTable');
     if(!nav || !tableView || document.getElementById('viewDashboard')) return;
 
-    /* Cria a navegação "Início" imediatamente antes de Mesa. */
+    /* Cria a navegação "Visão geral" imediatamente antes de Mesa. */
     const tableButton = nav.querySelector('[data-view="table"]');
     const dashboardButton = document.createElement('button');
     dashboardButton.type = 'button';
@@ -24,6 +37,14 @@
     dashboardButton.innerHTML = '✦ <span>Visão geral</span>';
     if(tableButton) nav.insertBefore(dashboardButton, tableButton);
     else nav.prepend(dashboardButton);
+
+    /* O app principal não conhece este botão porque ele é criado depois do carregamento.
+       Registramos o clique explicitamente para permitir voltar à Visão geral de qualquer aba. */
+    dashboardButton.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      activateView('dashboard');
+    });
 
     /* O dashboard é uma view independente. Nada é inserido dentro da Mesa. */
     const view = document.createElement('section');
@@ -101,6 +122,7 @@
     if(typeof state !== 'undefined'){
       state.view = 'dashboard';
       if(typeof renderView === 'function') renderView();
+      else activateView('dashboard');
     }
   }
 
