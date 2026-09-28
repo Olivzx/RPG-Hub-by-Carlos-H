@@ -186,7 +186,7 @@
         rotateRoomDirectly(id, event.shiftKey ? -15 : 15);
       });
 
-      room.appendChild(button);
+      roomEl.appendChild(button);
     });
   }
 
@@ -355,8 +355,6 @@
     if (typeof renderDice === 'function') renderDice();
 
     try {
-      // Em uma interação do usuário, chama a reprodução dos áudios imediatamente
-      // para aproveitar o user activation do navegador.
       if (typeof restoreCampaignAudioState === 'function') {
         const restoring = restoreCampaignAudioState();
         if (forceUnlock) await restoring;
@@ -425,9 +423,6 @@
   function initPlayerAudioSync() {
     if (!state || canEdit()) return;
 
-    // O navegador pode bloquear autoplay, mas a campanha já fica armada:
-    // quando permitido, o áudio começa imediatamente; caso contrário,
-    // a primeira interação do jogador destrava e restaura o ponto atual.
     state.audioEnabled = true;
     makePlayerAudioUiActive();
     schedulePlayerAudioSync(0);
