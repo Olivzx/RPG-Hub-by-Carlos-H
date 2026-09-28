@@ -1,1 +1,61 @@
-<script src="rpg-theme-customizer.js"></script>
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#080a0f">
+  <title>RPG HUB — Mesa</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2"></script>
+  <script src="supabase.js"></script>
+  <script src="rpg-theme-customizer.js"></script>
+</head>
+<body class="appBody">
+  <main class="appShell">
+    <aside class="sidebar">
+      <a class="sideBrand brand" href="index.html"><span class="brandMark">✦</span><div><b>RPG</b> HUB</div></a>
+      <div class="campaignSwitcher">
+  <div class="eyebrow">CAMPANHA</div>
+  <div class="campaignSelectWrap"><select id="campaignSelect"></select><button id="newCampaignBtn" class="iconButton" title="Nova campanha">+</button></div>
+  <div class="campaignAccessRow"> <button id="enterCampaignBtn" class="ghostButton">Entrar</button></div>
+  <div id="campaignRole" class="muted small">—</div>
+</div>
+      <nav class="sideNav">
+        <button class="navItem active" data-view="viewTable">▣ <span>Mesa</span></button>
+        <button class="navItem" data-view="viewCharacters">♟ <span>Personagens</span></button>
+        <button class="navItem" data-view="viewWorld">◇ <span>Mundo</span></button>
+        <button class="navItem" data-view="viewSessions">✦ <span>Sessões</span></button>
+        <button class="navItem" data-view="viewNpcs">♜ <span>NPCs & monstros</span></button>
+        <button class="navItem" data-view="viewDice">▣ <span>Utilitários</span></button>
+        <button class="navItem masterOnly" data-view="viewMasterPanel">♛ <span>Painel do Mestre</span></button>
+        <button class="navItem" data-view="viewChronicle">▤ <span>Crônica</span></button>
+      </nav>
+      <div class="sideBottom">
+        <div class="profileMini"><div id="profileAvatar" class="avatar sm">?</div><div class="profileMeta"><b id="profileName">—</b><span id="profileEmail">—</span></div><button id="profileMenuBtn" class="iconButton">⌄</button></div>
+      </div>
+    </aside>
+    <section class="content">
+      <header class="topbar"><div><div class="eyebrow">MESA DA CAMPANHA</div><h1 id="campaignTitle">—</h1><div id="campaignSubtitle" class="muted">Campanha persistente</div></div><div class="topActions"><button id="saveBtn" class="ghostButton">Salvar</button><span class="presence"><i></i><span id="presenceCount">0</span> online</span></div></header>
+      <section id="viewTable" class="view active">
+        <div class="viewHead"><div><div class="eyebrow">MAPA</div><h2>Mapa da mesa</h2><p class="muted">Arraste, redimensione e gire cômodos. O estado é salvo na campanha.</p></div><div class="viewTools masterOnly"><button id="addRoomBtn" class="primaryButton">+ Cômodo</button><button id="addNpcMapBtn" class="ghostButton">+ NPC</button></div></div>
+        <div id="mapStage" class="mapStage"><div id="mapCanvas" class="mapCanvas"></div></div>
+        <div class="mapLegend muted small">Dica: no desktop, arraste os cômodos; use as alças para redimensionar e girar.</div>
+      </section>
+      <section id="viewCharacters" class="view">
+        <div class="viewHead"><div><div class="eyebrow">FICHAS</div><h2>Personagens da campanha</h2><p class="muted">O mestre visualiza as fichas vinculadas aos jogadores.</p></div><div class="viewTools"><button id="characterHistoryBtn" class="ghostButton">Histórico</button><button id="newCharacterBtn" class="primaryButton masterOnly">+ Novo personagem</button></div></div>
+        <div id="charactersGrid" class="cardsGrid"></div>
+      </section>
+      <section id="viewWorld" class="view"><div class="viewHead"><div><div class="eyebrow">MUNDO</div><h2>Locais & cômodos</h2><p class="muted">Estruture o cenário persistente da campanha.</p></div><div class="viewTools masterOnly"><button id="newLocationBtn" class="primaryButton">+ Local</button><button id="newFloorBtn" class="ghostButton">+ Andar</button></div></div><div id="worldTree" class="worldTree"></div></section>
+      <section id="viewSessions" class="view"><div class="viewHead"><div><div class="eyebrow">SESSÕES</div><h2>Histórico de sessões</h2><p class="muted">Registre e continue a história da mesa.</p></div><div class="viewTools masterOnly"><button id="newSessionBtn" class="primaryButton">+ Nova sessão</button></div></div><div id="sessionsList" class="listStack"></div></section>
+      <section id="viewNpcs" class="view"><div class="viewHead"><div><div class="eyebrow">BESTIÁRIO</div><h2>NPCs & monstros</h2><p class="muted">Criaturas e personagens do mundo.</p></div><div class="viewTools masterOnly"><button id="newNpcBtn" class="primaryButton">+ Novo NPC</button></div></div><div id="npcsGrid" class="cardsGrid"></div></section>
+      <section id="viewDice" class="view"><div class="viewHead"><div><div class="eyebrow">UTILITÁRIOS</div><h2>Sistema de dados</h2><p class="muted">Role dados com modificadores, vantagem ou desvantagem.</p></div></div><div class="diceLayout"><div class="dicePanel"><div class="diceRow"><label>Quantidade<input id="diceQty" type="number" min="1" max="100" value="1"></label><label>Tipo de dado<select id="diceType"><option>d20</option><option>d12</option><option>d10</option><option>d8</option><option>d6</option><option>d4</option></select></label><label>Modificador<input id="diceMod" type="number" value="0"></label><label>Regra<select id="diceRule"><option value="normal">Normal</option><option value="adv">Vantagem</option><option value="dis">Desvantagem</option></select></label><button id="rollDiceBtn" class="primaryButton">Rolar</button></div><div id="quickDice" class="quickDice"></div><div id="diceResult" class="diceResult"></div><div id="sessionAudioPanel" class="audioPanel"><div class="audioHeader"><div><div class="eyebrow">ÁUDIO DA SESSÃO</div><h3>Som ambiente</h3><p class="muted small">O áudio é compartilhado com os jogadores conectados à mesa.</p></div><span id="audioLiveState" class="statusPill">Desconectado</span></div><div class="audioControls"><button id="audioPlayBtn" class="primaryButton">▶ Tocar</button><button id="audioPauseBtn" class="ghostButton">Ⅱ Pausar</button><button id="audioStopBtn" class="ghostButton">■ Parar</button><label>Volume<input id="audioVolume" type="range" min="0" max="1" step="0.01" value="1"></label></div><div class="audioSource"><input id="audioUrl" type="url" placeholder="https://.../audio.mp3"><button id="audioLoadBtn" class="ghostButton">Carregar áudio</button></div><div id="audioTrackLabel" class="muted small">Nenhuma faixa carregada</div></div></div></div></section>
+      <section id="viewMasterPanel" class="view masterOnly"><div class="viewHead"><div><div class="eyebrow">MESTRE</div><h2>Painel do Mestre</h2><p class="muted">Ferramentas privadas da mesa.</p></div></div><div class="masterDashboard"><section class="masterCard"><div class="masterCardHead"><div><div class="eyebrow">ROLAGENS</div><h3>Histórico de dados</h3></div><span class="statusPill">Privado</span></div><div id="masterDiceHistory" class="masterHistory"></div></section><section class="masterCard"><div class="masterCardHead"><div><div class="eyebrow">ÁUDIO</div><h3>Controle da mesa</h3></div></div><div id="masterAudioMirror" class="masterAudioMirror">Use o sistema de áudio em Utilitários.</div></section><section class="masterCard"><div class="masterCardHead"><div><div class="eyebrow">FICHAS</div><h3>Personagens</h3></div></div><div id="masterCharacters" class="masterCharacters"></div></section></div></section>
+      <section id="viewChronicle" class="view"><div class="viewHead"><div><div class="eyebrow">CRÔNICA</div><h2>Diário da campanha</h2><p class="muted">Registre acontecimentos importantes.</p></div></div><div class="chronicleLayout"><textarea id="chronicleText" placeholder="Escreva a crônica..." spellcheck="true"></textarea><div class="viewTools masterOnly"><button id="saveChronicleBtn" class="primaryButton">Salvar crônica</button></div></div></section>
+    </section>
+  </main>
+  <div id="modalRoot"></div>
+  <script src="app.js"></script>
+  <script src="rpg-realtime-enhancements.js"></script>
+  <script src="rpg-character-dice-enhancements.js"></script>
+</body>
+</html>
