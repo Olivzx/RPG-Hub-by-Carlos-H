@@ -1,8 +1,8 @@
-@import url("https://raw.githubusercontent.com/Olivzx/RPG-Hub-by-Carlos-H/d105e395f1c67508aed725a5013333a5e12cb8e4/styles.css");
+@import url("https://cdn.jsdelivr.net/gh/Olivzx/RPG-Hub-by-Carlos-H@d105e395f1c67508aed725a5013333a5e12cb8e4/styles.css");
 
-/* RPG HUB — camada local de identidade visual e temas.
-   O CSS base continua preservado no commit estável acima; esta camada
-   controla somente os acentos para não quebrar o layout original. */
+/* RPG HUB — camada de personalização de temas.
+   O CSS base original é carregado com MIME text/css pelo jsDelivr.
+   Esta camada só altera os acentos e o seletor de aparência. */
 :root{
   --rpg-accent:#8b5cf6;
   --rpg-accent-strong:#6d4ad8;
@@ -33,19 +33,10 @@
   border-color:var(--rpg-accent)!important;
   box-shadow:inset 2px 0 0 var(--rpg-accent),0 0 20px rgba(var(--rpg-accent-rgb),.06)!important;
 }
-.navItem:hover,.sideNav button:hover{
-  color:var(--rpg-accent)!important;
-}
+.navItem:hover,.sideNav button:hover{color:var(--rpg-accent)!important}
 
-.floorSwitch button.chosen,.toolButton.chosen,
-.roomSelected,.selectedCard,
-.authTabs button.active{
-  border-color:var(--rpg-accent)!important;
-}
-
-.roomSelected{
-  box-shadow:0 0 0 1px rgba(var(--rpg-accent-rgb),.20),0 0 30px rgba(var(--rpg-accent-rgb),.10)!important;
-}
+.floorSwitch button.chosen,.toolButton.chosen,.roomSelected,.selectedCard,.authTabs button.active{border-color:var(--rpg-accent)!important}
+.roomSelected{box-shadow:0 0 0 1px rgba(var(--rpg-accent-rgb),.20),0 0 30px rgba(var(--rpg-accent-rgb),.10)!important}
 
 input:focus,select:focus,textarea:focus,
 .authCard input:focus,.authCard select:focus,
@@ -55,21 +46,12 @@ input:focus,select:focus,textarea:focus,
   box-shadow:0 0 0 3px rgba(var(--rpg-accent-rgb),.12)!important;
 }
 
-.rollQuickRow button:hover,.textButton:hover,
-.sectionTitle button,.cardActions button,.sessionCardActions button{
-  color:var(--rpg-accent)!important;
-}
-
-.bigRoll,.rollResult b,.diceResult,.hero h1 em,.manifesto em{
-  color:var(--rpg-accent)!important;
-}
-
+.rollQuickRow button:hover,.textButton:hover,.sectionTitle button,.cardActions button,.sessionCardActions button{color:var(--rpg-accent)!important}
+.bigRoll,.rollResult b,.diceResult,.hero h1 em,.manifesto em{color:var(--rpg-accent)!important}
 .audioActions input[type=range]{accent-color:var(--rpg-accent)!important}
 
 .rpg-theme-trigger{color:#9ca5b5!important}
 .rpg-theme-trigger:hover{color:#fff!important}
 .rpg-theme-panel{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
 
-@media(max-width:700px){
-  .rpg-theme-panel{width:220px!important}
-}
+@media(max-width:700px){.rpg-theme-panel{width:220px!important}}
