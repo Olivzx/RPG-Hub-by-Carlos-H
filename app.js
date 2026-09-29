@@ -2731,3 +2731,4 @@ Object.assign(window,{
 });
 
 boot();
+// production verification trigger: keep main synchronized with the live deployment.
