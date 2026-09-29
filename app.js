@@ -484,7 +484,7 @@ function renderTable(){
     if(selectedRoom && !roomVisibleOnMap(selectedRoom)) state.selected=null;
   }
 
-  $('roomLayer').innerHTML=rooms.map(r=>`<div class="room ${state.selected?.type==='room'&&state.selected.id===r.id?'roomSelected':''}" data-room-id="${r.id}" style="left:${r.x}%;top:${r.y}%;width:${r.width}%;height:${r.height}%;transform:rotate(${Number(r.rotation)||0}deg)"><span>${escapeHtml(r.name)}</span><div class="roomResize" title="Redimensionar"></div></div>`).join('');
+  $('roomLayer').innerHTML=rooms.map(r=>`<div class="room ${state.selected?.type==='room'&&state.selected.id===r.id?'roomSelected':''}" data-room-id="${r.id}" style="left:${r.x}%;top:${r.y}%;width:${r.width}%;height:${r.height}%;transform:rotate(${Number(r.rotation)||0}deg)"><span>${escapeHtml(r.name)}</span><div class="roomResize roomResizeNW" data-resize-dir="nw" title="Redimensionar canto superior esquerdo"></div><div class="roomResize roomResizeN" data-resize-dir="n" title="Redimensionar cima"></div><div class="roomResize roomResizeNE" data-resize-dir="ne" title="Redimensionar canto superior direito"></div><div class="roomResize roomResizeE" data-resize-dir="e" title="Redimensionar direita"></div><div class="roomResize roomResizeSE" data-resize-dir="se" title="Redimensionar canto inferior direito"></div><div class="roomResize roomResizeS" data-resize-dir="s" title="Redimensionar baixo"></div><div class="roomResize roomResizeSW" data-resize-dir="sw" title="Redimensionar canto inferior esquerdo"></div><div class="roomResize roomResizeW" data-resize-dir="w" title="Redimensionar esquerda"></div></div>`).join('');
   $('roomList').innerHTML=rooms.map(r=>`<button class="roomItem ${state.selected?.type==='room'&&state.selected.id===r.id?'roomChosen':''}" data-room-list="${r.id}"><span class="roomIcon">▧</span><div><b>${escapeHtml(r.name)}</b><small>${escapeHtml(r.description||'Sem descrição')}</small></div><span>›</span></button>`).join('') || '<div class="emptySelect">Nenhum cômodo visível neste momento.</div>';
   $('entityCount').textContent=entities.length;
   $('tokenLayer').innerHTML=entities.map(e=>`<div class="tokenBig ${state.selected?.type==='entity'&&state.selected.id===e.id?'selected':''}" data-entity-id="${e.id}" style="left:${e.x}%;top:${e.y}%;--token-color:${escapeHtml(e.color||'#9487ff')}">${entityAvatarMarkup(e)}<span>${escapeHtml(e.display_name)}</span></div>`).join('');
@@ -508,7 +508,7 @@ function bindTableInteractions(){
   document.querySelectorAll('[data-move-entity]').forEach(b=>b.onclick=()=>{const select=b.closest('.selectionMoveFloor')?.querySelector('[data-selected-entity-floor]');moveEntityToFloor(b.dataset.moveEntity,select?.value);});
   document.querySelectorAll('.tokenBig').forEach(el=>{el.onpointerdown=e=>startEntityDrag(e,el);el.onclick=e=>{e.stopPropagation();state.selected={type:'entity',id:el.dataset.entityId};renderTable();};});
   document.querySelectorAll('.room').forEach(el=>{el.onclick=e=>{if(e.target.closest('.roomResize')||e.target.closest('.rpgRoomRotateHandle'))return;state.selected={type:'room',id:el.dataset.roomId};renderTable();};el.onpointerdown=e=>startRoomDrag(e,el);});
-  document.querySelectorAll('.roomResize').forEach(el=>el.onpointerdown=e=>startRoomResize(e,el.parentElement));
+  document.querySelectorAll('.roomResize').forEach(el=>el.onpointerdown=e=>startRoomResize(e,el.parentElement,el));
 }
 function clientToBoardPercent(clientX,clientY,rect){
   return {x:Math.max(0,Math.min(100,(clientX-rect.left)/Math.max(1,rect.width)*100)),y:Math.max(0,Math.min(100,(clientY-rect.top)/Math.max(1,rect.height)*100))};
@@ -555,35 +555,37 @@ function startRoomDrag(e,el){
   if(!canEdit()||state.tool!=='move'||e.target.closest('.roomResize')||e.target.closest('.rpgRoomRotateHandle'))return;
   e.preventDefault();e.stopPropagation();
   const r=state.rooms.find(x=>x.id===el.dataset.roomId);if(!r)return;
-  const board=$('board'),rect=board.getBoundingClientRect(),click=clientToBoardPercent(e.clientX,e.clientY,rect),ox=Number(r.x),oy=Number(r.y),grabOffset={x:click.x-ox,y:click.y-oy},previous={x:ox,y:oy};
+  const board=$('board'),rect=board.getBoundingClientRect(),click=clientToBoardPercent(e.clientX,e.clientY,rect);
+  const ox=Number(r.x)||0,oy=Number(r.y)||0,grabOffset={x:click.x-ox,y:click.y-oy},previous={x:ox,y:oy};
   let latestX=ox,latestY=oy,finished=false;el.classList.add('dragging');el.setPointerCapture?.(e.pointerId);
   const cleanup=()=>{if(finished)return;finished=true;try{el.releasePointerCapture?.(e.pointerId)}catch(_){}el.classList.remove('dragging');el.removeEventListener('pointermove',move);el.removeEventListener('pointerup',up);el.removeEventListener('pointercancel',cancel);};
-  const move=ev=>{
-    const p=clientToBoardPercent(ev.clientX,ev.clientY,rect),raw={x:p.x-grabOffset.x,y:p.y-grabOffset.y},snapped=window.rpgSnapPoint?window.rpgSnapPoint(raw.x,raw.y):raw;
-    const constrained=constrainRoomPosition({...r,x:latestX,y:latestY},snapped.x,snapped.y);latestX=constrained.x;latestY=constrained.y;
-    state.rooms=state.rooms.map(item=>item.id===r.id?{...item,x:latestX,y:latestY}:item);el.style.left=latestX+'%';el.style.top=latestY+'%';
-  };
-  const up=async()=>{cleanup();const {data,error}=await sb.from('rooms').update({x:latestX,y:latestY}).eq('id',r.id).select().single();if(error){state.rooms=state.rooms.map(item=>item.id===r.id?{...item,...previous}:item);renderTable();toast(error.message||'Não foi possível salvar a posição.','error');return;}state.rooms=state.rooms.map(item=>item.id===r.id?data:item);await broadcastRoomMove({room_id:r.id,x:latestX,y:latestY});setSave('Cômodo reposicionado');};
+  const move=ev=>{const p=clientToBoardPercent(ev.clientX,ev.clientY,rect),raw={x:p.x-grabOffset.x,y:p.y-grabOffset.y},snapped=window.rpgSnapPoint?window.rpgSnapPoint(raw.x,raw.y):raw,constrained=constrainRoomPosition({...r,x:latestX,y:latestY},snapped.x,snapped.y);latestX=constrained.x;latestY=constrained.y;state.rooms=state.rooms.map(item=>item.id===r.id?{...item,x:latestX,y:latestY}:item);el.style.left=latestX+'%';el.style.top=latestY+'%';};
+  const up=async()=>{cleanup();const result=await sb.from('rooms').update({x:latestX,y:latestY}).eq('id',r.id).select('*').maybeSingle();if(result.error||!result.data){state.rooms=state.rooms.map(item=>item.id===r.id?{...item,...previous}:item);renderTable();toast(result.error?.message||'Não foi possível salvar a posição deste cômodo.','error');return;}state.rooms=state.rooms.map(item=>item.id===r.id?result.data:item);await broadcastRoomMove({room_id:r.id,x:latestX,y:latestY});setSave('Cômodo reposicionado');};
   const cancel=()=>{cleanup();state.rooms=state.rooms.map(item=>item.id===r.id?{...item,...previous}:item);renderTable();};
   el.addEventListener('pointermove',move);el.addEventListener('pointerup',up,{once:true});el.addEventListener('pointercancel',cancel,{once:true});
 }
-function startRoomResize(e,el){
+function startRoomResize(e,roomEl,handle){
   if(!canEdit()||state.tool!=='move')return;
   e.preventDefault();e.stopPropagation();
-  const r=state.rooms.find(x=>x.id===el.dataset.roomId);if(!r)return;
-  const board=$('board'),rect=board.getBoundingClientRect(),sx=e.clientX,sy=e.clientY,ow=Number(r.width),oh=Number(r.height),previous={x:Number(r.x),y:Number(r.y),width:ow,height:oh};
-  let latestW=ow,latestH=oh,latestX=previous.x,latestY=previous.y,finished=false;el.setPointerCapture?.(e.pointerId);el.classList.add('resizing');
-  const cleanup=()=>{if(finished)return;finished=true;try{el.releasePointerCapture?.(e.pointerId)}catch(_){}el.classList.remove('resizing');el.removeEventListener('pointermove',move);el.removeEventListener('pointerup',up);el.removeEventListener('pointercancel',cancel);};
+  const r=state.rooms.find(x=>x.id===roomEl.dataset.roomId);if(!r)return;
+  const board=$('board'),rect=board.getBoundingClientRect(),sx=e.clientX,sy=e.clientY,ow=Number(r.width)||5,oh=Number(r.height)||5,ox=Number(r.x)||0,oy=Number(r.y)||0;
+  const dir=String(handle?.dataset?.resizeDir||'se').toLowerCase(),rotation=(Number(r.rotation)||0)*Math.PI/180,previous={x:ox,y:oy,width:ow,height:oh};
+  let latestW=ow,latestH=oh,latestX=ox,latestY=oy,finished=false;roomEl.setPointerCapture?.(e.pointerId);roomEl.classList.add('resizing');
+  const cleanup=()=>{if(finished)return;finished=true;try{roomEl.releasePointerCapture?.(e.pointerId)}catch(_){}roomEl.classList.remove('resizing');roomEl.removeEventListener('pointermove',move);roomEl.removeEventListener('pointerup',up);roomEl.removeEventListener('pointercancel',cancel);};
   const move=ev=>{
-    const rawW=Math.max(5,Math.min(90,ow+(ev.clientX-sx)/Math.max(1,rect.width)*100)),rawH=Math.max(5,Math.min(90,oh+(ev.clientY-sy)/Math.max(1,rect.height)*100)),snapped=window.rpgSnapSize?window.rpgSnapSize(rawW,rawH):{width:rawW,height:rawH};
-    latestW=Math.max(5,Math.min(90,snapped.width));latestH=Math.max(5,Math.min(90,snapped.height));
-    const constrained=constrainRoomPosition({...r,width:latestW,height:latestH},latestX,latestY);latestX=constrained.x;latestY=constrained.y;
-    state.rooms=state.rooms.map(item=>item.id===r.id?{...item,width:latestW,height:latestH,x:latestX,y:latestY}:item);el.style.width=latestW+'%';el.style.height=latestH+'%';el.style.left=latestX+'%';el.style.top=latestY+'%';
+    const dx=ev.clientX-sx,dy=ev.clientY-sy,localX=((dx*Math.cos(rotation)+dy*Math.sin(rotation))/Math.max(1,rect.width))*100,localY=((-dx*Math.sin(rotation)+dy*Math.cos(rotation))/Math.max(1,rect.height))*100;
+    let nextW=ow,nextH=oh,nextX=ox,nextY=oy;if(dir.includes('e'))nextW=ow+localX;if(dir.includes('w'))nextW=ow-localX;if(dir.includes('s'))nextH=oh+localY;if(dir.includes('n'))nextH=oh-localY;
+    nextW=Math.max(5,Math.min(90,nextW));nextH=Math.max(5,Math.min(90,nextH));
+    const snapped=window.rpgSnapSize?window.rpgSnapSize(nextW,nextH):{width:nextW,height:nextH};latestW=Math.max(5,Math.min(90,snapped.width));latestH=Math.max(5,Math.min(90,snapped.height));
+    if(dir.includes('w'))nextX=ox+(ow-latestW);if(dir.includes('n'))nextY=oy+(oh-latestH);
+    const pos=window.rpgSnapPoint?window.rpgSnapPoint(nextX,nextY):{x:nextX,y:nextY},constrained=constrainRoomPosition({...r,width:latestW,height:latestH},pos.x,pos.y);latestX=constrained.x;latestY=constrained.y;
+    state.rooms=state.rooms.map(item=>item.id===r.id?{...item,width:latestW,height:latestH,x:latestX,y:latestY}:item);roomEl.style.width=latestW+'%';roomEl.style.height=latestH+'%';roomEl.style.left=latestX+'%';roomEl.style.top=latestY+'%';
   };
-  const up=async()=>{cleanup();const {data,error}=await sb.from('rooms').update({width:latestW,height:latestH,x:latestX,y:latestY}).eq('id',r.id).select().single();if(error){state.rooms=state.rooms.map(item=>item.id===r.id?{...item,...previous}:item);renderTable();toast(error.message||'Não foi possível salvar o tamanho.','error');return;}state.rooms=state.rooms.map(item=>item.id===r.id?data:item);await broadcastRoomResize({room_id:r.id,width:latestW,height:latestH,x:latestX,y:latestY});setSave('Área do cômodo salva');};
+  const up=async()=>{cleanup();const result=await sb.from('rooms').update({width:latestW,height:latestH,x:latestX,y:latestY}).eq('id',r.id).select('*').maybeSingle();if(result.error||!result.data){state.rooms=state.rooms.map(item=>item.id===r.id?{...item,...previous}:item);renderTable();toast(result.error?.message||'Não foi possível salvar o redimensionamento deste cômodo.','error');return;}state.rooms=state.rooms.map(item=>item.id===r.id?result.data:item);await broadcastRoomResize({room_id:r.id,width:latestW,height:latestH,x:latestX,y:latestY});setSave('Tamanho do cômodo salvo');};
   const cancel=()=>{cleanup();state.rooms=state.rooms.map(item=>item.id===r.id?{...item,...previous}:item);renderTable();};
-  el.addEventListener('pointermove',move);el.addEventListener('pointerup',up,{once:true});el.addEventListener('pointercancel',cancel,{once:true});
+  roomEl.addEventListener('pointermove',move);roomEl.addEventListener('pointerup',up,{once:true});roomEl.addEventListener('pointercancel',cancel,{once:true});
 }
+
 function applyZoom(){
   const board=$('board');
   if(!board)return;
@@ -1569,25 +1571,22 @@ function fieldInputHtml(field,character,isMasterEditor){
   const id='field_'+field.id;
   const options=Array.isArray(field.options)?field.options:[];
   if(field.data_key==='avatar_url'){
-    return `<label class="dynamicField">${escapeHtml(field.label)} ${req}<input id="${id}" data-field-id="${field.id}" data-data-key="${escapeHtml(field.data_key)}" data-type="url" value="${escapeHtml(value)}" placeholder="https://.../imagem.webp" ${disabled} ${required}><input id="${id}_file" class="dynamicFile" type="file" accept="image/*" ${disabled}><small>URL ou envio de arquivo</small></label>`;
+    return \`<label class="dynamicField">\${escapeHtml(field.label)} \${req}<input id="\${id}" data-field-id="\${field.id}" data-data-key="\${escapeHtml(field.data_key)}" data-type="url" value="\${escapeHtml(value)}" placeholder="https://.../imagem.webp" \${disabled} \${required}><input id="\${id}_file" class="dynamicFile" type="file" accept="image/*" \${disabled}><small>URL ou envio de arquivo</small></label>\`;
   }
   if(field.field_type==='textarea'){
     const isItems=field.data_key==='sheet_data.current_items';
-    const placeholder=isItems?'Ex.: Espada longa x1\\nPoção de cura x2\\nTocha x3':'Digite as informações deste campo';
-    const hint=disabled?'Somente o mestre':isItems?'Cadastre um item por linha, com quantidade quando fizer sentido.':'Campo da ficha';
-    return '<label class="dynamicField">'+escapeHtml(field.label)+' '+req+'<textarea id="'+id+'" data-field-id="'+field.id+'" data-data-key="'+escapeHtml(field.data_key)+'" data-type="textarea" rows="'+(isItems?7:6)+'" placeholder="'+escapeHtml(placeholder)+'" '+disabled+' '+required+'>'+escapeHtml(value)+'</textarea><small>'+hint+'</small></label>';
+    const isWeapons=field.data_key==='sheet_data.weapons';
+    const placeholder=isWeapons?'Ex.: Espada longa — ataque +5 — dano 1d8\\nArco — ataque +4 — dano 1d6 — alcance 18m':isItems?'Ex.: Poção de cura x2\\nTocha x3\\nKit de ferramentas x1':'Digite as informações deste campo';
+    const hint=disabled?'Somente o mestre':isWeapons?'Cadastre uma arma por linha. Inclua ataque, dano, alcance e observações quando precisar.':isItems?'Cadastre um item/equipamento por linha, com quantidade quando fizer sentido.':'Campo da ficha';
+    const rows=isWeapons||isItems?8:6;
+    return '<label class="dynamicField">'+escapeHtml(field.label)+' '+req+'<textarea id="'+id+'" data-field-id="'+field.id+'" data-data-key="'+escapeHtml(field.data_key)+'" data-type="textarea" rows="'+rows+'" placeholder="'+escapeHtml(placeholder)+'" '+disabled+' '+required+'>'+escapeHtml(value)+'</textarea><small>'+hint+'</small></label>';
   }
-  if(field.field_type==='number'){
-    return `<label class="dynamicField">${escapeHtml(field.label)} ${req}<input id="${id}" data-field-id="${field.id}" data-data-key="${escapeHtml(field.data_key)}" data-type="number" type="number" value="${escapeHtml(value)}" ${disabled} ${required}>${disabled?'<small>Somente o mestre</small>':''}</label>`;
-  }
-  if(field.field_type==='select'){
-    return `<label class="dynamicField">${escapeHtml(field.label)} ${req}<select id="${id}" data-field-id="${field.id}" data-data-key="${escapeHtml(field.data_key)}" data-type="select" ${disabled} ${required}><option value="">Selecione</option>${options.map(o=>`<option value="${escapeHtml(o)}" ${String(value)===String(o)?'selected':''}>${escapeHtml(o)}</option>`).join('')}</select>${disabled?'<small>Somente o mestre</small>':''}</label>`;
-  }
-  if(field.field_type==='checkbox'){
-    return `<label class="dynamicCheck"><input id="${id}" data-field-id="${field.id}" data-data-key="${escapeHtml(field.data_key)}" data-type="checkbox" type="checkbox" ${value?'checked':''} ${disabled}> <span>${escapeHtml(field.label)}</span>${field.required?'<span class="requiredMark">*</span>':''}</label>`;
-  }
-  return `<label class="dynamicField">${escapeHtml(field.label)} ${req}<input id="${id}" data-field-id="${field.id}" data-data-key="${escapeHtml(field.data_key)}" data-type="${field.field_type||'text'}" value="${escapeHtml(value)}" ${disabled} ${required}>${disabled?'<small>Somente o mestre</small>':''}</label>`;
+  if(field.field_type==='number')return \`<label class="dynamicField">\${escapeHtml(field.label)} \${req}<input id="\${id}" data-field-id="\${field.id}" data-data-key="\${escapeHtml(field.data_key)}" data-type="number" type="number" value="\${escapeHtml(value)}" \${disabled} \${required}>\${disabled?'<small>Somente o mestre</small>':''}</label>\`;
+  if(field.field_type==='select')return \`<label class="dynamicField">\${escapeHtml(field.label)} \${req}<select id="\${id}" data-field-id="\${field.id}" data-data-key="\${escapeHtml(field.data_key)}" data-type="select" \${disabled} \${required}><option value="">Selecione</option>\${options.map(o=>\`<option value="\${escapeHtml(o)}" \${String(value)===String(o)?'selected':''}>\${escapeHtml(o)}</option>\`).join('')}</select>\${disabled?'<small>Somente o mestre</small>':''}</label>\`;
+  if(field.field_type==='checkbox')return \`<label class="dynamicCheck"><input id="\${id}" data-field-id="\${field.id}" data-data-key="\${escapeHtml(field.data_key)}" data-type="checkbox" type="checkbox" \${value?'checked':''} \${disabled}> <span>\${escapeHtml(field.label)}</span>\${field.required?'<span class="requiredMark">*</span>':''}</label>\`;
+  return \`<label class="dynamicField">\${escapeHtml(field.label)} \${req}<input id="\${id}" data-field-id="\${field.id}" data-data-key="\${escapeHtml(field.data_key)}" data-type="\${field.field_type||'text'}" value="\${escapeHtml(value)}" \${disabled} \${required}>\${disabled?'<small>Somente o mestre</small>':''}</label>\`;
 }
+
 function getDynamicFieldDefinitions(isMasterEditor){
   return (state.characterFields||[]).filter(f=>f.enabled && (isMasterEditor || f.player_visible)).sort((a,b)=>Number(a.sort_order)-Number(b.sort_order));
 }
