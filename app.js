@@ -965,16 +965,22 @@ function movementProfile(entity){
   const rules=window.rpgCampaignRules||{};
   const cfg=rules.config||{};
   const source=entity?.character_id?state.characters.find(x=>x.id===entity.character_id):null;
+  const mapCfg=window.rpgVttGetMovementConfig?.()||{};
+  const gridSize=Math.max(.1,Number(mapCfg.grid_size??5));
+  const unitPerCell=Math.max(.1,Number(mapCfg.unit_per_cell??5));
   const speed=Number(source?.movement_speed??source?.speed??cfg.movementUnits??6);
-  return {speed:Math.max(0,speed),unitsPerPercent:Number(cfg.percentPerUnit||1)};
+  return {speed:Math.max(0,speed),gridSize,unitPerCell};
 }
 function movementCost(entity,from,to){
-  const dx=Number(to.x)-Number(from.x),dy=Number(to.y)-Number(from.y);
-  return Math.sqrt(dx*dx+dy*dy);
+  const p=movementProfile(entity);
+  const dx=(Number(to.x)-Number(from.x))/p.gridSize;
+  const dy=(Number(to.y)-Number(from.y))/p.gridSize;
+  const cells=Math.hypot(dx,dy);
+  return {cells,units:cells*p.unitPerCell};
 }
 function canMoveEntity(entity,from,to){
-  const p=movementProfile(entity),cost=movementCost(entity,from,to);
-  return {ok:cost<=p.speed*p.unitsPerPercent+0.001,cost,remaining:Math.max(0,p.speed-cost/p.unitsPerPercent)};
+  const p=movementProfile(entity),metric=movementCost(entity,from,to),cost=metric.units;
+  return {ok:cost<=p.speed+0.001,cost,remaining:Math.max(0,p.speed-cost)};
 }
 function startEntityDrag(e,el){
   if(!canEdit()||state.tool!=='move'||e.button!==0)return;
@@ -982,6 +988,7 @@ function startEntityDrag(e,el){
   const id=el.dataset.entityId,current=state.entities.find(q=>q.id===id);if(!current)return;
   const board=$('board'),rect=board.getBoundingClientRect(),start=clientToBoardPercent(e.clientX,e.clientY,rect);
   const previous={x:Number(current.x),y:Number(current.y),room_id:current.room_id??null,floor_id:current.floor_id};
+  const moveStart={x:previous.x,y:previous.y};
   const grabOffset={x:start.x-previous.x,y:start.y-previous.y};
   let latestX=previous.x,latestY=previous.y,finished=false,lastMoveBroadcast=0;
   const movementKey='entity:'+id;
@@ -1009,8 +1016,10 @@ function startEntityDrag(e,el){
     if(!result.data){state.entities=state.entities.map(item=>item.id===id?{...item,...previous}:item);renderTable();toast('A entidade não pôde ser localizada após o movimento.','error');return;}
     const data=result.data;
     data.movement_remaining=canMoveEntity(data,moveStart,data).remaining;
+    const movement=canMoveEntity(data,moveStart,{x:latestX,y:latestY});
+    data.movement_remaining=movement.remaining;
     state.entities=state.entities.map(item=>item.id===id?data:item);
-    await broadcastEntityMove({entity_id:id,x:latestX,y:latestY,room_id:room?.id||null,floor_id:current.floor_id,movement_cost:canMoveEntity(data,moveStart,data).cost,movement_remaining:data.movement_remaining});
+    await broadcastEntityMove({entity_id:id,x:latestX,y:latestY,room_id:room?.id||null,floor_id:current.floor_id,movement_cost:movement.cost,movement_remaining:data.movement_remaining});
     setSave(room?'Entidade posicionada em '+room.name+' · deslocamento '+data.movement_remaining.toFixed(1):'Posição da entidade salva');
   };
   const cancel=()=>{cleanup();state.entities=state.entities.map(item=>item.id===id?{...item,...previous}:item);renderTable();};
@@ -1324,19 +1333,34 @@ function openRoomModal(id,floorId){
     <label>Imagem do cômodo <span class="optional">(opcional)</span><input id="roomImage" value="${escapeHtml(r.image_url||'')}" placeholder="https://..."></label>
     <label>Anotações do mestre <span class="optional">(opcional)</span><textarea id="roomNotes" rows="4">${escapeHtml(r.notes||'')}</textarea></label>
     <div class="rotationPresets"><span>Atalhos</span><button type="button" data-room-rotation="0">0°</button><button type="button" data-room-rotation="15">15°</button><button type="button" data-room-rotation="30">30°</button><button type="button" data-room-rotation="45">45°</button><button type="button" data-room-rotation="-45">−45°</button><button type="button" data-room-rotation="90">90°</button></div>
-    <div class="modalHint">Use ponto ou vírgula nos valores decimais. A rotação permite criar cômodos diagonais, por exemplo <strong>45°</strong>. A posição e o tamanho também podem ser ajustados diretamente na mesa visual.</div>
+    <div class="modalHint">Use ponto ou vírgula nos valores decimais. O editor respeita automaticamente a grade/snap configurada para este andar e impede o cenário de sair dos limites da mesa.</div>
+    <div class="modalActions"><button type="button" class="softButton" id="snapRoomGeometryBtn">Alinhar à grade</button></div>
     <div class="modalActions"><button class="softButton" data-close>Cancelar</button><button id="saveRoom" class="primarySmall">Salvar cômodo</button></div>`);
   document.querySelectorAll('[data-room-rotation]').forEach(b=>b.onclick=()=>{$('roomRotation').value=b.dataset.roomRotation;});
+  $('snapRoomGeometryBtn')?.addEventListener('click',()=>window.rpgSnapRoomGeometry?.());
   $('saveRoom').onclick=async()=>{
     try{
       const name=$('roomName').value.trim();if(!name){toast('Informe o nome do cômodo.','error');$('roomName').focus();return;}
       const selectedFloor=$('roomFloor').value;
       if(!selectedFloor){toast('Selecione o andar do cômodo.','error');$('roomFloor').focus();return;}
-      const x=readWorldNumber('roomX','Posição X',0,100);
-      const y=readWorldNumber('roomY','Posição Y',0,100);
-      const width=readWorldNumber('roomW','Largura',5,95);
-      const height=readWorldNumber('roomH','Altura',5,90);
+      let x=readWorldNumber('roomX','Posição X',0,100);
+      let y=readWorldNumber('roomY','Posição Y',0,100);
+      let width=readWorldNumber('roomW','Largura',5,95);
+      let height=readWorldNumber('roomH','Altura',5,90);
       const rotation=readWorldNumber('roomRotation','Rotação',-180,180);
+
+      const snappedSize=window.rpgSnapSize?.(width,height);
+      if(snappedSize){width=snappedSize.width;height=snappedSize.height;}
+      const snappedPoint=window.rpgSnapPoint?.(x,y);
+      if(snappedPoint){x=snappedPoint.x;y=snappedPoint.y;}
+      const constrained=constrainRoomPosition({x,y,width,height,rotation},x,y);
+      x=constrained.x;y=constrained.y;
+
+      $('roomX').value=Number(x).toFixed(2);
+      $('roomY').value=Number(y).toFixed(2);
+      $('roomW').value=Number(width).toFixed(2);
+      $('roomH').value=Number(height).toFixed(2);
+
       const payload={floor_id:selectedFloor,name,description:$('roomDesc').value.trim(),image_url:$('roomImage').value.trim()||null,notes:$('roomNotes').value.trim()||null,x,y,width,height,rotation};
       const roomId=room?.id||uid();const result=room?await sb.from('rooms').update(payload).eq('id',room.id).select('*').maybeSingle():await sb.from('rooms').insert({...payload,id:roomId,sort_order:state.rooms.filter(x=>x.floor_id===selectedFloor).length}).select('*').maybeSingle();
       if(result.error)throw result.error;
