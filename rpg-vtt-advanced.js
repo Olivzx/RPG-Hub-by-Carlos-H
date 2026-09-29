@@ -520,7 +520,7 @@
   function updatePanel(){
     $('rpgGridStatus')?.replaceChildren(document.createTextNode(vtt.settings?.grid_enabled?'ON':'OFF'));
     $('rpgSnapStatus')?.replaceChildren(document.createTextNode(vtt.settings?.snap_enabled?'ON':'OFF'));
-    const z=$('#rpgVttPanel [data-vtt-zoom]');if(z)z.textContent=(window.state?.zoom||100)+'%';
+    const z=document.querySelector('#rpgVttPanel [data-vtt-zoom]');if(z)z.textContent=(window.state?.zoom||100)+'%';
   }
 
   function hookRenderTable(){
@@ -552,7 +552,7 @@
     ch.on('postgres_changes',{event:'*',schema:'public',table:'fog_regions',filter:'campaign_id=eq.'+c},p=>{if(!floorMatch(p))return;const r=p.new||p.old;if(p.eventType==='INSERT'&&!vtt.fog.some(x=>x.id===r.id))vtt.fog.push(r);else if(p.eventType==='UPDATE')vtt.fog=vtt.fog.map(x=>x.id===r.id?r:x);else if(p.eventType==='DELETE')vtt.fog=vtt.fog.filter(x=>x.id!==r.id);renderFog()});
     ch.on('postgres_changes',{event:'*',schema:'public',table:'aoe_effects',filter:'campaign_id=eq.'+c},p=>{if(!floorMatch(p))return;const r=p.new||p.old;if(p.eventType==='INSERT'&&!vtt.aoe.some(x=>x.id===r.id))vtt.aoe.push(r);else if(p.eventType==='UPDATE')vtt.aoe=vtt.aoe.map(x=>x.id===r.id?r:x);else if(p.eventType==='DELETE')vtt.aoe=vtt.aoe.filter(x=>x.id!==r.id);renderAoe()});
     ch.on('postgres_changes',{event:'*',schema:'public',table:'rooms',filter:'floor_id=eq.'+fid()},()=>{if(window.state?.view==='table')setTimeout(decorateRoomRotation,30)});
-    ch.on('postgres_changes',{event:'*',schema:'public',table:'world_entities',filter:'campaign_id=eq.'+c},()=>{if(window.state?.view==='table'){window.renderTable?.();}}});
+    ch.on('postgres_changes',{event:'*',schema:'public',table:'world_entities',filter:'campaign_id=eq.'+c},()=>{if(window.state?.view==='table'){window.renderTable?.();}});
     ch.on('postgres_changes',{event:'*',schema:'public',table:'combat_encounters',filter:'campaign_id=eq.'+c},()=>{vtt.conditionCache={key:null,rows:[],promise:null};decorateTokens()});
     ch.on('postgres_changes',{event:'*',schema:'public',table:'combatants'},()=>{vtt.conditionCache={key:null,rows:[],promise:null};decorateTokens()});
     ch.subscribe((status,error)=>{if(status==='CHANNEL_ERROR'||status==='TIMED_OUT')console.warn('RPG HUB VTT realtime:',status,error)});
