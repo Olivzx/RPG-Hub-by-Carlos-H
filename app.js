@@ -664,7 +664,7 @@ function renderWorld(){
             <p>${escapeHtml(l.description||'Sem descrição')}</p>
           </div>
         </div>
-        ${canEdit()?'<div class="worldActionGroup"><button class="softButton" data-edit-location="'+l.id+'">Editar local</button><button class="dangerGhost" data-delete-location="'+l.id+'">Excluir</button></div>':''}
+        ${canEdit()?'<div class="worldActionGroup">'+(locationFloors[0]?'<button class="softButton" data-open-location="'+l.id+'">Abrir na mesa</button>':'')+'<button class="softButton" data-edit-location="'+l.id+'">Editar local</button><button class="dangerGhost" data-delete-location="'+l.id+'">Excluir</button></div>':''}
       </div>
       ${l.notes?`<div class="worldNote"><span>ANOTAÇÕES DO MESTRE</span><p>${escapeHtml(l.notes)}</p></div>`:''}
       <div class="worldFloorSection">
@@ -698,6 +698,7 @@ function renderWorld(){
   $('worldLocations').innerHTML=locations||'<div class="emptyPanel">Nenhum local cadastrado. Crie o primeiro local para começar a construir seu mundo.</div>';
 
   $('newLocationWorldBtn')?.addEventListener('click',openLocationCreateModal);
+  document.querySelectorAll('[data-open-location]').forEach(b=>b.onclick=async()=>{const loc=state.locations.find(l=>l.id===b.dataset.openLocation);const floor=state.floors.find(f=>f.location_id===loc?.id);if(!floor){toast('Este local ainda não possui andares cadastrados.','error');return;}await setActiveScene(floor.id,null);});
   document.querySelectorAll('[data-edit-location]').forEach(b=>b.onclick=()=>openLocationModal(b.dataset.editLocation));
   document.querySelectorAll('[data-delete-location]').forEach(b=>b.onclick=()=>openDeleteLocationModal(b.dataset.deleteLocation));
   document.querySelectorAll('[data-new-floor]').forEach(b=>b.onclick=()=>openFloorModal(null,b.dataset.newFloor));
