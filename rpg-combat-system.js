@@ -46,6 +46,10 @@
     const s=sourceFor(r);
     return Number(r?.armor_class??r?.defense??s?.armor_class??s?.data?.armor_class??s?.data?.ac??10);
   }
+  function equipmentModifiers(characterId){
+    const cache=window.rpgEquipmentCache||{};
+    return (cache[characterId]||[]).filter(x=>x.equipped).reduce((m,x)=>{const md=x.metadata&&typeof x.metadata==='object'?x.metadata:{};m.attack+=Number(md.attack_bonus||0);m.damage+=Number(md.damage_bonus||0);m.ac+=Number(md.ac_bonus||0);return m},{attack:0,damage:0,ac:0});
+  }
   function isDown(r){ return Number.isFinite(Number(r?.hp_current)) && Number(r.hp_current)<=0; }
   function focusToken(r){
     const token=tokenFor(r); if(!token)return toast('Este combatente não está na mesa.','error');
