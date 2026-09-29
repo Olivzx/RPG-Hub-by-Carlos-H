@@ -218,7 +218,11 @@
         loadAuditActivity();
       });
     }
-    byId('rpgAuditRefreshBtn')?.addEventListener('click', loadAuditActivity);
+    const refreshButton = byId('rpgAuditRefreshBtn');
+    if (refreshButton && !refreshButton.dataset.bound) {
+      refreshButton.dataset.bound = '1';
+      refreshButton.addEventListener('click', loadAuditActivity);
+    }
     route();
   }
 
@@ -417,7 +421,6 @@
       subscribeAuditRealtime();
       if (!isMasterCampaign()) {
         subscribePlayerDiceRealtime();
-        loadPlayerDiceHistory();
       }
       return result;
     };
