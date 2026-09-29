@@ -475,17 +475,11 @@ async function subscribeRealtime(){
     campaign.on('broadcast',{event:'INSERT'},payload=>receiveRealtimeBroadcast(payload));
     campaign.on('broadcast',{event:'UPDATE'},payload=>receiveRealtimeBroadcast(payload));
     campaign.on('broadcast',{event:'DELETE'},payload=>receiveRealtimeBroadcast(payload));
-    if(canEdit()){
-      campaign.on('postgres_changes',{event:'INSERT',schema:'public',table:'dice_rolls',filter:`campaign_id=eq.${campaignId}`},payload=>{
-        const row=payload?.new;
-        if(!row?.id)return;
-        if(!state.rolls.some(r=>r.id===row.id)) state.rolls=[row,...state.rolls];
-        renderDice();
-        renderDiceResult(row);
-        const roller=profileFor(row.roller_user_id)?.display_name||'Jogador';
-        toast('Rolagem de '+roller+': '+row.final_result);
-      });
-    }
+    campaign.on('postgres_changes',{event:'INSERT',schema:'public',table:'dice_rolls',filter:`campaign_id=eq.${campaignId}`},payload=>{
+      const row=payload?.new;
+      if(!row?.id)return;
+      receiveRoll(row);
+    });
     campaign.on('postgres_changes',{event:'*',schema:'public',table:'characters',filter:`campaign_id=eq.${campaignId}`},payload=>{receiveCharacterChange(payload);});
     campaign.subscribe((status,err)=>{if(status==='CHANNEL_ERROR'||status==='TIMED_OUT')console.warn('Campanha realtime:',status,err);});
     state.campaignChannel=campaign;
