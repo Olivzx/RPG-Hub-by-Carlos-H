@@ -659,9 +659,45 @@ async function setActiveScene(floorId,roomId=null){
   }
   renderAll();
 }
-async function broadcastEntityMove(payload){if(!state.campaignChannel||!canEdit())return;await state.campaignChannel.send({type:"broadcast",event:"entity_move",payload:{...payload,user_id:state.user.id}});}
-async function broadcastRoomMove(payload){if(!state.campaignChannel||!canEdit())return;await state.campaignChannel.send({type:"broadcast",event:"room_move",payload:{...payload,user_id:state.user.id}});}
-async function broadcastRoomResize(payload){if(!state.campaignChannel||!canEdit())return;await state.campaignChannel.send({type:"broadcast",event:"room_resize",payload:{...payload,user_id:state.user.id}});}
+const movementSync={entity:new Map(),room:new Map(),seq:new Map(),last:new Map()};
+function movementSeq(key){
+  const next=(movementSync.seq.get(key)||0)+1;
+  movementSync.seq.set(key,next);
+  return next;
+}
+async function sendMovement(event,payload,key){
+  if(!state.campaignChannel||!canEdit())return;
+  const seq=movementSeq(key);
+  movementSync.last.set(key,{seq,ts:Date.now()});
+  await state.campaignChannel.send({type:'broadcast',event,payload:{...payload,user_id:state.user.id,move_seq:seq,move_ts:Date.now()}});
+}
+async function broadcastEntityMove(payload){return sendMovement('entity_move',payload,'entity:'+payload.entity_id);}
+async function broadcastRoomMove(payload){return sendMovement('room_move',payload,'room:'+payload.room_id);}
+async function broadcastRoomResize(payload){return sendMovement('room_resize',payload,'room:'+payload.room_id);}
+function acceptRemoteMovement(key,payload){
+  if(!payload?.move_seq)return true;
+  const previous=movementSync.last.get(key);
+  if(previous&&Number(payload.move_seq)<Number(previous.seq))return false;
+  movementSync.last.set(key,{seq:Number(payload.move_seq),ts:Number(payload.move_ts)||Date.now()});
+  return true;
+}
+function applyRemoteEntityPosition(payload,render=true){
+  if(!payload?.entity_id||!acceptRemoteMovement('entity:'+payload.entity_id,payload))return;
+  state.entities=state.entities.map(e=>e.id===payload.entity_id?{...e,x:Number(payload.x),y:Number(payload.y),room_id:payload.room_id??null,floor_id:payload.floor_id??e.floor_id}:e);
+  if(render)renderTable();
+}
+function applyRemoteRoomPosition(payload,render=true){
+  if(!payload?.room_id||!acceptRemoteMovement('room:'+payload.room_id,payload))return;
+  state.rooms=state.rooms.map(r=>r.id===payload.room_id?{...r,x:Number(payload.x),y:Number(payload.y)}:r);
+  if(render)renderTable();
+}
+function receiveEntityMove(payload){applyRemoteEntityPosition(payload,true);}
+function receiveRoomMove(payload){applyRemoteRoomPosition(payload,true);}
+function receiveRoomResize(payload){
+  if(!payload?.room_id||!acceptRemoteMovement('room:'+payload.room_id,payload))return;
+  state.rooms=state.rooms.map(r=>r.id===payload.room_id?{...r,width:Number(payload.width),height:Number(payload.height),x:Number(payload.x),y:Number(payload.y)}:r);
+  renderTable();
+}
 function receiveRoomRotate(payload){if(!payload?.room_id)return;state.rooms=state.rooms.map(r=>r.id===payload.room_id?{...r,rotation:Number(payload.rotation)||0}:r);renderTable();}
 async function broadcastRoomRotate(payload){if(!state.campaignChannel||!canEdit())return;await state.campaignChannel.send({type:"broadcast",event:"room_rotate",payload:{...payload,user_id:state.user.id}});}
 
@@ -858,7 +894,8 @@ function startEntityDrag(e,el){
   const board=$('board'),rect=board.getBoundingClientRect(),start=clientToBoardPercent(e.clientX,e.clientY,rect);
   const previous={x:Number(current.x),y:Number(current.y),room_id:current.room_id??null,floor_id:current.floor_id};
   const grabOffset={x:start.x-previous.x,y:start.y-previous.y};
-  let latestX=previous.x,latestY=previous.y,finished=false;
+  let latestX=previous.x,latestY=previous.y,finished=false,lastMoveBroadcast=0;
+  const movementKey='entity:'+id;
   el.classList.add('dragging');el.dataset.wasDragged='1';el.setPointerCapture?.(e.pointerId);
   const cleanup=()=>{if(finished)return;finished=true;try{el.releasePointerCapture?.(e.pointerId)}catch(_){}el.classList.remove('dragging');el.removeEventListener('pointermove',move);el.removeEventListener('pointerup',up);el.removeEventListener('pointercancel',cancel);};
   const move=ev=>{
@@ -866,6 +903,11 @@ function startEntityDrag(e,el){
     const snapped=window.rpgSnapPoint?window.rpgSnapPoint(target.x,target.y):target;
     latestX=Math.max(1,Math.min(99,snapped.x));latestY=Math.max(1,Math.min(99,snapped.y));
     const room=roomAtPosition(latestX,latestY,current.floor_id||state.floor);
+    const now=performance.now();
+    if(now-lastMoveBroadcast>30){
+      lastMoveBroadcast=now;
+      broadcastEntityMove({entity_id:id,x:latestX,y:latestY,room_id:room?.id||null,floor_id:current.floor_id}).catch(()=>{});
+    }
     state.entities=state.entities.map(item=>item.id===id?{...item,x:latestX,y:latestY,room_id:room?.id||null}:item);
     el.style.left=latestX+'%';el.style.top=latestY+'%';
   };
@@ -896,11 +938,13 @@ function startRoomDrag(e,el){
   e.preventDefault();e.stopPropagation();
   const r=state.rooms.find(x=>x.id===el.dataset.roomId);if(!r)return;
   const board=$('board'),rect=board.getBoundingClientRect(),click=clientToBoardPercent(e.clientX,e.clientY,rect),ox=Number(r.x),oy=Number(r.y),grabOffset={x:click.x-ox,y:click.y-oy},previous={x:ox,y:oy};
-  let latestX=ox,latestY=oy,finished=false;el.classList.add('dragging');el.setPointerCapture?.(e.pointerId);
+  let latestX=ox,latestY=oy,finished=false,lastMoveBroadcast=0;el.classList.add('dragging');el.setPointerCapture?.(e.pointerId);
   const cleanup=()=>{if(finished)return;finished=true;try{el.releasePointerCapture?.(e.pointerId)}catch(_){}el.classList.remove('dragging');el.removeEventListener('pointermove',move);el.removeEventListener('pointerup',up);el.removeEventListener('pointercancel',cancel);};
   const move=ev=>{
     const p=clientToBoardPercent(ev.clientX,ev.clientY,rect),raw={x:p.x-grabOffset.x,y:p.y-grabOffset.y},snapped=window.rpgSnapPoint?window.rpgSnapPoint(raw.x,raw.y):raw;
     const constrained=constrainRoomPosition({...r,x:latestX,y:latestY},snapped.x,snapped.y);latestX=constrained.x;latestY=constrained.y;
+    const now=performance.now();
+    if(now-lastMoveBroadcast>30){lastMoveBroadcast=now;broadcastRoomMove({room_id:r.id,x:latestX,y:latestY}).catch(()=>{});}
     state.rooms=state.rooms.map(item=>item.id===r.id?{...item,x:latestX,y:latestY}:item);el.style.left=latestX+'%';el.style.top=latestY+'%';
   };
   const up=async()=>{cleanup();const {data,error}=await sb.from('rooms').update({x:latestX,y:latestY}).eq('id',r.id).select('*').maybeSingle();if(error||!data){state.rooms=state.rooms.map(item=>item.id===r.id?{...item,...previous}:item);renderTable();toast(error?.message||'O cômodo não pôde ser localizado após o movimento.','error');return;}state.rooms=state.rooms.map(item=>item.id===r.id?data:item);await broadcastRoomMove({room_id:r.id,x:latestX,y:latestY});setSave('Cômodo reposicionado');};
@@ -912,12 +956,14 @@ function startRoomResize(e,el){
   e.preventDefault();e.stopPropagation();
   const r=state.rooms.find(x=>x.id===el.dataset.roomId);if(!r)return;
   const board=$('board'),rect=board.getBoundingClientRect(),sx=e.clientX,sy=e.clientY,ow=Number(r.width),oh=Number(r.height),previous={x:Number(r.x),y:Number(r.y),width:ow,height:oh};
-  let latestW=ow,latestH=oh,latestX=previous.x,latestY=previous.y,finished=false;el.setPointerCapture?.(e.pointerId);el.classList.add('resizing');
+  let latestW=ow,latestH=oh,latestX=previous.x,latestY=previous.y,finished=false,lastResizeBroadcast=0;el.setPointerCapture?.(e.pointerId);el.classList.add('resizing');
   const cleanup=()=>{if(finished)return;finished=true;try{el.releasePointerCapture?.(e.pointerId)}catch(_){}el.classList.remove('resizing');el.removeEventListener('pointermove',move);el.removeEventListener('pointerup',up);el.removeEventListener('pointercancel',cancel);};
   const move=ev=>{
     const rawW=Math.max(5,Math.min(90,ow+(ev.clientX-sx)/Math.max(1,rect.width)*100)),rawH=Math.max(5,Math.min(90,oh+(ev.clientY-sy)/Math.max(1,rect.height)*100)),snapped=window.rpgSnapSize?window.rpgSnapSize(rawW,rawH):{width:rawW,height:rawH};
     latestW=Math.max(5,Math.min(90,snapped.width));latestH=Math.max(5,Math.min(90,snapped.height));
     const constrained=constrainRoomPosition({...r,width:latestW,height:latestH},latestX,latestY);latestX=constrained.x;latestY=constrained.y;
+    const now=performance.now();
+    if(now-lastResizeBroadcast>30){lastResizeBroadcast=now;broadcastRoomResize({room_id:r.id,width:latestW,height:latestH,x:latestX,y:latestY}).catch(()=>{});}
     state.rooms=state.rooms.map(item=>item.id===r.id?{...item,width:latestW,height:latestH,x:latestX,y:latestY}:item);el.style.width=latestW+'%';el.style.height=latestH+'%';el.style.left=latestX+'%';el.style.top=latestY+'%';
   };
   const up=async()=>{cleanup();const {data,error}=await sb.from('rooms').update({width:latestW,height:latestH,x:latestX,y:latestY}).eq('id',r.id).select('*').maybeSingle();if(error||!data){state.rooms=state.rooms.map(item=>item.id===r.id?{...item,...previous}:item);renderTable();toast(error?.message||'O cômodo não pôde ser localizado após redimensionar.','error');return;}state.rooms=state.rooms.map(item=>item.id===r.id?data:item);await broadcastRoomResize({room_id:r.id,width:latestW,height:latestH,x:latestX,y:latestY});setSave('Área do cômodo salva');};
