@@ -64,8 +64,13 @@ A tabela possui RLS para permitir leitura aos participantes da campanha, enquant
 - `rpg-multiplayer-combat.js` — presença, lista de jogadores e resolução/visualização das ações de combate.
 - `supabase.js` — carregamento da camada multiplayer adicional.
 - `supabase/migrations/20260929054500_combat_actions_and_rpc.sql` — tabela, RLS e função de resolução de ataques.
+- `supabase/migrations/20260929055000_optimize_combat_actions.sql` — índices e otimização das políticas RLS.
 - `rpg-combat-system.js` — rastreador de iniciativa, turnos, HP e condições já existente.
 
 ## Observação
 
 A arquitetura prioriza sincronização por Realtime e mantém o banco como fonte de verdade. O cliente pode atualizar a interface imediatamente, mas o resultado persistente continua sendo confirmado pelo Supabase.
+
+## Segurança / performance
+
+O novo módulo mantém a escrita de ações restrita ao Mestre, usa `SECURITY INVOKER` na RPC de combate e mantém RLS na tabela de ações. Os índices específicos das chaves estrangeiras de atacante/alvo e as chamadas de `auth.uid()` nas políticas foram ajustados para reduzir trabalho desnecessário no banco.
