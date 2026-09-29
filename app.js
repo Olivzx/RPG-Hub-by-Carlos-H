@@ -69,7 +69,8 @@ async function ensureProfile(){
   const {data,error}=await sb.from('profiles').select('*').eq('id',state.user.id).maybeSingle(); if(error) throw error;
   if(data){state.profile=data;return;}
   const display=state.user.user_metadata?.display_name || state.user.email?.split('@')[0] || 'Aventureiro';
-  const {data:created,error:insertError}=await sb.from('profiles').insert({id:state.user.id,display_name:display,account_type:'player'}).select('*').single();
+  const accountType=state.user.user_metadata?.account_type==='master'?'master':'player';
+  const {data:created,error:insertError}=await sb.from('profiles').insert({id:state.user.id,display_name:display,account_type:accountType}).select('*').single();
   if(insertError) throw insertError; state.profile=created;
 }
 
@@ -1287,6 +1288,7 @@ async function seedCharacterFieldsForCampaign(campaignId){
     ['avatar_url','Foto / avatar','url','avatar_url',false,150],
     ['notes','Ficha complementar','textarea','notes',false,160],
     ['current_items','Itens atuais / equipamentos em uso','textarea','sheet_data.current_items',false,165],
+    ['weapons','Armas','textarea','sheet_data.weapons',false,168],
   ];
   const payload=defaults.map(([field_key,label,field_type,data_key,required,sort_order])=>({campaign_id:campaignId,field_key,label,field_type,data_key,required,sort_order}));
   const {error}=await sb.from('character_field_definitions').insert(payload);
