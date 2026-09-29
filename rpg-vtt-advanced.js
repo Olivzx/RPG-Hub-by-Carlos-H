@@ -102,7 +102,7 @@
       '.rpgAoe.cone{clip-path:polygon(0 50%,100% 0,100% 100%);border-radius:0}',
       '.rpgAoe.line{height:5px!important;border-radius:99px;transform-origin:0 50%}',
       '.rpgAoeDelete{position:absolute;top:-11px;right:-11px;width:18px;height:18px;border:1px solid #4b2731;border-radius:50%;background:#171015;color:#ff9eaa;display:grid;place-items:center;font-size:10px;cursor:pointer;pointer-events:auto}',
-      '.rpgAoeLabel{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);padding:4px 7px;border-radius:99px;background:rgba(7,9,13,.74);color:#eeeaff;font-size:7px;white-space:nowrap}',
+      '.rpgAoeTargetList{display:grid;gap:6px;max-height:42vh;overflow:auto;margin:10px 0}.rpgAoeTarget{display:flex;align-items:center;gap:9px;padding:9px 10px;border:1px solid #29313d;border-radius:10px;background:#0e141b;cursor:pointer}.rpgAoeTarget.down{opacity:.45}.rpgAoeTarget input{accent-color:var(--accent,#9487ff)}.rpgAoeTarget span{display:grid;gap:3px}.rpgAoeTarget b{color:#dce1e8;font-size:9px}.rpgAoeTarget small{color:#697484;font-size:7px}.rpgAoeResolveMeta{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}.rpgAoeResolveMeta span{padding:6px 8px;border:1px solid #29313d;border-radius:8px;background:#0e141b;color:#747f8f;font-size:8px}.rpgAoeResolveMeta b{color:#c9c3ff;margin-left:3px}.rpgAoeLabel{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);padding:4px 7px;border-radius:99px;background:rgba(7,9,13,.74);color:#eeeaff;font-size:7px;white-space:nowrap}',
       '.rpgMeasureLine{position:absolute;height:3px;border-radius:99px;background:linear-gradient(90deg,#e8e3ff,#9487ff);transform-origin:0 50%;z-index:70;box-shadow:0 0 10px rgba(148,135,255,.58);pointer-events:none}',
       '.rpgMeasureDot{position:absolute;width:9px;height:9px;margin:-4.5px 0 0 -4.5px;border-radius:50%;background:#f3f0ff;border:1px solid #9487ff;box-shadow:0 0 12px rgba(148,135,255,.7);z-index:71;pointer-events:none}',
       '.rpgMeasureLabel{position:absolute;z-index:72;transform:translate(-50%,-50%);padding:6px 8px;border:1px solid #3c3565;border-radius:8px;background:rgba(13,14,22,.94);color:#ece8ff;font-size:8px;white-space:nowrap;box-shadow:0 9px 28px rgba(0,0,0,.38);pointer-events:none}',
@@ -174,7 +174,7 @@
       const color=r.color||'#9487ff';el.style.borderColor=color;el.style.background='color-mix(in srgb,'+color+' 20%, transparent)';el.style.opacity=String(r.opacity ?? .22);
       if(r.label)el.innerHTML='<span class="rpgAoeLabel">'+esc(r.label)+'</span>';
       if(master()){
-        const del=document.createElement('button');del.className='rpgAoeDelete';del.type='button';del.textContent='×';del.title='Remover área';del.addEventListener('click',async e=>{e.stopPropagation();await removeAoe(r.id)});el.appendChild(del);
+        const del=document.createElement('button');del.className='rpgAoeDelete';del.type='button';del.textContent='×';del.title='Remover área';del.addEventListener('click',async e=>{e.stopPropagation();await removeAoe(r.id)});el.appendChild(del);const hit=document.createElement('button');hit.className='rpgAoeDelete';hit.style.right='11px';hit.style.top='-11px';hit.textContent='⚔';hit.title='Resolver área no combate';hit.addEventListener('click',async e=>{e.stopPropagation();await resolveAoe(r.id)});el.appendChild(hit);
       }
       o.appendChild(el);
     });
@@ -375,6 +375,108 @@
       color:'#9487ff',opacity:.22,label:''
     };
     try{const saved=await confirmedWrite('aoe_effects',{id:crypto.randomUUID(),...payload},null,'a área de efeito');vtt.aoe.push(saved);renderAoe();broadcast('aoe_updated',{floor_id:fid()})}catch(err){window.toast?.(err.message||'Não foi possível criar a área.','error')}
+  }
+
+  function combatantsForAoe(){
+    const sess=typeof window.currentSession==='function'?window.currentSession():null;
+    if(!sess)return [];
+    return (window.state?.entities||[]).filter(e=>e.floor_id===fid()).map(entity=>{
+      const cbt=(window.__rpgCombatRows||[]).find(x=>(x.character_id&&x.character_id===entity.character_id)||(x.npc_id&&x.npc_id===entity.npc_id));
+      return cbt?{entity,combatant:cbt}:null;
+    }).filter(Boolean);
+  }
+
+  function pointOnAoe(aoe,x,y){
+    const rect=boardRect(),cell=cellPx(),shape=aoe.shape||'circle';
+    const size=Math.max(1,n(aoe.size,1))*cell, length=Math.max(1,n(aoe.length,aoe.size||1))*cell;
+    const cx=n(aoe.x)/100*rect.width,cy=n(aoe.y)/100*rect.height;
+    const px=n(x)/100*rect.width,py=n(y)/100*rect.height;
+    if(shape==='circle')return Math.hypot(px-cx,py-cy)<=size/2+cell*.6;
+    if(shape==='square')return Math.abs(px-cx)<=size/2+cell*.5&&Math.abs(py-cy)<=size/2+cell*.5;
+    const ang=n(aoe.rotation)*Math.PI/180,dx=px-cx,dy=py-cy;
+    const localX=dx*Math.cos(ang)+dy*Math.sin(ang),localY=-dx*Math.sin(ang)+dy*Math.cos(ang);
+    if(shape==='line'){
+      if(localX<-cell*.5||localX>length+cell*.5)return false;
+      return Math.abs(localY)<=Math.max(cell*.65,2);
+    }
+    if(shape==='cone')return localX>=-cell*.25&&localX<=length+cell*.5&&Math.abs(localY)<=Math.max(cell*.5,localX/2);
+    return false;
+  }
+
+  function aoeLineOfSight(aoe,x,y){
+    const shape=aoe.shape||'circle';
+    if(!window.rpgSupabase)return true;
+    const rect=boardRect(),sx=n(aoe.x),sy=n(aoe.y);
+    if(shape==='circle'||shape==='square')return !segmentBlocked(sx,sy,n(x),n(y));
+    return !segmentBlocked(sx,sy,n(x),n(y));
+  }
+
+  async function loadCombatRowsForAoe(){
+    const sess=typeof window.currentSession==='function'?window.currentSession():null;
+    if(!sess||!cid())return [];
+    const ce=await sbc().from('combat_encounters').select('id,status').eq('campaign_id',cid()).eq('session_id',sess.id).order('created_at',{ascending:false}).limit(1);
+    if(ce.error)throw ce.error;
+    const enc=ce.data?.[0];if(!enc)return [];
+    const cb=await sbc().from('combatants').select('*').eq('encounter_id',enc.id).order('turn_order');
+    if(cb.error)throw cb.error;
+    return cb.data||[];
+  }
+
+  function parseFormula(formula){
+    const m=/^(\\d+)d(\\d+)([+-]\\d+)?$/i.exec(String(formula||'').trim());
+    if(!m)return null;
+    return{count:Math.min(50,Math.max(1,Number(m[1]))),sides:Math.min(1000,Math.max(2,Number(m[2]))),mod:Number(m[3]||0)};
+  }
+  function rollFormula(f){
+    let dice=0;
+    for(let i=0;i<f.count;i++)dice+=(crypto.getRandomValues(new Uint32Array(1))[0]%f.sides)+1;
+    return{dice,total:Math.max(0,dice+f.mod)};
+  }
+
+  async function resolveAoe(id){
+    if(!master())return;
+    const aoe=vtt.aoe.find(x=>x.id===id);if(!aoe)return;
+    try{
+      const rows=await loadCombatRowsForAoe();
+      if(!rows.length)return window.toast?.('Não há combatentes no combate atual.','error');
+      const byEntity=(window.state?.entities||[]).filter(e=>e.floor_id===fid()).map(entity=>{
+        const combatant=rows.find(x=>(x.character_id&&x.character_id===entity.character_id)||(x.npc_id&&x.npc_id===entity.npc_id));
+        return combatant?{entity,combatant}:null;
+      }).filter(Boolean);
+      const candidates=byEntity.filter(({entity})=>pointOnAoe(aoe,n(entity.x),n(entity.y)));
+      const visible=candidates.filter(({entity})=>aoeLineOfSight(aoe,n(entity.x),n(entity.y)));
+      showAoeTargetModal(aoe,visible,candidates.length-visible.length,rows);
+    }catch(err){console.warn('RPG HUB AoE:',err);window.toast?.(err.message||'Não foi possível preparar a área de efeito.','error')}
+  }
+
+  function showAoeTargetModal(aoe,visible,blockedCount,allRows){
+    const formulaDefault=aoe.shape==='line'?'1d8+0':aoe.shape==='cone'?'1d6+0':'1d6+0';
+    const cards=visible.length?visible.map(({entity,combatant})=>{
+      const down=Number(combatant.hp_current)<=0;
+      return '<label class="rpgAoeTarget '+(down?'down':'')+'"><input type="checkbox" data-aoe-target="'+esc(combatant.id)+'" '+(down?'disabled':'checked')+'><span><b>'+esc(combatant.name)+'</b><small>HP '+(combatant.hp_current??'—')+(combatant.hp_max!=null?'/'+combatant.hp_max:'')+' · '+esc(combatant.kind||'combatente')+(down?' · KO':'')+'</small></span></label>';
+    }).join(''):'<div class="rpgCombatEmpty">Nenhum combatente atingido e visível.</div>';
+    showModal('<div class="modalHeader"><div><div class="eyebrow">ÁREA DE EFEITO</div><h3>Resolver '+esc(aoe.shape||'área')+'</h3><p class="modalHint">Alvos são calculados pela geometria da área e pelas paredes. Combatentes atrás de uma parede ficam bloqueados.</p></div><button class="closeButton" data-close>×</button></div><div class="rpgAoeResolveMeta"><span>Alvos elegíveis <b>'+visible.filter(x=>Number(x.combatant.hp_current)>0).length+'</b></span><span>Bloqueados por oclusão <b>'+blockedCount+'</b></span></div><div class="formGrid"><label>Dano<input id="aoeDamage" value="'+esc(formulaDefault)+'" placeholder="2d6+3"></label><label>Condição <span class="optional">(opcional)</span><input id="aoeCondition" maxlength="60" placeholder="Atordoado"></label></div><div class="rpgAoeTargetList">'+cards+'</div><div class="modalActions"><button class="softButton" data-close>Cancelar</button><button class="primarySmall" id="aoeResolve">Aplicar aos selecionados</button></div>');
+    $('aoeResolve').onclick=async()=>{
+      const targets=[...document.querySelectorAll('[data-aoe-target]:checked')].map(x=>x.dataset.aoeTarget);
+      const formula=parseFormula($('aoeDamage').value);
+      if(!formula)return window.toast?.('Fórmula inválida. Use 1d6, 2d6+3 etc.','error');
+      if(!targets.length)return window.toast?.('Selecione pelo menos um alvo.','error');
+      const rowsById=new Map(visible.map(x=>[x.combatant.id,x.combatant])),condition=$('aoeCondition').value.trim(),aoeName=aoe.label||('Área '+(aoe.shape||'efeito'));
+      let count=0;
+      for(const id of targets){
+        const target=rowsById.get(id);if(!target||Number(target.hp_current)<=0)continue;
+        const before=target.hp_current==null?null:Number(target.hp_current);
+        const rolled=rollFormula(formula),after=before==null?null:Math.max(0,before-rolled.total);
+        const q=await sbc().from('combatants').update({hp_current:after,conditions:condition?Array.from(new Set(String(target.conditions||'').split(',').map(x=>x.trim()).filter(Boolean).concat(condition))).join(', '):target.conditions}).eq('id',id).select('*').maybeSingle();
+        if(q.error)throw q.error;
+        const saved=q.data;if(!saved)throw new Error('Não foi possível confirmar '+target.name+' após aplicar a área.');
+        const action={id:crypto.randomUUID(),campaign_id:cid(),encounter_id:saved.encounter_id,attacker_combatant_id:null,target_combatant_id:saved.id,attacker_name:aoeName,target_name:saved.name,action_name:'Área de efeito',attack_notation:null,attack_roll:null,attack_modifier:null,target_defense:null,hit:true,critical:false,damage_notation:$('aoeDamage').value.trim(),damage_roll:rolled.dice,damage_bonus:formula.mod,damage_total:rolled.total,hp_before:before,hp_after:after,hp_lost_percent:before?Math.max(0,Math.min(100,rolled.total/before*100)):null,effect_percent:null,notes:'AoE '+aoe.id+(condition?' · condição: '+condition:'')};
+        const aq=await sbc().from('combat_actions').insert(action).select('*').maybeSingle();if(aq.error)throw aq.error;
+        if(typeof window.logCampaignActivity==='function')await window.logCampaignActivity('combat_aoe','combat',aoeName+' afetou '+saved.name+': '+rolled.total+' dano'+(condition?' · '+condition:''),action.id,{aoe_id:aoe.id,target_id:saved.id,damage:rolled.total,condition:condition||null}).catch(()=>{});
+        count++;
+      }
+      closeModal();window.toast?.(aoeName+' resolvida em '+count+' alvo(s).');window.renderTable?.();
+    };
   }
 
   async function removeFog(id){
