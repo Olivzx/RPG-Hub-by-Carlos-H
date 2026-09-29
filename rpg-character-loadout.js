@@ -20,8 +20,13 @@
   }
 
   function canEditCharacter(c){return master()||c?.player_id===st().user?.id}
-  async function rows(characterId){
-    const [a,i]=await Promise.all([
+  async function cacheEquipment(characterId){
+  const q=await api().from('character_inventory').select('id,name,equipped,metadata').eq('character_id',characterId).eq('equipped',true);
+  if(q.error)return [];
+  window.rpgEquipmentCache=window.rpgEquipmentCache||{};window.rpgEquipmentCache[characterId]=q.data||[];return q.data||[];
+}
+async function rows(characterId){
+    await cacheEquipment(characterId);\n    const [a,i]=await Promise.all([
       api().from('character_abilities').select('*').eq('character_id',characterId).order('created_at'),
       api().from('character_inventory').select('*').eq('character_id',characterId).order('created_at')
     ]);
@@ -75,7 +80,7 @@
       $('loadoutBody').querySelectorAll('[data-loadout-cancel]').forEach(b=>b.onclick=()=>{editing=null;editingType=null;render()});
       $('loadoutBody').querySelectorAll('[data-loadout-del-ability]').forEach(b=>b.onclick=async()=>{if(!confirm('Excluir esta habilidade?'))return;const q=await api().from('character_abilities').delete().eq('id',b.dataset.loadoutDelAbility);if(q.error)return toast(q.error.message,'error');data.abilities=data.abilities.filter(x=>x.id!==b.dataset.loadoutDelAbility);render();log('Habilidade excluída: '+b.dataset.loadoutDelAbility,characterId)});
       $('loadoutBody').querySelectorAll('[data-loadout-del-item]').forEach(b=>b.onclick=async()=>{if(!confirm('Excluir este item?'))return;const q=await api().from('character_inventory').delete().eq('id',b.dataset.loadoutDelItem);if(q.error)return toast(q.error.message,'error');data.inventory=data.inventory.filter(x=>x.id!==b.dataset.loadoutDelItem);render();log('Item excluído',characterId)});
-      $('loadoutBody').querySelectorAll('[data-loadout-equip]').forEach(b=>b.onclick=async()=>{const item=data.inventory.find(x=>x.id===b.dataset.loadoutEquip);if(!item)return;const q=await api().from('character_inventory').update({equipped:!item.equipped,updated_at:new Date().toISOString()}).eq('id',item.id).select('*').maybeSingle();if(q.error)return toast(q.error.message,'error');const saved=q.data||{...item,equipped:!item.equipped};data.inventory=data.inventory.map(x=>x.id===item.id?saved:x);render();log((saved.equipped?'Equipou ':'Desequipou ')+saved.name,characterId)});
+      $('loadoutBody').querySelectorAll('[data-loadout-equip]').forEach(b=>b.onclick=async()=>{const item=data.inventory.find(x=>x.id===b.dataset.loadoutEquip);if(!item)return;const q=await api().from('character_inventory').update({equipped:!item.equipped,updated_at:new Date().toISOString()}).eq('id',item.id).select('*').maybeSingle();if(q.error)return toast(q.error.message,'error');const saved=q.data||{...item,equipped:!item.equipped};data.inventory=data.inventory.map(x=>x.id===item.id?saved:x);await cacheEquipment(characterId);render();log((saved.equipped?'Equipou ':'Desequipou ')+saved.name,characterId)});
       $('loadoutBody').querySelectorAll('[data-loadout-use]').forEach(b=>b.onclick=async()=>{const x=data.abilities.find(a=>a.id===b.dataset.loadoutUse);if(!x)return;const next=Math.max(0,Number(x.uses_remaining)-1);const q=await api().from('character_abilities').update({uses_remaining:next,updated_at:new Date().toISOString()}).eq('id',x.id).select('*').maybeSingle();if(q.error)return toast(q.error.message,'error');const saved=q.data||{...x,uses_remaining:next};data.abilities=data.abilities.map(a=>a.id===x.id?saved:a);render();await log('Usou '+x.name+' · '+next+'/'+x.uses_max+' usos restantes',characterId);toast(x.name+' usado')});
       $('loadoutBody').querySelectorAll('[data-loadout-save-ability]').forEach(b=>b.onclick=async()=>{
         const payload={campaign_id:st().campaign.id,character_id:characterId,name:$('loadAbilityName').value.trim(),category:$('loadAbilityCategory').value,action_type:$('loadAbilityAction').value,cost:$('loadAbilityCost').value.trim(),damage_formula:$('loadAbilityDamage').value.trim(),damage_type:$('loadAbilityDamageType').value.trim()||'physical',save_ability:$('loadAbilitySave').value.trim(),save_dc:Number($('loadAbilityDc').value||0),uses_max:Math.max(0,Number($('loadAbilityUsesMax').value||0)),uses_remaining:Math.max(0,Number($('loadAbilityUses').value||0)),description:$('loadAbilityDescription').value.trim(),updated_at:new Date().toISOString(),created_by:st().user.id};
@@ -89,7 +94,7 @@
         if(!payload.name)return toast('Informe o nome do item.','error');
         const q=editing.id?await api().from('character_inventory').update(payload).eq('id',editing.id).select('*').maybeSingle():await api().from('character_inventory').insert({...payload,id:crypto.randomUUID()}).select('*').maybeSingle();
         if(q.error)return toast(q.error.message,'error');const saved=q.data;if(!saved)return toast('O servidor não confirmou o item.','error');
-        const wasEdit=!!editing.id;data.inventory=wasEdit?data.inventory.map(x=>x.id===editing.id?saved:x):[...data.inventory,saved];editing=null;editingType=null;render();await log((wasEdit?'Editou ':'Criou ')+saved.name,characterId);toast('Item salvo');
+        const wasEdit=!!editing.id;data.inventory=wasEdit?data.inventory.map(x=>x.id===editing.id?saved:x):[...data.inventory,saved];await cacheEquipment(characterId);editing=null;editingType=null;render();await log((wasEdit?'Editou ':'Criou ')+saved.name,characterId);toast('Item salvo');
       });
     };
     window.showModal?.('<div class="modalHeader"><div><div class="eyebrow">PERSONAGEM</div><h3>Habilidades, magias e inventário</h3><p class="modalHint">'+esc(c.name)+'</p></div><button class="closeButton" data-close>×</button></div><div class="rpgLoadout"><div class="rpgLoadoutTabs"><button class="rpgLoadoutTab active" data-loadout-tab="abilities">Habilidades / magias</button><button class="rpgLoadoutTab" data-loadout-tab="inventory">Inventário / equipamento</button></div><div id="loadoutBody"></div></div>',true);
