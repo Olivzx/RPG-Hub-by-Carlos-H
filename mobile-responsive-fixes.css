@@ -281,3 +281,18 @@
     grid-template-columns:1fr;
   }
 }
+
+@media (max-width:760px){
+  .boardToolbar{position:sticky;top:0;z-index:80;flex-wrap:wrap;gap:6px;padding:7px!important}
+  .boardToolbar .toolbarActions{width:100%;display:flex;justify-content:space-between;gap:5px}
+  .boardToolbar .toolGroup{display:flex;min-width:0;flex:1}
+  .boardToolbar .toolButton{flex:1;min-height:42px;font-size:11px}
+  .boardToolbar .iconButton{width:42px;height:42px}
+  .boardStage,.tableCanvas,.mapCanvas{min-height:55vh;touch-action:none}
+  .combatTracker,.combatPanel,.rpg-combat-panel{max-width:100%;overflow-x:hidden}
+  .combatActions,.combatToolbar,.combatHeader{display:flex;flex-wrap:wrap;gap:7px}
+  .combatActions button,.combatToolbar button{min-height:42px}
+  .modal,.modalCard,.dialog,.rpg-modal{width:min(calc(100vw - 20px),520px);max-width:calc(100vw - 20px);max-height:88vh;overflow:auto}
+  input,select,textarea,button{font-size:16px}
+  .formGrid{grid-template-columns:1fr!important}
+}
