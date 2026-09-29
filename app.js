@@ -258,20 +258,46 @@ function receiveSceneChange(payload){
   state.selected=payload.room_id?{type:"room",id:payload.room_id}:null;
   state.view='table';renderAll();toast(payload.room_name?`Cena: ${payload.room_name}`:'Cena atualizada');
 }
+function receiveEntityChange(payload){
+  if(!payload)return;
+  const type=payload.eventType,row=payload.new||payload.old,id=row?.id;
+  if(!id)return;
+  if(type==='INSERT'){
+    if(row.campaign_id===state.campaign?.id&&!state.entities.some(e=>e.id===id))state.entities.push(row);
+  }else if(type==='UPDATE'){
+    state.entities=state.entities.map(e=>e.id===id?{...e,...row}:e);
+  }else if(type==='DELETE'){
+    state.entities=state.entities.filter(e=>e.id!==id);
+    if(state.selected?.type==='entity'&&state.selected.id===id)state.selected=null;
+  }
+  renderTable();
+}
+function receiveRoomChange(payload){
+  if(!payload)return;
+  const type=payload.eventType,row=payload.new||payload.old,id=row?.id;
+  if(!id)return;
+  if(type==='INSERT'){
+    if(!state.rooms.some(r=>r.id===id)&&state.floors.some(f=>f.id===row.floor_id))state.rooms.push(row);
+  }else if(type==='UPDATE'){
+    state.rooms=state.rooms.map(r=>r.id===id?{...r,...row}:r);
+    if(state.selected?.type==='room'&&state.selected.id===id&&row.floor_id&&row.floor_id!==state.floor)state.selected=null;
+  }else if(type==='DELETE'){
+    state.rooms=state.rooms.filter(r=>r.id!==id);
+    if(state.selected?.type==='room'&&state.selected.id===id)state.selected=null;
+  }
+  renderTable();
+}
 function receiveEntityMove(payload){
   if(!payload?.entity_id)return;
-  state.entities=state.entities.map(e=>e.id===payload.entity_id?{...e,x:Number(payload.x),y:Number(payload.y),room_id:payload.room_id??null,floor_id:payload.floor_id??e.floor_id}:e);
-  renderTable();
+  receiveEntityChange({eventType:'UPDATE',new:payload});
 }
 function receiveRoomMove(payload){
   if(!payload?.room_id)return;
-  state.rooms=state.rooms.map(r=>r.id===payload.room_id?{...r,x:Number(payload.x),y:Number(payload.y)}:r);
-  renderTable();
+  receiveRoomChange({eventType:'UPDATE',new:{id:payload.room_id,x:payload.x,y:payload.y}});
 }
 function receiveRoomResize(payload){
   if(!payload?.room_id)return;
-  state.rooms=state.rooms.map(r=>r.id===payload.room_id?{...r,width:Number(payload.width),height:Number(payload.height)}:r);
-  renderTable();
+  receiveRoomChange({eventType:'UPDATE',new:{id:payload.room_id,width:payload.width,height:payload.height,x:payload.x,y:payload.y}});
 }
 async function broadcastScene(payload){if(!state.campaignChannel||!canEdit())return;await state.campaignChannel.send({type:"broadcast",event:"scene_change",payload:{...payload,user_id:state.user.id}});}
 async function setActiveScene(floorId,roomId=null){
@@ -469,152 +495,83 @@ function bindTableInteractions(){
   document.querySelectorAll('[data-delete-room]').forEach(b=>b.onclick=()=>deleteRoom(b.dataset.deleteRoom));
   document.querySelectorAll('[data-edit-entity]').forEach(b=>b.onclick=()=>openEntityModal(b.dataset.editEntity));
   document.querySelectorAll('[data-move-entity]').forEach(b=>b.onclick=()=>{const select=b.closest('.selectionMoveFloor')?.querySelector('[data-selected-entity-floor]');moveEntityToFloor(b.dataset.moveEntity,select?.value);});
-  document.querySelectorAll('.tokenBig').forEach(el=>{el.onpointerdown=e=>startEntityDrag(e,el);el.onclick=e=>{e.stopPropagation();state.selected={type:'entity',id:el.dataset.entityId};renderTable();};});
-  document.querySelectorAll('.room').forEach(el=>{el.onclick=e=>{if(e.target.closest('.roomResize'))return;state.selected={type:'room',id:el.dataset.roomId};renderTable();};el.onpointerdown=e=>startRoomDrag(e,el);});
+  document.querySelectorAll('.tokenBig').forEach(el=>{el.onpointerdown=e=>startEntityDrag(e,el);el.onclick=e=>{e.stopPropagation();if(el.dataset.wasDragged==='1'){el.dataset.wasDragged='';return;}state.selected={type:'entity',id:el.dataset.entityId};renderTable();};});
+  document.querySelectorAll('.room').forEach(el=>{el.onclick=e=>{if(e.target.closest('.roomResize')||e.target.closest('.rpgRoomRotateHandle'))return;state.selected={type:'room',id:el.dataset.roomId};renderTable();};el.onpointerdown=e=>startRoomDrag(e,el);});
   document.querySelectorAll('.roomResize').forEach(el=>el.onpointerdown=e=>startRoomResize(e,el.parentElement));
 }
+function clientToBoardPercent(clientX,clientY,rect){
+  return {x:Math.max(0,Math.min(100,(clientX-rect.left)/Math.max(1,rect.width)*100)),y:Math.max(0,Math.min(100,(clientY-rect.top)/Math.max(1,rect.height)*100))};
+}
 function startEntityDrag(e,el){
-  if(!canEdit()||state.tool!=='move')return;
-  e.preventDefault();
-  const id=el.dataset.entityId;
-  const current=state.entities.find(q=>q.id===id);
-  if(!current)return;
-  const board=$('board');
-  const rect=board.getBoundingClientRect();
-  const previous={x:Number(current.x),y:Number(current.y),room_id:current.room_id??null};
-  let latestX=previous.x,latestY=previous.y;
-  el.classList.add('dragging');
-
+  if(!canEdit()||state.tool!=='move'||e.button!==0)return;
+  e.preventDefault();e.stopPropagation();
+  const id=el.dataset.entityId,current=state.entities.find(q=>q.id===id);if(!current)return;
+  const board=$('board'),rect=board.getBoundingClientRect(),start=clientToBoardPercent(e.clientX,e.clientY,rect);
+  const previous={x:Number(current.x),y:Number(current.y),room_id:current.room_id??null,floor_id:current.floor_id};
+  const grabOffset={x:start.x-previous.x,y:start.y-previous.y};
+  let latestX=previous.x,latestY=previous.y,finished=false;
+  el.classList.add('dragging');el.dataset.wasDragged='1';el.setPointerCapture?.(e.pointerId);
+  const cleanup=()=>{if(finished)return;finished=true;try{el.releasePointerCapture?.(e.pointerId)}catch(_){}el.classList.remove('dragging');el.removeEventListener('pointermove',move);el.removeEventListener('pointerup',up);el.removeEventListener('pointercancel',cancel);};
   const move=ev=>{
-    const rawX=Math.max(3,Math.min(97,((ev.clientX-rect.left)/rect.width)*100));
-    const rawY=Math.max(7,Math.min(93,((ev.clientY-rect.top)/rect.height)*100));
-    const snapped=typeof window.rpgSnapPoint==='function'?window.rpgSnapPoint(rawX,rawY):{x:rawX,y:rawY};
-    const x=snapped.x, y=snapped.y;
-    latestX=x; latestY=y;
-    const room=roomAtPosition(x,y,current.floor_id||state.floor);
-    state.entities=state.entities.map(item=>item.id===id?{...item,x,y,room_id:room?.id||null}:item);
-    el.style.left=x+'%';
-    el.style.top=y+'%';
-    el.dataset.x=x;
-    el.dataset.y=y;
-  };
-
-  const up=async()=>{
-    document.removeEventListener('pointermove',move);
-    el.classList.remove('dragging');
+    const raw=clientToBoardPercent(ev.clientX,ev.clientY,rect),target={x:raw.x-grabOffset.x,y:raw.y-grabOffset.y};
+    const snapped=window.rpgSnapPoint?window.rpgSnapPoint(target.x,target.y):target;
+    latestX=Math.max(1,Math.min(99,snapped.x));latestY=Math.max(1,Math.min(99,snapped.y));
     const room=roomAtPosition(latestX,latestY,current.floor_id||state.floor);
+    state.entities=state.entities.map(item=>item.id===id?{...item,x:latestX,y:latestY,room_id:room?.id||null}:item);
+    el.style.left=latestX+'%';el.style.top=latestY+'%';
+  };
+  const up=async()=>{
+    cleanup();const room=roomAtPosition(latestX,latestY,current.floor_id||state.floor);
     const {data,error}=await sb.from('world_entities').update({x:latestX,y:latestY,room_id:room?.id||null}).eq('id',id).select().single();
-    if(error){
-      state.entities=state.entities.map(item=>item.id===id?{...item,...previous}:item);
-      toast(error.message,'error');
-      renderTable();
-      return;
-    }
+    if(error){state.entities=state.entities.map(item=>item.id===id?{...item,...previous}:item);renderTable();toast(error.message||'Não foi possível salvar a posição.','error');return;}
     state.entities=state.entities.map(item=>item.id===id?data:item);
     await broadcastEntityMove({entity_id:id,x:latestX,y:latestY,room_id:room?.id||null,floor_id:current.floor_id});
     setSave(room?'Entidade posicionada em '+room.name:'Posição da entidade salva');
   };
-
-  document.addEventListener('pointermove',move);
-  document.addEventListener('pointerup',up,{once:true});
+  const cancel=()=>{cleanup();state.entities=state.entities.map(item=>item.id===id?{...item,...previous}:item);renderTable();};
+  el.addEventListener('pointermove',move);el.addEventListener('pointerup',up,{once:true});el.addEventListener('pointercancel',cancel,{once:true});
 }
 function rotatedRoomInsets(room){
   const w=Number(room?.width)||0,h=Number(room?.height)||0,deg=Number(room?.rotation)||0,rad=Math.abs(deg)*Math.PI/180;
-  const bboxW=Math.abs(w*Math.cos(rad))+Math.abs(h*Math.sin(rad));
-  const bboxH=Math.abs(w*Math.sin(rad))+Math.abs(h*Math.cos(rad));
+  const bboxW=Math.abs(w*Math.cos(rad))+Math.abs(h*Math.sin(rad)),bboxH=Math.abs(w*Math.sin(rad))+Math.abs(h*Math.cos(rad));
   return {x:Math.max(0,(bboxW-w)/2),y:Math.max(0,(bboxH-h)/2)};
 }
 function constrainRoomPosition(room,x,y){
-  const i=rotatedRoomInsets(room);
-  return {
-    x:Math.max(i.x,Math.min(100-Number(room.width)-i.x,x)),
-    y:Math.max(i.y,Math.min(100-Number(room.height)-i.y,y))
-  };
+  const i=rotatedRoomInsets(room),maxX=Math.max(i.x,100-Number(room.width)-i.x),maxY=Math.max(i.y,100-Number(room.height)-i.y);
+  return {x:Math.max(i.x,Math.min(maxX,x)),y:Math.max(i.y,Math.min(maxY,y))};
 }
 function startRoomDrag(e,el){
-  if(!canEdit()||state.tool!=='move'||e.target.closest('.roomResize'))return;
-  e.preventDefault();
-  e.stopPropagation();
-  const r=state.rooms.find(x=>x.id===el.dataset.roomId);
-  if(!r)return;
-  const board=$('board');
-  const rect=board.getBoundingClientRect();
-  const sx=e.clientX,sy=e.clientY,ox=Number(r.x),oy=Number(r.y);
-  const previous={x:ox,y:oy};
-  let latestX=ox,latestY=oy;
-
+  if(!canEdit()||state.tool!=='move'||e.target.closest('.roomResize')||e.target.closest('.rpgRoomRotateHandle'))return;
+  e.preventDefault();e.stopPropagation();
+  const r=state.rooms.find(x=>x.id===el.dataset.roomId);if(!r)return;
+  const board=$('board'),rect=board.getBoundingClientRect(),click=clientToBoardPercent(e.clientX,e.clientY,rect),ox=Number(r.x),oy=Number(r.y),grabOffset={x:click.x-ox,y:click.y-oy},previous={x:ox,y:oy};
+  let latestX=ox,latestY=oy,finished=false;el.classList.add('dragging');el.setPointerCapture?.(e.pointerId);
+  const cleanup=()=>{if(finished)return;finished=true;try{el.releasePointerCapture?.(e.pointerId)}catch(_){}el.classList.remove('dragging');el.removeEventListener('pointermove',move);el.removeEventListener('pointerup',up);el.removeEventListener('pointercancel',cancel);};
   const move=ev=>{
-    const rawX=ox+((ev.clientX-sx)/rect.width)*100;
-    const rawY=oy+((ev.clientY-sy)/rect.height)*100;
-    const snapped=typeof window.rpgSnapPoint==='function'?window.rpgSnapPoint(rawX,rawY):{x:rawX,y:rawY};
-    const constrained=constrainRoomPosition(r,snapped.x,snapped.y);
-    latestX=constrained.x;
-    latestY=constrained.y;
-    state.rooms=state.rooms.map(item=>item.id===r.id?{...item,x:latestX,y:latestY}:item);
-    el.style.left=latestX+'%';
-    el.style.top=latestY+'%';
-    el.dataset.x=latestX;
-    el.dataset.y=latestY;
+    const p=clientToBoardPercent(ev.clientX,ev.clientY,rect),raw={x:p.x-grabOffset.x,y:p.y-grabOffset.y},snapped=window.rpgSnapPoint?window.rpgSnapPoint(raw.x,raw.y):raw;
+    const constrained=constrainRoomPosition({...r,x:latestX,y:latestY},snapped.x,snapped.y);latestX=constrained.x;latestY=constrained.y;
+    state.rooms=state.rooms.map(item=>item.id===r.id?{...item,x:latestX,y:latestY}:item);el.style.left=latestX+'%';el.style.top=latestY+'%';
   };
-
-  const up=async()=>{
-    document.removeEventListener('pointermove',move);
-    const {data,error}=await sb.from('rooms').update({x:latestX,y:latestY}).eq('id',r.id).select().single();
-    if(error){
-      state.rooms=state.rooms.map(item=>item.id===r.id?{...item,...previous}:item);
-      toast(error.message,'error');
-      renderTable();
-      return;
-    }
-    state.rooms=state.rooms.map(item=>item.id===r.id?data:item);
-    await broadcastRoomMove({room_id:r.id,x:latestX,y:latestY});
-    setSave('Cômodo reposicionado');
-  };
-
-  document.addEventListener('pointermove',move);
-  document.addEventListener('pointerup',up,{once:true});
+  const up=async()=>{cleanup();const {data,error}=await sb.from('rooms').update({x:latestX,y:latestY}).eq('id',r.id).select().single();if(error){state.rooms=state.rooms.map(item=>item.id===r.id?{...item,...previous}:item);renderTable();toast(error.message||'Não foi possível salvar a posição.','error');return;}state.rooms=state.rooms.map(item=>item.id===r.id?data:item);await broadcastRoomMove({room_id:r.id,x:latestX,y:latestY});setSave('Cômodo reposicionado');};
+  const cancel=()=>{cleanup();state.rooms=state.rooms.map(item=>item.id===r.id?{...item,...previous}:item);renderTable();};
+  el.addEventListener('pointermove',move);el.addEventListener('pointerup',up,{once:true});el.addEventListener('pointercancel',cancel,{once:true});
 }
 function startRoomResize(e,el){
   if(!canEdit()||state.tool!=='move')return;
-  e.preventDefault();
-  e.stopPropagation();
-  const r=state.rooms.find(x=>x.id===el.dataset.roomId);
-  if(!r)return;
-  const board=$('board');
-  const rect=board.getBoundingClientRect();
-  const sx=e.clientX,sy=e.clientY,ow=Number(r.width),oh=Number(r.height);
-  const previous={width:ow,height:oh};
-  let latestW=ow,latestH=oh;
-
+  e.preventDefault();e.stopPropagation();
+  const r=state.rooms.find(x=>x.id===el.dataset.roomId);if(!r)return;
+  const board=$('board'),rect=board.getBoundingClientRect(),sx=e.clientX,sy=e.clientY,ow=Number(r.width),oh=Number(r.height),previous={x:Number(r.x),y:Number(r.y),width:ow,height:oh};
+  let latestW=ow,latestH=oh,latestX=previous.x,latestY=previous.y,finished=false;el.setPointerCapture?.(e.pointerId);el.classList.add('resizing');
+  const cleanup=()=>{if(finished)return;finished=true;try{el.releasePointerCapture?.(e.pointerId)}catch(_){}el.classList.remove('resizing');el.removeEventListener('pointermove',move);el.removeEventListener('pointerup',up);el.removeEventListener('pointercancel',cancel);};
   const move=ev=>{
-    const rawW=Math.max(10,Math.min(85,ow+((ev.clientX-sx)/rect.width)*100));
-    const rawH=Math.max(8,Math.min(75,oh+((ev.clientY-sy)/rect.height)*100));
-    const snapped=typeof window.rpgSnapSize==='function'?window.rpgSnapSize(rawW,rawH):{width:rawW,height:rawH};
-    latestW=Math.min(85,Math.max(10,snapped.width));
-    latestH=Math.min(75,Math.max(8,snapped.height));
-    state.rooms=state.rooms.map(item=>item.id===r.id?{...item,width:latestW,height:latestH}:item);
-    el.style.width=latestW+'%';
-    el.style.height=latestH+'%';
-    el.dataset.w=latestW;
-    el.dataset.h=latestH;
+    const rawW=Math.max(5,Math.min(90,ow+(ev.clientX-sx)/Math.max(1,rect.width)*100)),rawH=Math.max(5,Math.min(90,oh+(ev.clientY-sy)/Math.max(1,rect.height)*100)),snapped=window.rpgSnapSize?window.rpgSnapSize(rawW,rawH):{width:rawW,height:rawH};
+    latestW=Math.max(5,Math.min(90,snapped.width));latestH=Math.max(5,Math.min(90,snapped.height));
+    const constrained=constrainRoomPosition({...r,width:latestW,height:latestH},latestX,latestY);latestX=constrained.x;latestY=constrained.y;
+    state.rooms=state.rooms.map(item=>item.id===r.id?{...item,width:latestW,height:latestH,x:latestX,y:latestY}:item);el.style.width=latestW+'%';el.style.height=latestH+'%';el.style.left=latestX+'%';el.style.top=latestY+'%';
   };
-
-  const up=async()=>{
-    document.removeEventListener('pointermove',move);
-    const {data,error}=await sb.from('rooms').update({width:latestW,height:latestH}).eq('id',r.id).select().single();
-    if(error){
-      state.rooms=state.rooms.map(item=>item.id===r.id?{...item,...previous}:item);
-      toast(error.message,'error');
-      renderTable();
-      return;
-    }
-    state.rooms=state.rooms.map(item=>item.id===r.id?data:item);
-    await broadcastRoomResize({room_id:r.id,width:latestW,height:latestH});
-    setSave('Área do cômodo salva');
-  };
-
-  document.addEventListener('pointermove',move);
-  document.addEventListener('pointerup',up,{once:true});
+  const up=async()=>{cleanup();const {data,error}=await sb.from('rooms').update({width:latestW,height:latestH,x:latestX,y:latestY}).eq('id',r.id).select().single();if(error){state.rooms=state.rooms.map(item=>item.id===r.id?{...item,...previous}:item);renderTable();toast(error.message||'Não foi possível salvar o tamanho.','error');return;}state.rooms=state.rooms.map(item=>item.id===r.id?data:item);await broadcastRoomResize({room_id:r.id,width:latestW,height:latestH,x:latestX,y:latestY});setSave('Área do cômodo salva');};
+  const cancel=()=>{cleanup();state.rooms=state.rooms.map(item=>item.id===r.id?{...item,...previous}:item);renderTable();};
+  el.addEventListener('pointermove',move);el.addEventListener('pointerup',up,{once:true});el.addEventListener('pointercancel',cancel,{once:true});
 }
 function applyZoom(){
   const board=$('board');
@@ -2016,8 +1973,8 @@ $('mobileJoinCampaignBtn')?.addEventListener('click',openJoinCampaignModal);
 $('mobileCampaignSelect')?.addEventListener('change',async()=>{state.campaign=state.campaigns.find(c=>c.id===$('mobileCampaignSelect').value)||null;state.floor=null;state.selected=null;await loadCampaignData();});
 $('newCampaignBtn').onclick=()=>{if(!canCreateCampaign()){toast('Somente contas Mestre podem criar campanhas. O tipo de conta é administrativo.','error');return;}openCampaignCreate(false);}; $('openSessionsBtn').onclick=()=>{state.view='sessions';renderView();}; $('openDiceBtn').onclick=()=>{state.view='dice';renderView();renderDice();setTimeout(wireAudioControls,0);};
 $('newRoomBtn').onclick=()=>{if(requireMaster())openRoomModal();};
-$('structureBtn').onclick=()=>{state.tool=state.tool==='draw'?'move':'draw';$('structureBtn').classList.toggle('chosen',state.tool==='draw');$('moveBtn').classList.toggle('chosen',state.tool==='move');$('board').classList.toggle('drawing',state.tool==='draw');$('boardHint').textContent=state.tool==='draw'?'Clique e arraste para desenhar um novo cômodo':'Arraste entidades e cômodos para reposicionar';};
-$('moveBtn').onclick=()=>{state.tool='move';$('moveBtn').classList.add('chosen');$('structureBtn').classList.remove('chosen');$('board').classList.remove('drawing');};
+$('structureBtn').onclick=()=>{if(state.tool==='draw'){state.tool='move';window.rpgVttSetTool?.('move');}else{state.tool='draw';window.rpgVttSetTool?.('move');}$('structureBtn').classList.toggle('chosen',state.tool==='draw');$('moveBtn').classList.toggle('chosen',state.tool==='move');$('board').classList.toggle('drawing',state.tool==='draw');$('boardHint').textContent=state.tool==='draw'?'Clique e arraste para desenhar um novo cômodo':'Arraste entidades e cômodos para reposicionar';};
+$('moveBtn').onclick=()=>{state.tool='move';window.rpgVttSetTool?.('move');$('moveBtn').classList.add('chosen');$('structureBtn').classList.remove('chosen');$('board').classList.remove('drawing');$('boardHint').textContent='Arraste entidades e cômodos para reposicionar';};
 $('zoomIn').onclick=()=>{state.zoom=Math.min(200,state.zoom+10);applyZoom();};
 $('zoomOut').onclick=()=>{state.zoom=Math.max(75,state.zoom-10);applyZoom();};
 $('characterFieldsBtn')?.addEventListener('click',openCharacterFieldConfig);
@@ -2050,53 +2007,15 @@ function wireAudioControls(){
 }
 $('modalBackdrop').addEventListener('click',e=>{if(e.target===$('modalBackdrop'))closeModal();});document.addEventListener('click',e=>{if(e.target.closest('[data-close]'))closeModal();});
 
-// Drawing tool: create a room with a real pointer capture and grid-aware geometry.
+// Drawing tool: create a room without competing with the advanced VTT tools.
 let drawStart=null,drawPointerId=null,drawPreview=null;
-function drawPoint(e){
-  const board=$('board');const r=board.getBoundingClientRect();
-  return {x:Math.max(0,Math.min(100,(e.clientX-r.left)/r.width*100)),y:Math.max(0,Math.min(100,(e.clientY-r.top)/r.height*100))};
-}
-function updateDrawPreview(p){
-  const board=$('board');if(!drawPreview)return;
-  const x=Math.min(drawStart.x,p.x),y=Math.min(drawStart.y,p.y),w=Math.abs(p.x-drawStart.x),h=Math.abs(p.y-drawStart.y);
-  drawPreview.style.left=x+'%';drawPreview.style.top=y+'%';drawPreview.style.width=w+'%';drawPreview.style.height=h+'%';
-}
-$('board').addEventListener('pointerdown',e=>{
-  if(state.tool!=='draw'||!canEdit()||e.button!==0||e.target.closest('.tokenBig')||e.target.closest('.room')||e.target.closest('.rpgVttOverlay'))return;
-  e.preventDefault();
-  drawPointerId=e.pointerId;drawStart=drawPoint(e);
-  drawPreview=document.createElement('div');
-  drawPreview.className='rpgRoomDrawPreview';
-  drawPreview.style.left=drawStart.x+'%';drawPreview.style.top=drawStart.y+'%';
-  $('board').appendChild(drawPreview);
-  $('board').setPointerCapture?.(e.pointerId);
-},true);
-$('board').addEventListener('pointermove',e=>{
-  if(state.tool!=='draw'||drawPointerId!==e.pointerId||!drawStart)return;
-  updateDrawPreview(drawPoint(e));
-},true);
-async function finishDraw(e){
-  if(!drawStart||drawPointerId!==e.pointerId)return;
-  const p=drawPoint(e),s=drawStart;
-  drawStart=null;drawPointerId=null;drawPreview?.remove();drawPreview=null;
-  const x=Math.min(s.x,p.x),y=Math.min(s.y,p.y),width=Math.max(5,Math.abs(p.x-s.x)),height=Math.max(5,Math.abs(p.y-s.y));
-  if(width<5||height<5)return;
-  window.__roomGeom={x,y,width,height};
-  openRoomModal();
-  setTimeout(()=>{
-    const g=window.__roomGeom;
-    if(!g)return;
-    $('roomX').value=g.x.toFixed(2);$('roomY').value=g.y.toFixed(2);
-    $('roomW').value=g.width.toFixed(2);$('roomH').value=g.height.toFixed(2);
-    window.__roomGeom=null;
-    if(typeof window.rpgSnapRoomGeometry==='function')window.rpgSnapRoomGeometry();
-  },0);
-}
-$('board').addEventListener('pointerup',e=>{finishDraw(e)},true);
-$('board').addEventListener('pointercancel',e=>{
-  if(drawPointerId===e.pointerId){drawStart=null;drawPointerId=null;drawPreview?.remove();drawPreview=null;}
-},true);
-function openRoomModalWithGeometry(g){window.__roomGeom=g;openRoomModal();setTimeout(()=>{if(window.__roomGeom){$('roomX').value=g.x.toFixed(2);$('roomY').value=g.y.toFixed(2);$('roomW').value=g.width.toFixed(2);$('roomH').value=g.height.toFixed(2);window.__roomGeom=null;}},0);}
+function drawPoint(e){const board=$('board');return clientToBoardPercent(e.clientX,e.clientY,board.getBoundingClientRect());}
+function updateDrawPreview(p){if(!drawPreview)return;const x=Math.min(drawStart.x,p.x),y=Math.min(drawStart.y,p.y),w=Math.abs(p.x-drawStart.x),h=Math.abs(p.y-drawStart.y);drawPreview.style.left=x+'%';drawPreview.style.top=y+'%';drawPreview.style.width=w+'%';drawPreview.style.height=h+'%';}
+$('board').addEventListener('pointerdown',e=>{if(state.tool!=='draw'||!canEdit()||e.button!==0||e.target.closest('.tokenBig')||e.target.closest('.room')||e.target.closest('.rpgVttOverlay'))return;e.preventDefault();drawPointerId=e.pointerId;drawStart=drawPoint(e);drawPreview=document.createElement('div');drawPreview.className='rpgRoomDrawPreview';drawPreview.style.left=drawStart.x+'%';drawPreview.style.top=drawStart.y+'%';$('board').appendChild(drawPreview);$('board').setPointerCapture?.(e.pointerId);},true);
+$('board').addEventListener('pointermove',e=>{if(state.tool!=='draw'||drawPointerId!==e.pointerId||!drawStart)return;updateDrawPreview(drawPoint(e));},true);
+async function finishDraw(e){if(!drawStart||drawPointerId!==e.pointerId)return;const p=drawPoint(e),s=drawStart,w=Math.abs(p.x-s.x),h=Math.abs(p.y-s.y);drawStart=null;drawPointerId=null;try{$('board').releasePointerCapture?.(e.pointerId)}catch(_){}drawPreview?.remove();drawPreview=null;if(w<2.5||h<2.5){state.tool='move';window.rpgVttSetTool?.('move');$('moveBtn').click();return;}window.__roomGeom={x:Math.min(s.x,p.x),y:Math.min(s.y,p.y),width:Math.max(5,w),height:Math.max(5,h)};openRoomModal();setTimeout(()=>{const g=window.__roomGeom;if(!g)return;$('roomX').value=g.x.toFixed(2);$('roomY').value=g.y.toFixed(2);$('roomW').value=g.width.toFixed(2);$('roomH').value=g.height.toFixed(2);window.__roomGeom=null;window.rpgSnapRoomGeometry?.();},0);}
+$('board').addEventListener('pointerup',finishDraw,true);
+$('board').addEventListener('pointercancel',e=>{if(drawPointerId===e.pointerId){drawStart=null;drawPointerId=null;drawPreview?.remove();drawPreview=null;}},true);
 const originalOpenRoom=openRoomModal;
 
 boot();
