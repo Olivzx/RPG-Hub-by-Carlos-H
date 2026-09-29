@@ -293,7 +293,7 @@
       equipmentByCharacter[characterId]=q.data||[];return equipmentByCharacter[characterId];
     };
     const equipmentMods=items=>items.reduce((a,x)=>{const m=x.metadata&&typeof x.metadata==='object'?x.metadata:{};return{attack:a.attack+Number(m.attack_bonus||0),damage:a.damage+Number(m.damage_bonus||0),ac:a.ac+Number(m.ac_bonus||0),damageType:m.damage_type||a.damageType}}, {attack:0,damage:0,ac:0,damageType:''});
-    const sync=async()=>{const t=cs.combatants.find(x=>x.id===$('atkTarget').value),from=cs.combatants.find(x=>x.id===$('atkFrom').value);$('atkAc').value=t?defenseFor(t):10;const mods=equipmentMods(await loadEquipment(from?.character_id));$('atkBonus').value=mods.attack; if(mods.damageType&&$('atkType').value==='físico')$('atkType').value=mods.damageType;};
+    let sync=async()=>{const t=cs.combatants.find(x=>x.id===$('atkTarget').value),from=cs.combatants.find(x=>x.id===$('atkFrom').value);$('atkAc').value=t?defenseFor(t):10;const mods=equipmentMods(await loadEquipment(from?.character_id));$('atkBonus').value=mods.attack; if(mods.damageType&&$('atkType').value==='físico')$('atkType').value=mods.damageType;};
     $('atkTarget').onchange=()=>sync();$('atkFrom').onchange=()=>sync();sync();
     const baseSync=sync; sync=async()=>{const t=cs.combatants.find(x=>x.id===$('atkTarget').value),from=cs.combatants.find(x=>x.id===$('atkFrom').value);const tm=equipmentMods(await loadEquipment(t?.character_id));const fm=equipmentMods(await loadEquipment(from?.character_id));$('atkAc').value=t?defenseFor(t)+tm.ac:10;$('atkBonus').value=fm.attack;if(fm.damageType&&$('atkType').value==='físico')$('atkType').value=fm.damageType;}; sync();
     $('atkRoll').onclick=async()=>{
