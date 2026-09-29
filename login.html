@@ -60,7 +60,7 @@
       <div class="authTabs"><button id="loginTab" class="active" type="button">Entrar</button><button id="registerTab" type="button">Criar conta</button></div>
       <form id="authForm">
         <label id="displayNameField" class="hidden">Nome de exibição<input id="displayName" maxlength="80" placeholder="Como você quer aparecer na mesa?"></label>
-        <label id="accountTypeField" class="hidden">Tipo de conta<select id="accountType" disabled><option value="player" selected>Jogador</option></select></label>
+        <label id="accountTypeField" class="hidden">Tipo de conta<select id="accountType"><option value="player" selected>Jogador</option><option value="master">Mestre</option></select><small>Você pode mudar esse tipo depois, no perfil.</small></label>
         <label>E-mail<input id="email" type="email" autocomplete="email" required placeholder="voce@email.com"></label>
         <label>Senha<input id="password" type="password" autocomplete="current-password" minlength="6" required placeholder="••••••••"></label>
         <button class="primaryButton full" id="submitBtn" type="submit"><span id="submitText">Entrar</span><span>→</span></button>
