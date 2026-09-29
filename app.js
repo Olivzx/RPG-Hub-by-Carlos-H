@@ -1061,8 +1061,9 @@ function openLocationCreateModal(){
   $('createLocation').onclick=async()=>{
     try{
       const name=$('locName').value.trim();if(!name){toast('Informe o nome do local.','error');$('locName').focus();return;}
-      const {data,error}=await sb.from('locations').insert({campaign_id:state.campaign.id,name,location_type:$('locType').value,description:$('locDesc').value.trim(),image_url:$('locImage').value.trim()||null,notes:$('locNotes').value.trim()||null,created_by:state.user.id,sort_order:state.locations.length}).select().single();
+      const {data,error}=await sb.from('locations').insert({campaign_id:state.campaign.id,name,location_type:$('locType').value,description:$('locDesc').value.trim(),image_url:$('locImage').value.trim()||null,notes:$('locNotes').value.trim()||null,created_by:state.user.id,sort_order:state.locations.length}).select().maybeSingle();
       if(error)throw error;
+      if(!data)throw new Error('O servidor não confirmou a criação do local.');
       state.locations.push(data);state.location=data;closeModal();renderAll();toast('Local criado');
     }catch(e){toast(e.message||'Não foi possível criar o local.','error');}
   };
@@ -1083,8 +1084,8 @@ function openLocationModal(id){
   $('saveLocation').onclick=async()=>{
     try{
       const name=$('locName').value.trim();if(!name){toast('Informe o nome do local.','error');return;}
-      const {data,error}=await sb.from('locations').update({name,location_type:$('locType').value,description:$('locDesc').value.trim(),image_url:$('locImage').value.trim()||null,notes:$('locNotes').value.trim()||null}).eq('id',id).select().single();
-      if(error)throw error;state.locations=state.locations.map(x=>x.id===id?data:x);if(state.location?.id===id)state.location=data;closeModal();renderAll();toast('Local atualizado');
+      const {data,error}=await sb.from('locations').update({name,location_type:$('locType').value,description:$('locDesc').value.trim(),image_url:$('locImage').value.trim()||null,notes:$('locNotes').value.trim()||null}).eq('id',id).select().maybeSingle();
+      if(error)throw error;if(!data)throw new Error('O servidor não confirmou a atualização do local.');state.locations=state.locations.map(x=>x.id===id?data:x);if(state.location?.id===id)state.location=data;closeModal();renderAll();toast('Local atualizado');
     }catch(e){toast(e.message||'Não foi possível atualizar o local.','error');}
   };
 }
@@ -1142,8 +1143,9 @@ function openFloorModal(id,locationId){
       if(!selectedLocation){toast('Selecione o local/cenário do andar.','error');$('floorLocation').focus();return;}
       const floorNumber=readWorldInteger('floorNum','Número do andar',-50,100);
       const payload={location_id:selectedLocation,name,floor_number:floorNumber,description:$('floorDesc').value.trim(),notes:$('floorNotes').value.trim()||null,sort_order:floor?.sort_order??state.floors.filter(x=>x.location_id===selectedLocation).length};
-      const result=f?await sb.from('floors').update(payload).eq('id',f.id).select().single():await sb.from('floors').insert(payload).select().single();
+      const result=f?await sb.from('floors').update(payload).eq('id',f.id).select().maybeSingle():await sb.from('floors').insert(payload).select().maybeSingle();
       if(result.error)throw result.error;
+      if(!result.data)throw new Error('O servidor não confirmou o andar.');
       if(f)state.floors=state.floors.map(x=>x.id===f.id?result.data:x);else state.floors.push(result.data);
       state.floor=result.data.id;state.location=state.locations.find(x=>x.id===selectedLocation)||state.location;closeModal();renderAll();toast(floor?'Andar atualizado':'Andar criado');
     }catch(e){toast(e.message||'Não foi possível salvar o andar.','error');}
@@ -1259,9 +1261,10 @@ async function saveCampaignChronicle(){
     save?.setAttribute('disabled','disabled');if(save)save.textContent='Salvando…';
     const payload={campaign_id:state.campaign.id,content:field.value,updated_by:state.user.id,updated_at:new Date().toISOString()};
     const result=state.campaignChronicle?.campaign_id===state.campaign.id
-      ?await sb.from('campaign_chronicles').update({content:payload.content,updated_by:payload.updated_by}).eq('campaign_id',state.campaign.id).select('*').single()
-      :await sb.from('campaign_chronicles').insert(payload).select('*').single();
+      ?await sb.from('campaign_chronicles').update({content:payload.content,updated_by:payload.updated_by}) .eq('campaign_id',state.campaign.id).select('*').maybeSingle()
+      :await sb.from('campaign_chronicles').insert(payload).select('*').maybeSingle();
     if(result.error)throw result.error;
+    if(!result.data)throw new Error('O servidor não confirmou a crônica.');
     state.campaignChronicle=result.data;
     renderChronicle();
     setSave('Crônica da mesa salva');toast('História da mesa salva');
@@ -2329,8 +2332,9 @@ function openSessionModal(id){
       const title=$('sessTitle').value.trim();
       if(!title){toast('Informe o título da sessão.','error');$('sessTitle').focus();return;}
       const payload={campaign_id:state.campaign.id,session_number:Number($('sessNumber').value)||next,title,summary:$('sessSummary').value.trim(),history:$('sessHistory').value.trim(),starts_at:$('sessStarts').value?new Date($('sessStarts').value).toISOString():null,status:$('sessStatus').value,created_by:s?s.created_by:state.user.id};
-      const result=s?await sb.from('sessions').update(payload).eq('id',s.id).select().single():await sb.from('sessions').insert(payload).select().single();
+      const result=s?await sb.from('sessions').update(payload).eq('id',s.id).select().maybeSingle():await sb.from('sessions').insert(payload).select().maybeSingle();
       if(result.error)throw result.error;
+      if(!result.data)throw new Error('O servidor não confirmou a sessão.');
       if(s)state.sessions=state.sessions.map(x=>x.id===s.id?result.data:x);else state.sessions.push(result.data);
       state.selectedSessionId=result.data.id;closeModal();await subscribeRealtime();renderAll();toast(s?'Sessão atualizada':'Sessão criada');
     }catch(e){toast(e.message||'Não foi possível salvar a sessão.','error');}
@@ -2338,7 +2342,7 @@ function openSessionModal(id){
 }
 async function activateSession(id){if(!id)return;const session=state.sessions.find(x=>x.id===id);if(!session)return;state.selectedSessionId=id;state.floor=session.active_floor_id||state.floor;state.selected=session.active_room_id?{type:'room',id:session.active_room_id}:null;state.tool='move';window.rpgVttSetTool?.('move');window.rpgVttContextChanged?.();const af=state.floors.find(f=>f.id===state.floor);if(af)state.location=state.locations.find(l=>l.id===af.location_id)||state.location;renderAll();await subscribeRealtime();toast(`Sessão #${session.session_number} aberta`);}
 
-function openNpcModal(id){if(!requireMaster())return;const n=id?state.npcs.find(x=>x.id===id):null;const v=n||{name:'',description:'',notes_private:'',avatar_url:'',data:{}};showModal(`<div class="modalHeader"><div><div class="eyebrow">BESTIÁRIO</div><h3>${n?'Editar entidade':'Novo NPC / monstro'}</h3></div><button class="closeButton" data-close>×</button></div><label>Nome<input id="npcName" value="${escapeHtml(v.name)}"></label><label>Descrição<textarea id="npcDesc" rows="4">${escapeHtml(v.description||'')}</textarea></label><label>Notas privadas do mestre<textarea id="npcNotes" rows="5">${escapeHtml(v.notes_private||'')}</textarea></label><label>Avatar URL<input id="npcAvatar" value="${escapeHtml(v.avatar_url||'')}" placeholder="https://..."></label><label>Avatar do NPC<input id="npcFile" type="file" accept="image/*"></label><label>Dados / ficha (JSON)<textarea id="npcData" rows="6">${escapeHtml(JSON.stringify(v.data||{},null,2))}</textarea></label><div class="modalActions"><button class="softButton" data-close>Cancelar</button><button id="saveNpc" class="primarySmall">Salvar</button></div>`);$('saveNpc').onclick=async()=>{try{const payload={campaign_id:state.campaign.id,name:$('npcName').value.trim(),description:$('npcDesc').value.trim(),notes_private:$('npcNotes').value.trim(),avatar_url:$('npcAvatar').value.trim()||null,data:JSON.parse($('npcData').value||'{}')};if(!payload.name)throw new Error('Informe o nome.');const file=$('npcFile').files[0];if(file)payload.avatar_url=await uploadMedia(file,`npcs/${uid()}`);const result=n?await sb.from('npcs').update(payload).eq('id',n.id).select().single():await sb.from('npcs').insert(payload).select().single();if(result.error)throw result.error;if(n)state.npcs=state.npcs.map(x=>x.id===n.id?result.data:x);else state.npcs.push(result.data);closeModal();renderAll();toast('NPC salvo');}catch(e){toast(e.message,'error');}};}
+function openNpcModal(id){if(!requireMaster())return;const n=id?state.npcs.find(x=>x.id===id):null;const v=n||{name:'',description:'',notes_private:'',avatar_url:'',data:{}};showModal(`<div class="modalHeader"><div><div class="eyebrow">BESTIÁRIO</div><h3>${n?'Editar entidade':'Novo NPC / monstro'}</h3></div><button class="closeButton" data-close>×</button></div><label>Nome<input id="npcName" value="${escapeHtml(v.name)}"></label><label>Descrição<textarea id="npcDesc" rows="4">${escapeHtml(v.description||'')}</textarea></label><label>Notas privadas do mestre<textarea id="npcNotes" rows="5">${escapeHtml(v.notes_private||'')}</textarea></label><label>Avatar URL<input id="npcAvatar" value="${escapeHtml(v.avatar_url||'')}" placeholder="https://..."></label><label>Avatar do NPC<input id="npcFile" type="file" accept="image/*"></label><label>Dados / ficha (JSON)<textarea id="npcData" rows="6">${escapeHtml(JSON.stringify(v.data||{},null,2))}</textarea></label><div class="modalActions"><button class="softButton" data-close>Cancelar</button><button id="saveNpc" class="primarySmall">Salvar</button></div>`);$('saveNpc').onclick=async()=>{try{const payload={campaign_id:state.campaign.id,name:$('npcName').value.trim(),description:$('npcDesc').value.trim(),notes_private:$('npcNotes').value.trim(),avatar_url:$('npcAvatar').value.trim()||null,data:JSON.parse($('npcData').value||'{}')};if(!payload.name)throw new Error('Informe o nome.');const file=$('npcFile').files[0];if(file)payload.avatar_url=await uploadMedia(file,`npcs/${uid()}`);const result=n?await sb.from('npcs').update(payload).eq('id',n.id).select().maybeSingle():await sb.from('npcs').insert(payload).select().maybeSingle();if(result.error)throw result.error;if(!result.data)throw new Error('O servidor não confirmou o NPC.');if(n)state.npcs=state.npcs.map(x=>x.id===n.id?result.data:x);else state.npcs.push(result.data);closeModal();renderAll();toast('NPC salvo');}catch(e){toast(e.message,'error');}};}
 
 async function addCharacterToBoard(id){
   if(!requireMaster())return;
