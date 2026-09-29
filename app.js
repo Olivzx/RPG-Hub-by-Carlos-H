@@ -929,8 +929,23 @@ async function saveCampaignChronicle(){
 }
 
 function renderNpcs(){
-  $('npcsGrid').innerHTML=state.npcs.map(n=>`<article class="dataCard"><div class="cardAvatar npc">${n.avatar_url?`<img src="${escapeHtml(n.avatar_url)}" alt="">`:'♜'}</div><div class="dataCardMain"><div class="cardKicker">NPC / MONSTRO</div><h3>${escapeHtml(n.name)}</h3><p>${escapeHtml(n.description||'Sem descrição')}</p><small class="privateNote">Anotação do mestre: ${escapeHtml(n.notes_private||'—')}</small></div><div class="cardActions"><button data-edit-npc="${n.id}">Editar</button>${canEdit()?`<button class="softButton" data-add-npc="${n.id}">${state.entities.some(e=>e.npc_id===n.id)?'Na mesa':'Colocar na mesa'}</button>`:''}</div></article>`).join('') || '<div class="emptyPanel">Nenhum NPC ou monstro cadastrado.</div>';
-  document.querySelectorAll('[data-edit-npc]').forEach(b=>b.onclick=()=>openNpcModal(b.dataset.editNpc));document.querySelectorAll('[data-add-npc]').forEach(b=>b.onclick=()=>addNpcToBoard(b.dataset.addNpc));
+  $('npcsGrid').innerHTML=state.npcs.map(n=>{
+    const isMonster=n.npc_type==='monster';
+    return '<article class="dataCard">'+
+      '<div class="cardAvatar npc">'+(n.avatar_url?'<img src="'+escapeHtml(n.avatar_url)+'" alt="">':'♜')+'</div>'+
+      '<div class="dataCardMain">'+
+        '<div class="cardKicker">'+(isMonster?'MONSTRO':'NPC')+'</div>'+
+        '<h3>'+escapeHtml(n.name)+'</h3>'+
+        '<p>'+escapeHtml(n.description||'Sem descrição')+'</p>'+
+        '<small class="privateNote">Tipo: '+(isMonster?'Monstro':'NPC')+' · Anotação do mestre: '+escapeHtml(n.notes_private||'—')+'</small>'+
+      '</div>'+
+      '<div class="cardActions"><button data-edit-npc="'+n.id+'">Editar</button>'+
+        (canEdit()?'<button class="softButton" data-add-npc="'+n.id+'">'+(state.entities.some(e=>e.npc_id===n.id)?'Na mesa':'Colocar na mesa')+'</button>':'')+
+      '</div>'+
+    '</article>';
+  }).join('') || '<div class="emptyPanel">Nenhum NPC ou monstro cadastrado.</div>';
+  document.querySelectorAll('[data-edit-npc]').forEach(b=>b.onclick=()=>openNpcModal(b.dataset.editNpc));
+  document.querySelectorAll('[data-add-npc]').forEach(b=>b.onclick=()=>addNpcToBoard(b.dataset.addNpc));
 }
 function renderDice(){
   const active=currentSession();
@@ -1297,8 +1312,41 @@ async function seedCharacterFieldsForCampaign(campaignId){
 }
 
 async function ensureCharacterFields(){
-  if(state.characterFields.length||!state.campaign)return;
-  if(canEdit()){await seedCharacterFieldsForCampaign(state.campaign.id);}
+  if(!state.campaign||!canEdit())return;
+  const defaults=[
+    ['name','Nome do personagem','text','name',true,0],
+    ['class_name','Classe / função','text','class_name',false,10],
+    ['ancestry_name','Origem / ancestralidade','text','ancestry_name',false,20],
+    ['level','Nível','number','level',false,30],
+    ['hp_current','Vida atual','number','hp_current',false,40],
+    ['hp_max','Vida máxima','number','hp_max',false,50],
+    ['armor_class','Defesa / CA','number','armor_class',false,60],
+    ['luck','Sorte','number','luck',false,70],
+    ['luck_points','Pontos de sorte','number','luck_points',false,80],
+    ['attr_forca','Força','number','attributes.forca',false,90],
+    ['attr_destreza','Destreza','number','attributes.destreza',false,100],
+    ['attr_constituicao','Constituição','number','attributes.constituicao',false,110],
+    ['attr_inteligencia','Inteligência','number','attributes.inteligencia',false,120],
+    ['attr_sabedoria','Sabedoria','number','attributes.sabedoria',false,130],
+    ['attr_carisma','Carisma','number','attributes.carisma',false,140],
+    ['avatar_url','Foto / avatar','url','avatar_url',false,150],
+    ['notes','Ficha complementar','textarea','notes',false,160],
+    ['current_items','Itens atuais / equipamentos em uso','textarea','sheet_data.current_items',false,165],
+    ['weapons','Armas','textarea','sheet_data.weapons',false,168]
+  ];
+  const {data:existing,error:readError}=await sb.from('character_field_definitions').select('*').eq('campaign_id',state.campaign.id);
+  if(readError)throw readError;
+  const existingKeys=new Set((existing||[]).map(f=>f.field_key));
+  const missing=defaults.filter(([field_key])=>!existingKeys.has(field_key)).map(([field_key,label,field_type,data_key,required,sort_order])=>({
+    campaign_id:state.campaign.id,field_key,label,field_type,data_key,required,sort_order,enabled:true,player_visible:true,player_editable:true,options:[]
+  }));
+  if(missing.length){
+    const {error}=await sb.from('character_field_definitions').insert(missing);
+    if(error)throw error;
+  }
+  const {data:rows,error}=await sb.from('character_field_definitions').select('*').eq('campaign_id',state.campaign.id).order('sort_order');
+  if(error)throw error;
+  state.characterFields=rows||[];
 }
 
 async function createCampaign(name,description){
@@ -1864,10 +1912,58 @@ function openSessionModal(id){
 }
 async function activateSession(id){if(!id)return;const session=state.sessions.find(x=>x.id===id);if(!session)return;state.selectedSessionId=id;state.floor=session.active_floor_id||state.floor;state.selected=session.active_room_id?{type:'room',id:session.active_room_id}:null;state.tool='move';window.rpgVttSetTool?.('move');window.rpgVttContextChanged?.();const af=state.floors.find(f=>f.id===state.floor);if(af)state.location=state.locations.find(l=>l.id===af.location_id)||state.location;renderAll();await subscribeRealtime();toast(`Sessão #${session.session_number} aberta`);}
 
-function openNpcModal(id){if(!requireMaster())return;const n=id?state.npcs.find(x=>x.id===id):null;const v=n||{name:'',description:'',notes_private:'',avatar_url:'',data:{}};showModal(`<div class="modalHeader"><div><div class="eyebrow">BESTIÁRIO</div><h3>${n?'Editar entidade':'Novo NPC / monstro'}</h3></div><button class="closeButton" data-close>×</button></div><label>Nome<input id="npcName" value="${escapeHtml(v.name)}"></label><label>Descrição<textarea id="npcDesc" rows="4">${escapeHtml(v.description||'')}</textarea></label><label>Notas privadas do mestre<textarea id="npcNotes" rows="5">${escapeHtml(v.notes_private||'')}</textarea></label><label>Avatar URL<input id="npcAvatar" value="${escapeHtml(v.avatar_url||'')}" placeholder="https://..."></label><label>Avatar do NPC<input id="npcFile" type="file" accept="image/*"></label><label>Dados / ficha (JSON)<textarea id="npcData" rows="6">${escapeHtml(JSON.stringify(v.data||{},null,2))}</textarea></label><div class="modalActions"><button class="softButton" data-close>Cancelar</button><button id="saveNpc" class="primarySmall">Salvar</button></div>`);$('saveNpc').onclick=async()=>{try{const payload={campaign_id:state.campaign.id,name:$('npcName').value.trim(),description:$('npcDesc').value.trim(),notes_private:$('npcNotes').value.trim(),avatar_url:$('npcAvatar').value.trim()||null,data:JSON.parse($('npcData').value||'{}')};if(!payload.name)throw new Error('Informe o nome.');const file=$('npcFile').files[0];if(file)payload.avatar_url=await uploadMedia(file,`npcs/${uid()}`);const result=n?await sb.from('npcs').update(payload).eq('id',n.id).select().single():await sb.from('npcs').insert(payload).select().single();if(result.error)throw result.error;if(n)state.npcs=state.npcs.map(x=>x.id===n.id?result.data:x);else state.npcs.push(result.data);closeModal();renderAll();toast('NPC salvo');}catch(e){toast(e.message,'error');}};}
-
+function openNpcModal(id){
+  if(!requireMaster())return;
+  const n=id?state.npcs.find(x=>x.id===id):null;
+  const v=n||{name:'',npc_type:'npc',description:'',notes_private:'',avatar_url:'',data:{}};
+  showModal(
+    '<div class="modalHeader"><div><div class="eyebrow">BESTIÁRIO</div><h3>'+(n?'Editar ficha':'Nova ficha')+'</h3></div><button class="closeButton" data-close>×</button></div>'+
+    '<div class="formGrid">'+
+      '<label>Nome<input id="npcName" maxlength="120" value="'+escapeHtml(v.name)+'" placeholder="Ex.: Guarda da ponte"></label>'+
+      '<label>Classificação<select id="npcType"><option value="npc" '+(v.npc_type!=='monster'?'selected':'')+'>NPC</option><option value="monster" '+(v.npc_type==='monster'?'selected':'')+'>Monstro</option></select></label>'+
+    '</div>'+
+    '<label>Descrição<textarea id="npcDesc" rows="4" placeholder="Características, papel na história ou comportamento.">'+escapeHtml(v.description||'')+'</textarea></label>'+
+    '<label>Notas privadas do mestre<textarea id="npcNotes" rows="5" placeholder="Informações que somente o mestre deve consultar.">'+escapeHtml(v.notes_private||'')+'</textarea></label>'+
+    '<label>Avatar URL<input id="npcAvatar" value="'+escapeHtml(v.avatar_url||'')+'" placeholder="https://..."></label>'+
+    '<label>Avatar do NPC<input id="npcFile" type="file" accept="image/*"></label>'+
+    '<label>Dados / ficha complementar (JSON)<textarea id="npcData" rows="8">'+escapeHtml(JSON.stringify(v.data||{},null,2))+'</textarea></label>'+
+    '<div class="modalHint">A classificação fica salva na ficha e também é usada na mesa para diferenciar NPCs e monstros.</div>'+
+    '<div class="modalActions"><button class="softButton" data-close>Cancelar</button><button id="saveNpc" class="primarySmall">Salvar ficha</button></div>'
+  );
+  $('saveNpc').onclick=async()=>{
+    try{
+      const payload={
+        campaign_id:state.campaign.id,
+        npc_type:$('npcType').value==='monster'?'monster':'npc',
+        name:$('npcName').value.trim(),
+        description:$('npcDesc').value.trim(),
+        notes_private:$('npcNotes').value.trim(),
+        avatar_url:$('npcAvatar').value.trim()||null,
+        data:JSON.parse($('npcData').value||'{}')
+      };
+      if(!payload.name)throw new Error('Informe o nome.');
+      const file=$('npcFile').files[0];
+      if(file)payload.avatar_url=await uploadMedia(file,'npcs/'+uid());
+      const result=n?
+        await sb.from('npcs').update(payload).eq('id',n.id).select('*').maybeSingle():
+        await sb.from('npcs').insert(payload).select('*').single();
+      if(result.error||!result.data)throw result.error||new Error('Não foi possível salvar esta ficha.');
+      if(n)state.npcs=state.npcs.map(x=>x.id===n.id?result.data:x);else state.npcs.push(result.data);
+      if(n){
+        const linked=state.entities.find(e=>e.npc_id===n.id);
+        if(linked){
+          const kind=result.data.npc_type==='monster'?'monster':'npc';
+          const icon=kind==='monster'?'☠':'♜';
+          const entityResult=await sb.from('world_entities').update({entity_kind:kind,display_name:result.data.name,icon}).eq('id',linked.id).select('*').maybeSingle();
+          if(entityResult.data)state.entities=state.entities.map(e=>e.id===linked.id?entityResult.data:e);
+        }
+      }
+      closeModal();renderAll();toast(payload.npc_type==='monster'?'Monstro salvo':'NPC salvo');
+    }catch(e){toast(e.message||'Não foi possível salvar a ficha.','error');}
+  };
+}
 async function addCharacterToBoard(id){if(!requireMaster())return;const c=state.characters.find(x=>x.id===id);if(!c)return;if(state.entities.some(e=>e.character_id===id)){toast('Esse personagem já está na mesa.');return;}const payload={campaign_id:state.campaign.id,character_id:id,entity_kind:'character',display_name:c.name,icon:'♙',color:colors[state.entities.length%colors.length],floor_id:state.floor,x:50,y:50,room_id:null,visible:true,metadata:{}};const {data,error}=await sb.from('world_entities').insert(payload).select().single();if(error){toast(error.message,'error');return;}state.entities.push(data);renderAll();toast(`${c.name} entrou na mesa`);}
-async function addNpcToBoard(id){if(!requireMaster())return;const n=state.npcs.find(x=>x.id===id);if(!n)return;if(state.entities.some(e=>e.npc_id===id)){toast('Essa entidade já está na mesa.');return;}const payload={campaign_id:state.campaign.id,npc_id:id,entity_kind:'npc',display_name:n.name,icon:'♜',color:colors[state.entities.length%colors.length],floor_id:state.floor,x:50,y:50,room_id:null,visible:true,metadata:{}};const {data,error}=await sb.from('world_entities').insert(payload).select().single();if(error){toast(error.message,'error');return;}state.entities.push(data);renderAll();toast(`${n.name} entrou na mesa`);}
+async function addNpcToBoard(id){if(!requireMaster())return;const n=state.npcs.find(x=>x.id===id);if(!n)return;if(state.entities.some(e=>e.npc_id===id)){toast('Essa entidade já está na mesa.');return;}const kind=n.npc_type==='monster'?'monster':'npc';const payload={campaign_id:state.campaign.id,npc_id:id,entity_kind:kind,display_name:n.name,icon:kind==='monster'?'☠':'♜',color:colors[state.entities.length%colors.length],floor_id:state.floor,x:50,y:50,room_id:null,visible:true,metadata:{}};const {data,error}=await sb.from('world_entities').insert(payload).select().single();if(error){toast(error.message,'error');return;}state.entities.push(data);renderAll();toast(`${n.name} entrou na mesa`);}
 function roomAtPosition(x,y,floorId){
   return state.rooms.find(r=>r.floor_id===floorId&&pointInsideRoom(x,y,r))||null;
 }
