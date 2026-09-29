@@ -706,7 +706,8 @@
     vtt.channel=ch;vtt.campaignId=c;
   }
 
-  function init(){
+    window.addEventListener('rpg:realtime-reconnect',()=>{if(vtt.channel){sbc()?.removeChannel(vtt.channel).catch(()=>{});vtt.channel=null;}realtime();});
+function init(){
     if(vtt.initialized)return;
     const run=()=>{
       if(typeof window.state==='undefined'||!sbc()){setTimeout(run,250);return}
