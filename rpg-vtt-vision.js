@@ -25,7 +25,7 @@
     return {board,scene,svg:scene.querySelector('svg'),mask};
   }
 
-  function resetAdvanced(){document.querySelector('#rpgVttTools .rpgVttTool.active')?.click()}
+  function resetAdvanced(){if(typeof window.rpgVttSetTool==='function')window.rpgVttSetTool('move');else document.querySelector('#rpgVttTools .rpgVttTool.active')?.click()}
 
   function renderWalls(){
     const l=layers();if(!l)return;l.svg.innerHTML='';
@@ -55,13 +55,19 @@
   }
 
   function polygon(src,radius,rect){
-    const angles=[];for(let a=0;a<Math.PI*2;a+=Math.PI/30)angles.push(a);
-    V.walls.filter(w=>w.blocks_vision!==false).forEach(w=>[{x:n(w.x1),y:n(w.y1)},{x:n(w.x2),y:n(w.y2)}].forEach(p=>{
-      const a=Math.atan2(p.y/100*rect.height-src.y,p.x/100*rect.width-src.x);angles.push(a-.00025,a,a+.00025)
+    const walls=V.walls.filter(w=>w.blocks_vision!==false).map(w=>({
+      ...w,
+      x1:n(w.x1)/100*rect.width,y1:n(w.y1)/100*rect.height,
+      x2:n(w.x2)/100*rect.width,y2:n(w.y2)/100*rect.height
     }));
-    angles.sort((a,b)=>a-b);return angles.map(a=>{
+    const angles=[];for(let a=0;a<Math.PI*2;a+=Math.PI/30)angles.push(a);
+    walls.forEach(w=>[{x:w.x1,y:w.y1},{x:w.x2,y:w.y2}].forEach(p=>{
+      const a=Math.atan2(p.y-src.y,p.x-src.x);angles.push(a-.00025,a,a+.00025)
+    }));
+    angles.sort((a,b)=>a-b);
+    return angles.map(a=>{
       const dx=Math.cos(a),dy=Math.sin(a);let t=radius;
-      V.walls.filter(w=>w.blocks_vision!==false).forEach(w=>{t=Math.min(t,hit(src.x,src.y,dx,dy,w,radius))});
+      walls.forEach(w=>{t=Math.min(t,hit(src.x,src.y,dx,dy,w,radius))});
       return [src.x+dx*t,src.y+dy*t]
     });
   }
@@ -139,9 +145,13 @@
   function renderCombatDecor(){
     const board=$('board');if(!board)return;board.querySelectorAll('.rpgVisionCombatBadge,.rpgVisionSourceDot,.rpgVisionRangeRing').forEach(e=>e.remove());
     if(master())return;const rect=board.getBoundingClientRect();
-    playerSources().forEach(src=>{const p=src.entity,cells=n(src.rangeUnits,60)/Math.max(.1,n(V.settings?.unit_per_cell,5)),size=Math.max(4,cells*n(V.settings?.grid_size,5)*2);
+    playerSources().forEach(src=>{
+      const p=src.entity;
+      const cells=n(src.rangeUnits,60)/Math.max(.1,n(V.settings?.unit_per_cell,5));
+      const cellPx=Math.max(8,rect.width*Math.max(.1,n(V.settings?.grid_size,5))/100);
+      const diameterPx=Math.max(8,cells*cellPx*2);
       const dot=document.createElement('div');dot.className='rpgVisionSourceDot';dot.style.left=n(p.x,50)+'%';dot.style.top=n(p.y,50)+'%';board.appendChild(dot);
-      const ring=document.createElement('div');ring.className='rpgVisionRangeRing';ring.style.left=n(p.x,50)+'%';ring.style.top=n(p.y,50)+'%';ring.style.width=size+'%';ring.style.height=size+'%';board.appendChild(ring)
+      const ring=document.createElement('div');ring.className='rpgVisionRangeRing';ring.style.left=n(p.x,50)+'%';ring.style.top=n(p.y,50)+'%';ring.style.width=(diameterPx/rect.width*100)+'%';ring.style.height=(diameterPx/rect.height*100)+'%';board.appendChild(ring);
     });
     const c=combatInfo(),ae=entityCombat(c.active),owned=playerSources().some(s=>s.entity.id===ae?.id);if(ae&&owned&&ae.floor_id===fid()){const b=document.createElement('div');b.className='rpgVisionCombatBadge';b.textContent='TURNO · R'+n(c.encounter?.round,1);b.style.left=n(ae.x,50)+'%';b.style.top=(n(ae.y,50)-9)+'%';board.appendChild(b)}
   }
