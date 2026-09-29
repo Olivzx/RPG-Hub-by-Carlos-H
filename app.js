@@ -51,7 +51,7 @@ function roomVisibleOnMap(room){
 
 window.addEventListener('online',()=>scheduleRealtimeRecovery('browser-online'));
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')scheduleRealtimeRecovery('tab-visible')});
-function boot(){
+async function boot(){
   try{
     const {data,error}=await sb.auth.getSession(); if(error) throw error;
     if(!data.session){location.href='login.html';return;}
