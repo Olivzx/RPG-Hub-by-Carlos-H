@@ -457,30 +457,48 @@ async function reconcileRealtimeState(reason='reconnect'){
   realtimeRecoveryRunning=true;
   try{
     const cid=state.campaign.id;
-    const [entities,rooms,sessions,characters]=await Promise.all([
-      sb.from('world_entities').select('*').eq('campaign_id',cid),
-      sb.from('rooms').select('*').eq('campaign_id',cid),
-      sb.from('sessions').select('*').eq('campaign_id',cid),
-      sb.from('characters').select('*').eq('campaign_id',cid)
+    const [locations,entities,sessions,characters]=await Promise.all([
+      sb.from('locations').select('*').eq('campaign_id',cid).order('sort_order'),
+      sb.from('world_entities').select('*').eq('campaign_id',cid).order('created_at'),
+      sb.from('sessions').select('*').eq('campaign_id',cid).order('session_number',{ascending:false}),
+      sb.from('characters').select('*').eq('campaign_id',cid).order('name')
     ]);
+    if(locations.error)throw locations.error;
     if(entities.error)throw entities.error;
-    if(rooms.error)throw rooms.error;
     if(sessions.error)throw sessions.error;
     if(characters.error)throw characters.error;
+    state.locations=locations.data||[];
+    if(state.locations.length){
+      const locIds=state.locations.map(l=>l.id);
+      const floors=await sb.from('floors').select('*').in('location_id',locIds).order('sort_order');
+      if(floors.error)throw floors.error;
+      state.floors=floors.data||[];
+      if(state.floors.length){
+        const floorIds=state.floors.map(f=>f.id);
+        const rooms=await sb.from('rooms').select('*').in('floor_id',floorIds).order('sort_order');
+        if(rooms.error)throw rooms.error;
+        state.rooms=rooms.data||[];
+      }else state.rooms=[];
+    }else{state.floors=[];state.rooms=[];}
     state.entities=entities.data||[];
-    state.rooms=rooms.data||[];
     state.sessions=sessions.data||[];
     state.characters=characters.data||[];
+    state.selectedSessionId=state.selectedSessionId&&state.sessions.some(s=>s.id===state.selectedSessionId)?state.selectedSessionId:(currentSession()?.id||null);
     const active=currentSession();
     if(active){
-      state.floor=active.active_floor_id||state.floor||state.floors[0]?.id||null;
-      state.selected=active.active_room_id?{type:'room',id:active.active_room_id}:null;
+      state.floor=active.active_floor_id&&state.floors.some(f=>f.id===active.active_floor_id)?active.active_floor_id:(state.floors[0]?.id||null);
+      state.selected=active.active_room_id&&state.rooms.some(r=>r.id===active.active_room_id)?{type:'room',id:active.active_room_id}:null;
       const floor=state.floors.find(f=>f.id===state.floor);
-      if(floor)state.location=state.locations.find(l=>l.id===floor.location_id)||state.location;
+      state.location=floor?state.locations.find(l=>l.id===floor.location_id)||state.locations[0]||null:state.locations[0]||null;
+    }else{
+      ensureFloor();
+      state.location=state.locations.find(l=>l.id===state.floors.find(f=>f.id===state.floor)?.location_id)||state.locations[0]||null;
+      state.selected=null;
     }
     renderAll();
     window.rpgVttContextChanged?.();
     window.rpgVttVisionRefresh?.();
+    window.dispatchEvent(new CustomEvent('rpg:realtime-reconnect'));
     window.rpgCombatReconnect?.();
   }catch(err){
     console.warn('RPG HUB state reconciliation:',reason,err);
