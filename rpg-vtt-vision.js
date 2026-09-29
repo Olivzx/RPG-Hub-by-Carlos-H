@@ -78,11 +78,11 @@
   function renderCombatDecor(){
     const board=$('board');if(!board)return;board.querySelectorAll('.rpgVisionCombatBadge,.rpgVisionSourceDot,.rpgVisionRangeRing').forEach(e=>e.remove());
     if(master())return;const rect=board.getBoundingClientRect();
-    playerSources().forEach(src=>{const p=src.entity,cells=n(src.rangeUnits,60)/Math.max(.1,n(V.settings?.unit_per_cell,5)),size=Math.max(4,cells*n(V.settings?.grid_size,5));
+    playerSources().forEach(src=>{const p=src.entity,cells=n(src.rangeUnits,60)/Math.max(.1,n(V.settings?.unit_per_cell,5)),size=Math.max(4,cells*n(V.settings?.grid_size,5)*2);
       const dot=document.createElement('div');dot.className='rpgVisionSourceDot';dot.style.left=n(p.x,50)+'%';dot.style.top=n(p.y,50)+'%';board.appendChild(dot);
       const ring=document.createElement('div');ring.className='rpgVisionRangeRing';ring.style.left=n(p.x,50)+'%';ring.style.top=n(p.y,50)+'%';ring.style.width=size+'%';ring.style.height=size+'%';board.appendChild(ring)
     });
-    const c=combatInfo(),ae=entityCombat(c.active);if(ae&&ae.floor_id===fid()){const b=document.createElement('div');b.className='rpgVisionCombatBadge';b.textContent='TURNO · R'+n(c.encounter?.round,1);b.style.left=n(ae.x,50)+'%';b.style.top=(n(ae.y,50)-9)+'%';board.appendChild(b)}
+    const c=combatInfo(),ae=entityCombat(c.active),owned=playerSources().some(s=>s.entity.id===ae?.id);if(ae&&owned&&ae.floor_id===fid()){const b=document.createElement('div');b.className='rpgVisionCombatBadge';b.textContent='TURNO · R'+n(c.encounter?.round,1);b.style.left=n(ae.x,50)+'%';b.style.top=(n(ae.y,50)-9)+'%';board.appendChild(b)}
   }
 
   function draw(){
