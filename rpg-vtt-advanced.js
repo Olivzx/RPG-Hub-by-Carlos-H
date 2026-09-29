@@ -352,8 +352,8 @@
     if(vtt.activeTool==='fog'){
       const x=Math.min(d.start.x,p.x),y=Math.min(d.start.y,p.y),w=Math.abs(p.x-d.start.x),h=Math.abs(p.y-d.start.y);
       if(w<1||h<1)return;
-      const q=await sbc().from('fog_regions').insert({campaign_id:cid(),floor_id:fid(),x,y,width:w,height:h,revealed:false,created_by:window.state.user.id}).select().single();
-      if(q.error)window.toast?.(q.error.message||'Não foi possível criar a névoa.','error');else{vtt.fog.push(q.data);renderFog();broadcast('fog_updated',{floor_id:fid()})}
+      const id=crypto.randomUUID();const data={id,campaign_id:cid(),floor_id:fid(),x,y,width:w,height:h,revealed:false,created_by:window.state.user.id};
+      try{const saved=await confirmedWrite('fog_regions',data,null,'a região de névoa');vtt.fog.push(saved);renderFog();broadcast('fog_updated',{floor_id:fid()})}catch(err){window.toast?.(err.message||'Não foi possível criar a névoa.','error')}
       return;
     }
     const r=boardRect(),cell=cellPx(),shape=vtt.aoeShape;
@@ -374,8 +374,7 @@
       shape,x:startX,y:startY,size:cells,length:cells,rotation:shape==='circle'||shape==='square'?0:normalizeAngle(angle),
       color:'#9487ff',opacity:.22,label:''
     };
-    const q=await sbc().from('aoe_effects').insert(payload).select().single();
-    if(q.error)window.toast?.(q.error.message||'Não foi possível criar a área.','error');else{vtt.aoe.push(q.data);renderAoe();broadcast('aoe_updated',{floor_id:fid()})}
+    try{const saved=await confirmedWrite('aoe_effects',{id:crypto.randomUUID(),...payload},null,'a área de efeito');vtt.aoe.push(saved);renderAoe();broadcast('aoe_updated',{floor_id:fid()})}catch(err){window.toast?.(err.message||'Não foi possível criar a área.','error')}
   }
 
   async function removeFog(id){
@@ -450,9 +449,7 @@
 
   async function saveSettings(partial){
     if(!master()||!cid()||!fid())return;
-    const q=await sbc().from('map_settings').upsert({...settingsDefault(),...(vtt.settings||{}),...partial,campaign_id:cid(),floor_id:fid(),updated_by:window.state.user.id},{onConflict:'campaign_id,floor_id'}).select().single();
-    if(q.error)return window.toast?.(q.error.message||'Não foi possível salvar as configurações.','error');
-    vtt.settings=q.data;renderGrid();refreshMapLayout();window.setSave?.('Configuração do mapa salva');
+    try{const saved=await confirmedWrite('map_settings',{...settingsDefault(),...(vtt.settings||{}),...partial,campaign_id:cid(),floor_id:fid(),updated_by:window.state.user.id},'campaign_id,floor_id','as configurações do mapa');vtt.settings=saved;}catch(err){return window.toast?.(err.message||'Não foi possível salvar as configurações.','error')}renderGrid();refreshMapLayout();window.setSave?.('Configuração do mapa salva');
   }
 
   function refreshMapLayout(){
