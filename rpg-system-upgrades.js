@@ -126,13 +126,16 @@
   }
 
   function gridEnabled() {
-    try { return localStorage.getItem(GRID_KEY) === '1'; } catch (_) { return false; }
+    if (typeof window.rpgVttGetGrid === 'function') return !!window.rpgVttGetGrid();
+    try {
+      const saved = localStorage.getItem(GRID_KEY);
+      return saved === null ? true : saved === '1';
+    } catch (_) { return true; }
   }
 
   function setGrid(enabled) {
     try { localStorage.setItem(GRID_KEY, enabled ? '1' : '0'); } catch (_) {}
     const syncButton = () => {
-      byId('board')?.classList.toggle('rpg-grid-enabled', enabled);
       const button = byId('rpgGridToggle');
       if (button) {
         button.classList.toggle('active', enabled);
@@ -143,25 +146,32 @@
     };
     syncButton();
     if (typeof window.rpgVttSetGrid === 'function') {
-      Promise.resolve(window.rpgVttSetGrid(!!enabled)).then(syncButton).catch(() => {});
+      return Promise.resolve(window.rpgVttSetGrid(!!enabled)).then(syncButton).catch(() => {});
     }
   }
 
   function installGridControl() {
     const toolbar = document.querySelector('.boardToolbar .toolbarActions');
-    if (!toolbar || byId('rpgGridToggle')) return;
-    const button = document.createElement('button');
-    button.id = 'rpgGridToggle';
-    button.className = 'toolButton rpgGridToggle';
-    button.type = 'button';
-    button.setAttribute('aria-pressed', 'false');
-    button.textContent = '▦ Grade';
-    button.title = 'Exibir grade de alinhamento';
-    button.addEventListener('click', () => setGrid(!gridEnabled()));
-    const zoomOut = byId('zoomOut');
-    toolbar.insertBefore(button, zoomOut || toolbar.firstChild);
-    setGrid(gridEnabled());
+    if (!toolbar) return;
+    let button = byId('rpgGridToggle');
+    if (!button) {
+      button = document.createElement('button');
+      button.id = 'rpgGridToggle';
+      button.className = 'toolButton rpgGridToggle';
+      button.type = 'button';
+      button.setAttribute('aria-pressed', 'false');
+      button.textContent = '▦ Grade';
+      button.title = 'Exibir grade de alinhamento';
+      button.addEventListener('click', () => setGrid(!gridEnabled()));
+      const zoomOut = byId('zoomOut');
+      toolbar.insertBefore(button, zoomOut || toolbar.firstChild);
+    }
+    const enabled = gridEnabled();
+    button.classList.toggle('active', enabled);
+    button.setAttribute('aria-pressed', String(enabled));
+    button.title = enabled ? 'Ocultar grade' : 'Exibir grade';
   }
+
 
   function installAuditView() {
     if (!isMasterCampaign()) return;
