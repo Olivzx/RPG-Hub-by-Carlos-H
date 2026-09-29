@@ -180,3 +180,18 @@ input:focus,select:focus,textarea:focus,.authCard input:focus,.authCard select:f
   .mobileBottomNav button{min-height:48px;font-size:14px}
   .mobileBottomNav small{font-size:6.5px}
 }
+
+/* ===== Mesa VTT hardening ===== */
+.boardPanel{overflow:hidden}
+.boardFrame{overflow:auto;max-width:100%;scrollbar-gutter:stable}
+.boardToolbar{flex-wrap:wrap}
+.boardToolbar .toolbarActions{min-width:0;flex:1 1 auto;flex-wrap:wrap}
+#rpgVttTools,#rpgVisionTools{flex:1 1 100%;width:100%;justify-content:flex-end}
+.boardGrid.rpg-grid-enabled{background-size:var(--rpg-grid-size,5%) var(--rpg-grid-size,5%)!important}
+.boardGrid:not(.rpg-grid-enabled){background-image:none!important}
+.tokenBig[aria-hidden="true"],.room[aria-hidden="true"]{display:none!important}
+@media(max-width:700px){
+  .boardFrame{overflow:auto}
+  .boardToolbar .toolbarActions{width:100%;justify-content:flex-end}
+  #rpgVttTools,#rpgVisionTools{justify-content:stretch}
+}
