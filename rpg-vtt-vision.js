@@ -121,16 +121,11 @@
     });
   }
 
-  function roomVisible(x,y,w,h){
+  function roomVisible(x,y,w,h,rotation=0){
     if(master()) return true;
-    const pts=[
-      [n(x)+n(w)/2,n(y)+n(h)/2],
-      [n(x)+1,n(y)+1],
-      [n(x)+n(w)-1,n(y)+1],
-      [n(x)+1,n(y)+n(h)-1],
-      [n(x)+n(w)-1,n(y)+n(h)-1]
-    ];
-    return pts.some(p=>pointVisible(p[0],p[1]));
+    const cx=n(x)+n(w)/2,cy=n(y)+n(h)/2,rad=Number(rotation||0)*Math.PI/180,cos=Math.cos(rad),sin=Math.sin(rad);
+    const local=[[0,0],[-n(w)/2+1,-n(h)/2+1],[n(w)/2-1,-n(h)/2+1],[-n(w)/2+1,n(h)/2-1],[n(w)/2-1,n(h)/2-1]];
+    return local.some(([lx,ly])=>pointVisible(cx+lx*cos-ly*sin,cy+lx*sin+ly*cos));
   }
 
   function combatInfo(){
