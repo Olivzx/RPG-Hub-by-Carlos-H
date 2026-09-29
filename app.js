@@ -85,6 +85,13 @@ async function loadCampaigns(){
   if(state.campaign) $('campaignSelect').value=state.campaign.id;
 }
 
+async function ensureCampaignWorld(campaignId){
+  if(!campaignId||!canEdit())return null;
+  const {data,error}=await sb.rpc('ensure_campaign_world',{p_campaign_id:campaignId});
+  if(error)throw error;
+  return data;
+}
+
 async function loadCampaignData(){
   if(!state.campaign)return;
   const campaignId=state.campaign.id;
@@ -129,8 +136,13 @@ async function loadCampaignData(){
   const ids=[...new Set(state.members.map(m=>m.user_id).filter(Boolean))];
   if(ids.length){ const {data:profiles}=await sb.from('profiles').select('id,display_name,avatar_url').in('id',ids); (profiles||[]).forEach(p=>state.profiles.set(p.id,p)); }
   await ensureCharacterFields();
-  if(!state.locations.length && canEdit()) await initializeWorld();
-  else { await loadFloors(); }
+  if(!state.locations.length && canEdit()){
+    await ensureCampaignWorld(campaignId);
+    const {data:fixedLocations,error:fixedLocationsError}=await sb.from('locations').select('*').eq('campaign_id',campaignId).order('sort_order');
+    if(fixedLocationsError)throw fixedLocationsError;
+    state.locations=fixedLocations||[];
+  }
+  await loadFloors();
   ensureFloor();
   state.selectedSessionId=currentSession()?.id||null;
   const active=currentSession();
@@ -141,17 +153,13 @@ async function loadCampaignData(){
 }
 
 async function initializeWorld(){
-  const {data:location,error:le}=await sb.from('locations').insert({campaign_id:state.campaign.id,name:'Mundo de '+state.campaign.name,description:'Local principal da campanha',created_by:state.user.id}).select().single(); if(le) throw le;
-  state.location=location; state.locations=[location];
-  const floorDefs=[{name:'2º andar',floor_number:2,sort_order:0},{name:'1º andar',floor_number:1,sort_order:1},{name:'Térreo',floor_number:0,sort_order:2},{name:'Subsolo',floor_number:-1,sort_order:3}];
-  const {data:floors,error:fe}=await sb.from('floors').insert(floorDefs.map(f=>({...f,location_id:location.id}))).select(); if(fe) throw fe; state.floors=floors||[];
-  const mapByNumber=new Map(state.floors.map(f=>[f.floor_number,f.id]));
-  const starter=[
-    ['Sala do Trono',2,55,48,38,32],['Corredor Norte',2,7,18,36,22],['Escritório',2,7,49,36,30],
-    ['Grande Hall',1,12,19,76,58],['Cozinha',0,6,18,27,28],['Salão da Taverna',0,38,15,55,62]
-  ];
-  const {data:rooms,error:re}=await sb.from('rooms').insert(starter.map(([name,fl,x,y,w,h],i)=>({floor_id:mapByNumber.get(fl),name,description:'',x,y,width:w,height:h,sort_order:i}))).select(); if(re) throw re;
-  state.rooms=rooms||[]; state.floor=mapByNumber.get(2); state.location=location; setSave('Mundo inicial criado');
+  if(!state.campaign||!canEdit())throw new Error('Somente o mestre pode inicializar o mundo.');
+  await ensureCampaignWorld(state.campaign.id);
+  const {data:locations,error}=await sb.from('locations').select('*').eq('campaign_id',state.campaign.id).order('sort_order');
+  if(error)throw error;
+  state.locations=locations||[];
+  await loadFloors();
+  ensureFloor();
 }
 
 async function loadFloors(){
@@ -578,18 +586,38 @@ function startRoomResize(e,el){
 function applyZoom(){
   const board=$('board');
   if(!board)return;
+  const frame=board.closest('.boardFrame');
   const zoom=Math.max(75,Math.min(200,Number(state.zoom)||100));
   state.zoom=zoom;
+  const factor=zoom/100;
+  const baseHeight=window.matchMedia?.('(max-width:760px)').matches?460:650;
+  let centerRatioX=0.5,centerRatioY=0.5;
+  if(frame){
+    const maxX=Math.max(1,frame.scrollWidth-frame.clientWidth),maxY=Math.max(1,frame.scrollHeight-frame.clientHeight);
+    centerRatioX=(frame.scrollLeft+frame.clientWidth/2)/Math.max(1,frame.scrollWidth);
+    centerRatioY=(frame.scrollTop+frame.clientHeight/2)/Math.max(1,frame.scrollHeight);
+  }
   board.style.removeProperty('--board-zoom');
   board.style.transform='none';
-  board.style.width=zoom===100?'100%':zoom+'%';
-  board.style.height=Math.round(650*zoom/100)+'px';
+  board.style.width='100%';
+  board.style.height=baseHeight+'px';
   board.style.minWidth='0';
   board.style.minHeight='0';
-  board.closest('.boardFrame')?.style.setProperty('--map-zoom',String(zoom/100));
+  void board.offsetWidth;
+  const baseWidth=Math.max(280,Math.round(board.getBoundingClientRect().width));
+  board.dataset.rpgBaseWidth=String(baseWidth);
+  board.style.width=Math.max(280,Math.round(baseWidth*factor))+'px';
+  board.style.height=Math.round(baseHeight*factor)+'px';
+  frame?.style.setProperty('--map-zoom',String(factor));
   $('zoomValue').textContent=zoom+'%';
   window.rpgVttRefreshGrid?.();
   window.rpgVttRefreshMapLayout?.();
+  if(frame){
+    requestAnimationFrame(()=>{
+      frame.scrollLeft=Math.max(0,(frame.scrollWidth*centerRatioX)-frame.clientWidth/2);
+      frame.scrollTop=Math.max(0,(frame.scrollHeight*centerRatioY)-frame.clientHeight/2);
+    });
+  }
 }
 
 function renderCharacters(){
@@ -1278,7 +1306,12 @@ async function createCampaign(name,description){
   if(error) throw error;
   const {error:me}=await sb.from('campaign_members').insert({campaign_id:data.id,campaign_owner_id:state.user.id,user_id:state.user.id,role:'owner'}); if(me) throw me;
   await seedCharacterFieldsForCampaign(data.id);
-  state.campaign=data; await loadCampaigns(); await initializeWorld(); await loadCampaignData(); closeModal();toast('Campanha criada');
+  state.campaign=data;
+  await loadCampaigns();
+  await ensureCampaignWorld(data.id);
+  await loadCampaignData();
+  closeModal();
+  toast('Campanha criada');
 }
 async function openCampaignInvite(){
   if(!canEdit()||!state.campaign)return;
