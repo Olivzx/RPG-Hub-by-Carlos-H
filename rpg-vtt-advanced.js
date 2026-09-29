@@ -433,6 +433,22 @@
     return{dice,total:Math.max(0,dice+f.mod)};
   }
 
+  async function mirrorAoeHp(combatant,after){
+    if(combatant?.character_id){
+      const q=await sbc().from('characters').update({hp_current:after}).eq('id',combatant.character_id).select('*').maybeSingle();
+      if(q.error)throw q.error;
+      if(q.data)window.state.characters=(window.state.characters||[]).map(x=>x.id===combatant.character_id?q.data:x);
+    }else if(combatant?.npc_id){
+      const npc=(window.state.npcs||[]).find(x=>x.id===combatant.npc_id);
+      if(npc){
+        const data={...(npc.data||{}),hp_current:after};
+        const q=await sbc().from('npcs').update({data}).eq('id',combatant.npc_id).select('*').maybeSingle();
+        if(q.error)throw q.error;
+        if(q.data)window.state.npcs=(window.state.npcs||[]).map(x=>x.id===combatant.npc_id?q.data:x);
+      }
+    }
+  }
+
   async function resolveAoe(id){
     if(!master())return;
     const aoe=vtt.aoe.find(x=>x.id===id);if(!aoe)return;
@@ -469,7 +485,7 @@
         const rolled=rollFormula(formula),after=before==null?null:Math.max(0,before-rolled.total);
         const q=await sbc().from('combatants').update({hp_current:after,conditions:condition?Array.from(new Set(String(target.conditions||'').split(',').map(x=>x.trim()).filter(Boolean).concat(condition))).join(', '):target.conditions}).eq('id',id).select('*').maybeSingle();
         if(q.error)throw q.error;
-        const saved=q.data;if(!saved)throw new Error('Não foi possível confirmar '+target.name+' após aplicar a área.');
+        const saved=q.data;if(!saved)throw new Error('Não foi possível confirmar '+target.name+' após aplicar a área.');await mirrorAoeHp(saved,after).catch(err=>console.warn('RPG HUB AoE mirror HP:',err));
         const action={id:crypto.randomUUID(),campaign_id:cid(),encounter_id:saved.encounter_id,attacker_combatant_id:null,target_combatant_id:saved.id,attacker_name:aoeName,target_name:saved.name,action_name:'Área de efeito',attack_notation:null,attack_roll:null,attack_modifier:null,target_defense:null,hit:true,critical:false,damage_notation:$('aoeDamage').value.trim(),damage_roll:rolled.dice,damage_bonus:formula.mod,damage_total:rolled.total,hp_before:before,hp_after:after,hp_lost_percent:before?Math.max(0,Math.min(100,rolled.total/before*100)):null,effect_percent:null,notes:'AoE '+aoe.id+(condition?' · condição: '+condition:'')};
         const aq=await sbc().from('combat_actions').insert(action).select('*').maybeSingle();if(aq.error)throw aq.error;
         if(typeof window.logCampaignActivity==='function')await window.logCampaignActivity('combat_aoe','combat',aoeName+' afetou '+saved.name+': '+rolled.total+' dano'+(condition?' · '+condition:''),action.id,{aoe_id:aoe.id,target_id:saved.id,damage:rolled.total,condition:condition||null}).catch(()=>{});
