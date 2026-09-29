@@ -2302,7 +2302,7 @@ function openAddCharacterFieldModal(){
       const options=type==='select'?$('newFieldOptions').value.split(',').map(x=>x.trim()).filter(Boolean):[];
       const next=(state.characterFields||[]).reduce((m,f)=>Math.max(m,Number(f.sort_order)||0),0)+10;
       const payload={campaign_id:state.campaign.id,field_key:key,label,field_type:type,data_key:'sheet_data.'+key,options,enabled:$('newFieldEnabled').checked,player_visible:$('newFieldVisible').checked,player_editable:$('newFieldEditable').checked,required:$('newFieldRequired').checked,sort_order:next};
-      const {data,error}=await sb.from('character_field_definitions').insert(payload).select().single();if(error)throw error;state.characterFields.push(data);closeModal();openCharacterFieldConfig();toast('Campo adicionado');
+      const {data,error}=await sb.from('character_field_definitions').insert(payload).select().maybeSingle();if(error)throw error;if(!data)throw new Error('O campo não foi confirmado pelo servidor.');state.characterFields.push(data);closeModal();openCharacterFieldConfig();toast('Campo adicionado');
     }catch(e){toast(e.message||'Não foi possível adicionar o campo.','error');}
   };
 }
