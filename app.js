@@ -44,7 +44,7 @@ function entityVisibleOnMap(entity){
 function roomVisibleOnMap(room){
   if(!room) return false;
   try{
-    if(typeof window.rpgVttRoomVisible === 'function') return !!window.rpgVttRoomVisible(room.x,room.y,room.width,room.height);
+    if(typeof window.rpgVttRoomVisible === 'function') return !!window.rpgVttRoomVisible(room.x,room.y,room.width,room.height,room.rotation||0);
   }catch(err){ console.warn('RPG HUB room visibility:',err); }
   return mapPointVisible(Number(room.x)+Number(room.width)/2, Number(room.y)+Number(room.height)/2);
 }
@@ -458,7 +458,7 @@ function renderTable(){
   document.querySelectorAll('[data-floor]').forEach(b=>b.onclick=async()=>{
     const id=b.dataset.floor;
     if(canEdit()) await setActiveScene(id,null);
-    else { state.floor=id; state.selected=null; renderTable(); }
+    else { state.floor=id; state.selected=null; state.tool='move'; window.rpgVttSetTool?.('move'); window.rpgVttContextChanged?.(); renderTable(); }
   });
 
   const allRooms=state.rooms.filter(r=>r.floor_id===state.floor);
