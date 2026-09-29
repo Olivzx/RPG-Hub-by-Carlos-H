@@ -418,6 +418,13 @@ async function subscribeRealtime(){
     campaign.on('broadcast',{event:'room_rotate'},({payload})=>{if(payload?.user_id!==state.user.id)receiveRoomRotate(payload);});
     campaign.on('broadcast',{event:'scene_change'},({payload})=>{if(payload?.user_id!==state.user.id)receiveSceneChange(payload);});
     campaign.on('broadcast',{event:'audio'},({payload})=>{if(payload?.user_id!==state.user.id)receiveAudio(payload);});
+    campaign.on('postgres_changes',{event:'*',schema:'public',table:'campaign_audio_state',filter:`campaign_id=eq.${campaignId}`},async payload=>{
+      if(canEdit()||!state.audioEnabled)return;
+      const row=payload?.new;
+      if(!row)return;
+      state.campaignAudioState=row;
+      await syncPersistedAudioState({broadcast:false}).catch(err=>console.warn('RPG HUB audio realtime:',err));
+    });
     campaign.on('broadcast',{event:'INSERT'},payload=>receiveRealtimeBroadcast(payload));
     campaign.on('broadcast',{event:'UPDATE'},payload=>receiveRealtimeBroadcast(payload));
     campaign.on('broadcast',{event:'DELETE'},payload=>receiveRealtimeBroadcast(payload));
@@ -1357,7 +1364,13 @@ async function persistAudioStateNow(){
     layers,
     updated_by:state.user.id,
     updated_at:new Date().toISOString()
-  },{onConflict:'campaign_id'}).select('*').single();
+  },{onConflict:'campaign_id'}).select('*').maybeSingle();
+  if(!error&&!data){
+    const {data:verified,error:verifyError}=await sb.from('campaign_audio_state').select('*').eq('campaign_id',state.campaign.id).maybeSingle();
+    if(verifyError)throw verifyError;
+    state.campaignAudioState=verified||null;
+    return verified||null;
+  }
   if(error)throw error;
   state.campaignAudioState=data;
 }
@@ -1370,6 +1383,33 @@ function audioElapsed(layer){
   const started=layer?.started_at?new Date(layer.started_at).getTime():Date.now();
   const offset=Number(layer?.start_offset||0);
   return Math.max(0,(Date.now()-started)/1000)+offset;
+}
+async function syncPersistedAudioState(opts={}){
+  if(!state.audioEnabled||!state.campaign)return;
+  const desired=getPersistedAudioLayers();
+  const desiredIds=new Set(desired.map(layer=>layer.layer_id));
+  for(const layerId of [...state.audioLayers.keys()]){
+    if(!desiredIds.has(layerId))await stopAudioLayer(layerId,{broadcast:false});
+  }
+  await Promise.all(desired.map(async layer=>{
+    const current=audioElapsed(layer);
+    const local=state.audioLayers.get(layer.layer_id);
+    if(!local){
+      await playAudioLayer({
+        action:'play-layer',
+        layer_id:layer.layer_id,url:layer.url,name:layer.name,kind:layer.kind,loop:layer.loop,
+        volume:layer.volume,asset_id:layer.asset_id,playlist_id:layer.playlist_id,
+        current_time:current,started_at:layer.started_at,start_offset:layer.start_offset
+      },{broadcast:false,restored:true});
+      return;
+    }
+    const volume=Math.max(0,Math.min(1,Number(layer.volume??0.75)));
+    local.volume=volume;if(local.audio)local.audio.volume=volume;
+    const drift=Math.abs((Number(local.audio?.currentTime)||0)-current);
+    if(drift>1.5&&local.audio){try{local.audio.currentTime=Math.max(0,current);}catch(e){}}
+    state.audioLayers.set(layer.layer_id,local);
+  }));
+  renderDice();
 }
 async function restoreCampaignAudioState(){
   if(!state.audioEnabled||!state.campaign)return;
@@ -1404,6 +1444,7 @@ async function unlockAudio(){
     silent.src='';
   }catch(e){console.warn('Audio unlock failed',e);}
   if(!canEdit()&&!wasEnabled)await restoreCampaignAudioState();
+  if(!canEdit())await syncPersistedAudioState({broadcast:false});
   renderDice();
 }
 
