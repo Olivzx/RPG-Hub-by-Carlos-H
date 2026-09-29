@@ -49,7 +49,9 @@ function roomVisibleOnMap(room){
   return mapPointVisible(Number(room.x)+Number(room.width)/2, Number(room.y)+Number(room.height)/2);
 }
 
-async function boot(){
+async window.addEventListener('online',()=>scheduleRealtimeRecovery('browser-online'));
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')scheduleRealtimeRecovery('tab-visible')});
+function boot(){
   try{
     const {data,error}=await sb.auth.getSession(); if(error) throw error;
     if(!data.session){location.href='login.html';return;}
@@ -448,6 +450,46 @@ function receiveRealtimeBroadcast(message){
   }
 }
 
+let realtimeRecoveryTimer=null;
+let realtimeRecoveryRunning=false;
+async function reconcileRealtimeState(reason='reconnect'){
+  if(realtimeRecoveryRunning||!state.campaign?.id)return;
+  realtimeRecoveryRunning=true;
+  try{
+    const cid=state.campaign.id;
+    const [entities,rooms,sessions,characters]=await Promise.all([
+      sb.from('world_entities').select('*').eq('campaign_id',cid),
+      sb.from('rooms').select('*').eq('campaign_id',cid),
+      sb.from('sessions').select('*').eq('campaign_id',cid),
+      sb.from('characters').select('*').eq('campaign_id',cid)
+    ]);
+    if(entities.error)throw entities.error;
+    if(rooms.error)throw rooms.error;
+    if(sessions.error)throw sessions.error;
+    if(characters.error)throw characters.error;
+    state.entities=entities.data||[];
+    state.rooms=rooms.data||[];
+    state.sessions=sessions.data||[];
+    state.characters=characters.data||[];
+    const active=currentSession();
+    if(active){
+      state.floor=active.active_floor_id||state.floor||state.floors[0]?.id||null;
+      state.selected=active.active_room_id?{type:'room',id:active.active_room_id}:null;
+      const floor=state.floors.find(f=>f.id===state.floor);
+      if(floor)state.location=state.locations.find(l=>l.id===floor.location_id)||state.location;
+    }
+    renderAll();
+    window.rpgVttContextChanged?.();
+    window.rpgVttVisionRefresh?.();
+    window.rpgCombatReconnect?.();
+  }catch(err){
+    console.warn('RPG HUB state reconciliation:',reason,err);
+  }finally{realtimeRecoveryRunning=false;}
+}
+function scheduleRealtimeRecovery(reason='reconnect'){
+  clearTimeout(realtimeRecoveryTimer);
+  realtimeRecoveryTimer=setTimeout(()=>reconcileRealtimeState(reason),350);
+}
 async function subscribeRealtime(){
   if(state.campaignChannel)await sb.removeChannel(state.campaignChannel).catch(()=>{});
   if(state.sessionChannel)await sb.removeChannel(state.sessionChannel).catch(()=>{});
@@ -481,7 +523,7 @@ async function subscribeRealtime(){
       receiveRoll(row);
     });
     campaign.on('postgres_changes',{event:'*',schema:'public',table:'characters',filter:`campaign_id=eq.${campaignId}`},payload=>{receiveCharacterChange(payload);});
-    campaign.subscribe((status,err)=>{if(status==='CHANNEL_ERROR'||status==='TIMED_OUT')console.warn('Campanha realtime:',status,err);});
+    campaign.subscribe((status,err)=>{if(status==='SUBSCRIBED'){scheduleRealtimeRecovery('campaign-subscribed');}if(status==='CHANNEL_ERROR'||status==='TIMED_OUT'){console.warn('Campanha realtime:',status,err);scheduleRealtimeRecovery('campaign-'+status);}});
     state.campaignChannel=campaign;
     startAudioDriftSync();
   }
@@ -512,13 +554,13 @@ async function subscribeRealtime(){
       const row=payload.new;
       if(row?.id)receiveRoomMove({room_id:row.id,x:row.x,y:row.y});
     });
-    session.subscribe((status,err)=>{if(status==='CHANNEL_ERROR'||status==='TIMED_OUT')console.warn('Sessão realtime:',status,err);});
+    session.subscribe((status,err)=>{if(status==='SUBSCRIBED'){scheduleRealtimeRecovery('session-subscribed');}if(status==='CHANNEL_ERROR'||status==='TIMED_OUT'){console.warn('Sessão realtime:',status,err);scheduleRealtimeRecovery('session-'+status);}});
     state.sessionChannel=session;
   }
 
   const presence=sb.channel(`rpg-hub-presence-${state.campaign.id}`,{config:{private:true,presence:{key:state.user.id}}});
   presence.on('presence',{event:'sync'},()=>{state.online=Object.keys(presence.presenceState()).length;$('onlineCount').textContent=`${Math.max(1,state.online)} online`;});
-  presence.subscribe(async status=>{if(status==='SUBSCRIBED')await presence.track({user_id:state.user.id,display_name:state.profile?.display_name||'Aventureiro'});else if(status==='CHANNEL_ERROR'||status==='TIMED_OUT')console.warn('Presença realtime:',status);});
+  presence.subscribe(async status=>{if(status==='SUBSCRIBED'){await presence.track({user_id:state.user.id,display_name:state.profile?.display_name||'Aventureiro'});scheduleRealtimeRecovery('presence-subscribed');}else if(status==='CHANNEL_ERROR'||status==='TIMED_OUT'){console.warn('Presença realtime:',status);scheduleRealtimeRecovery('presence-'+status);}});
   state.presenceChannel=presence;
 }
 
@@ -2654,7 +2696,7 @@ Object.assign(window,{
   currentFloor,currentSession,profileFor,toast,setSave,showModal,closeModal,renderAll,renderShell,renderTable,
   renderCharacters,renderWorld,renderSessions,renderNpcs,renderDice,renderMasterDashboard,renderChronicle,renderView,
   applyZoom,subscribeRealtime,broadcastRoomMove,broadcastRoomResize,broadcastEntityMove,broadcastScene,rpgSnapPoint,rpgSnapSize,
-  loadCampaigns,loadCampaignData,loadFloors,createCampaign,logCampaignActivity,loadCampaignActivity,renderActivity
+  loadCampaigns,loadCampaignData,createCampaign,logCampaignActivity,loadCampaignActivity,renderActivity,reconcileRealtimeState,scheduleRealtimeRecovery
 });
 
 boot();
