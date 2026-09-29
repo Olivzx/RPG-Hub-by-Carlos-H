@@ -1,5 +1,12 @@
 /* RPG HUB — correções específicas para navegação mobile */
 
+/* O painel "Mais" existe no HTML da mesa, mas deve permanecer invisível
+   em desktop. Antes das media queries ele podia ocupar o fluxo da página
+   e vazar apenas o título/descrição para o rodapé da Mesa. */
+.mobileMoreBackdrop{
+  display:none;
+}
+
 @media (max-width: 760px){
   /* Impede qualquer componente da área autenticada de criar vazamento lateral. */
   .appBody,
