@@ -1,7 +1,7 @@
 /* RPG HUB — real token vision, line of sight, walls and combat/map sync */
 (() => {
   'use strict';
-  const V={initialized:false,campaignId:null,floorId:null,settings:null,walls:[],sources:[],fog:[],combat:{encounter:null,combatants:[]},activeTool:'none',drag:null,channel:null,lastKey:null,queued:false,observer:null,resizeObserver:null};
+  const V={initialized:false,campaignId:null,floorId:null,settings:null,walls:[],sources:[],fog:[],explored:[],combat:{encounter:null,combatants:[]},activeTool:'none',drag:null,channel:null,lastKey:null,queued:false,observer:null,resizeObserver:null,revealBusy:false};
   const $=id=>document.getElementById(id), sb=()=>window.rpgSupabase, cid=()=>window.state?.campaign?.id||null, fid=()=>window.state?.floor||null;
   const master=()=>typeof window.canEdit==='function'&&window.canEdit();
   const esc=v=>typeof window.escapeHtml==='function'?window.escapeHtml(v):String(v??'').replace(/[&<>\"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[m]));
@@ -97,6 +97,33 @@
     return (V.fog||[]).some(r=>!r.revealed&&x>=n(r.x)&&x<=n(r.x)+n(r.width)&&y>=n(r.y)&&y<=n(r.y)+n(r.height));
   }
 
+  function exploredKey(x,y){return Number(x)+':'+Number(y)}
+  function hasExplored(x,y){return V.explored.some(c=>Number(c.cell_x)===Number(x)&&Number(c.cell_y)===Number(y))}
+  function cellSize(){return Math.max(.5,n(V.settings?.grid_size,5))}
+  async function revealVisibleCells(){
+    if(master()||!V.settings?.fog_enabled||!V.settings?.vision_enabled||V.revealBusy||!cid()||!fid())return;
+    const api=sb(),st=window.state;if(!api||!st?.user)return;
+    V.revealBusy=true;
+    try{
+      const step=cellSize(),cols=Math.ceil(100/step),rows=Math.ceil(100/step),known=new Set(V.explored.map(c=>exploredKey(c.cell_x,c.cell_y))),fresh=[];
+      for(let cy=0;cy<rows;cy++){
+        for(let cx=0;cx<cols;cx++){
+          if(known.has(exploredKey(cx,cy)))continue;
+          const x=Math.min(99.999,(cx+.5)*step),y=Math.min(99.999,(cy+.5)*step);
+          if(pointVisible(x,y)){
+            fresh.push({id:crypto.randomUUID(),campaign_id:cid(),floor_id:fid(),user_id:st.user.id,cell_x:cx,cell_y:cy});
+            known.add(exploredKey(cx,cy));
+          }
+        }
+      }
+      if(!fresh.length)return;
+      const q=await api.from('fog_exploration_cells').upsert(fresh,{onConflict:'campaign_id,floor_id,user_id,cell_x,cell_y'}).select('*');
+      if(q.error){console.warn('[RPG HUB] Falha ao persistir exploração:',q.error);return}
+      V.explored=[...V.explored,...(q.data||fresh)];
+      queue();
+    }finally{V.revealBusy=false}
+  }
+
   function pointVisible(x,y){
     if(master()) return true;
     x=clamp(Number(x)||0);y=clamp(Number(y)||0);
@@ -167,7 +194,23 @@
         ctx.beginPath();ctx.arc(px,py,radius,0,Math.PI*2);ctx.fill();
       });ctx.globalCompositeOperation='source-over';
     }
-    if(V.settings?.fog_enabled){ctx.fillStyle='rgba(3,5,8,.92)';(V.fog||[]).forEach(r=>{if(!r.revealed)ctx.fillRect(rect.width*n(r.x)/100,rect.height*n(r.y)/100,rect.width*n(r.width)/100,rect.height*n(r.height)/100)})}
+    if(V.settings?.fog_enabled){
+      if(V.explored.length){
+        const step=cellSize();
+        ctx.globalCompositeOperation='destination-out';
+        ctx.fillStyle='rgba(0,0,0,.34)';
+        V.explored.forEach(c=>{
+          ctx.fillRect(rect.width*n(c.cell_x*step)/100,rect.height*n(c.cell_y*step)/100,rect.width*step/100,rect.height*step/100);
+        });
+        ctx.globalCompositeOperation='source-over';
+      }
+      (V.fog||[]).forEach(r=>{
+        if(!r.revealed){
+          ctx.fillStyle='rgba(3,5,8,.96)';
+          ctx.fillRect(rect.width*n(r.x)/100,rect.height*n(r.y)/100,rect.width*n(r.width)/100,rect.height*n(r.height)/100);
+        }
+      });
+    }
     const hint=$('rpgVisionPlayerHint');if(enabled&&!playerSources().length){if(!hint){const x=document.createElement('div');x.id='rpgVisionPlayerHint';x.className='rpgVisionPlayerHint';x.textContent='Nenhum personagem com visão neste andar.';l.board.appendChild(x)}}else hint?.remove()
   }
 
@@ -177,21 +220,23 @@
     const c=cid(),f=fid(),api=sb();if(!c||!f||!api)return;
     const defaults={grid_enabled:true,snap_enabled:true,grid_size:5,unit_per_cell:5,fog_enabled:false,vision_enabled:false};
     // Não reaproveitar a visão do andar/campanha anterior enquanto o novo estado está carregando.
-    V.settings=defaults;V.walls=[];V.sources=[];V.fog=[];V.combat.encounter=null;V.combat.combatants=[];
+    V.settings=defaults;V.walls=[];V.sources=[];V.fog=[];V.explored=[];V.combat.encounter=null;V.combat.combatants=[];
     try{
-      const [a,b,d,g,e]=await Promise.all([
+      const [a,b,d,g,h,e]=await Promise.all([
         api.from('map_settings').select('*').eq('campaign_id',c).eq('floor_id',f).maybeSingle(),
         api.from('map_walls').select('*').eq('campaign_id',c).eq('floor_id',f).order('created_at'),
         api.from('vision_sources').select('*').eq('campaign_id',c).eq('floor_id',f).order('updated_at',{ascending:false}),
         api.from('fog_regions').select('*').eq('campaign_id',c).eq('floor_id',f).order('created_at'),
+        !master()?api.from('fog_exploration_cells').select('id,cell_x,cell_y,last_seen_at').eq('campaign_id',c).eq('floor_id',f).eq('user_id',window.state.user.id).order('cell_y').order('cell_x'):Promise.resolve({data:[]}),
         session()?api.from('combat_encounters').select('id,current_index,round,status').eq('campaign_id',c).eq('session_id',session().id).order('created_at',{ascending:false}).limit(1):Promise.resolve({data:[]})
       ]);
       if(a.error)console.warn('[RPG HUB] Configuração de visão indisponível:',a.error);
       if(b.error)console.warn('[RPG HUB] Paredes indisponíveis:',b.error);
       if(d.error)console.warn('[RPG HUB] Fontes de visão indisponíveis:',d.error);
       if(g.error)console.warn('[RPG HUB] Névoa indisponível:',g.error);
+      if(h?.error)console.warn('[RPG HUB] Exploração persistente indisponível:',h.error);
       V.settings=a.data||defaults;
-      V.walls=b.error?[]:(b.data||[]);V.sources=d.error?[]:(d.data||[]);V.fog=g.error?[]:(g.data||[]);V.combat.encounter=e.data?.[0]||null;
+      V.walls=b.error?[]:(b.data||[]);V.sources=d.error?[]:(d.data||[]);V.fog=g.error?[]:(g.data||[]);V.explored=h?.error?[]:(h?.data||[]);V.combat.encounter=e.data?.[0]||null;
       if(V.combat.encounter){const q=await api.from('combatants').select('id,character_id,npc_id,name,conditions,turn_order').eq('encounter_id',V.combat.encounter.id).order('turn_order');if(!q.error)V.combat.combatants=q.data||[]}
     }catch(error){
       console.warn('[RPG HUB] Falha ao carregar camada de visão:',error);
@@ -199,6 +244,7 @@
     V.campaignId=c;V.floorId=f;V.lastKey=c+':'+f+':'+(session()?.id||'');
     window.rpgVttVisibilityReady=true;
     queue();
+    setTimeout(()=>revealVisibleCells().catch(err=>console.warn('[RPG HUB] exploração:',err)),120);
     setTimeout(()=>window.renderTable?.(),0);
   }
   async function saveWall(s,e){
@@ -264,6 +310,7 @@
     toolbar();observe();realtime();queue();
     const key=cid()+':'+fid()+':'+(session()?.id||'');
     if(key!==V.lastKey&&cid()&&fid())load();
+    else if(!master()&&V.settings?.fog_enabled&&V.settings?.vision_enabled)revealVisibleCells().catch(()=>{});
   }
 
   function init(){
