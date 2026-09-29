@@ -421,6 +421,7 @@
     if(cs.initialized)return;cs.initialized=true;styles();mountUI();bind();realtime();loadCombat(true);
     setInterval(()=>{mountUI();bind();const k=(cid()+':'+(activeSession()?.id||null));if(k!==cs.key)loadCombat(true);if(cid()!==cs.campaignId)realtime();if(state.view==='combat')render();},2000);
   }
+  window.rpgCombatIsActive=()=>cs.encounter?.status==='active';
   window.rpgCombatReconnect=reconnectCombatState;
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
 })();
