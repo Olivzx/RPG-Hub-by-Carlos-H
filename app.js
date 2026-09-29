@@ -10,7 +10,7 @@ const state = {
   user:null, profile:null, campaigns:[], campaign:null, role:'player', members:[], profiles:new Map(),
   locations:[], floors:[], rooms:[], characters:[], characterFields:[], npcs:[], entities:[], sessions:[], rolls:[], audioAssets:[], audioPlaylists:[], audioPlaylistItems:[],
   location:null, floor:null, selected:null, view:'table', tool:'move', zoom:100, campaignChannel:null, sessionChannel:null, audioPlayers:new Map(), audioLayers:new Map(),
-  audioEnabled:false, presenceChannel:null, online:1, isLoading:true, campaignChronicle:null, campaignAudioState:null, chatMessages:[]
+  audioEnabled:false, presenceChannel:null, online:1, isLoading:true, campaignChronicle:null, campaignAudioState:null, chatMessages:[], activity:[]
 };
 
 function isMaster(){ return state.profile?.account_type === 'master'; }
@@ -132,7 +132,7 @@ async function loadCampaignChat(){
   if(!state.campaign)return; const {data,error}=await sb.from('campaign_chat_messages').select('*').eq('campaign_id',state.campaign.id).order('created_at',{ascending:true}).limit(200); if(error){console.warn('RPG HUB chat:',error);state.chatMessages=[];return;} state.chatMessages=data||[];
 }
 function renderChat(){const box=$('campaignChatMessages');if(!box)return;box.innerHTML=state.chatMessages.map(m=>{const p=profileFor(m.user_id);return '<article class="chatMessage '+(m.user_id===state.user?.id?'mine':'')+'"><div class="chatMessageMeta"><b>'+escapeHtml(p?.display_name||'Aventureiro')+'</b><time>'+escapeHtml(fmtDate(m.created_at))+'</time></div><div class="chatMessageBody">'+escapeHtml(m.content).replace(/\n/g,'<br>')+'</div></article>';}).join('')||'<div class="chatEmpty">Nenhuma mensagem ainda. Comece a conversa da mesa.</div>';box.scrollTop=box.scrollHeight;}
-async function sendChatMessage(){const input=$('campaignChatInput');if(!input||!state.campaign)return;const content=input.value.trim();if(!content)return;input.disabled=true;try{const {data,error}=await sb.from('campaign_chat_messages').insert({campaign_id:state.campaign.id,user_id:state.user.id,content,message_type:canEdit()?'master':'chat'}).select('*').maybeSingle();if(error)throw error;if(data&&!state.chatMessages.some(m=>m.id===data.id))state.chatMessages.push(data);input.value='';renderChat();}catch(e){toast(e.message||'Não foi possível enviar a mensagem.','error');}finally{input.disabled=false;input.focus();}}
+async function sendChatMessage(){const input=$('campaignChatInput');if(!input||!state.campaign)return;const content=input.value.trim();if(!content)return;input.disabled=true;try{const {data,error}=await sb.from('campaign_chat_messages').insert({campaign_id:state.campaign.id,user_id:state.user.id,content,message_type:canEdit()?'master':'chat'}).select('*').maybeSingle();if(error)throw error;if(data&&!state.chatMessages.some(m=>m.id===data.id))state.chatMessages.push(data);input.value='';renderChat();await logCampaignActivity('chat_message','chat',canEdit()?'Mestre enviou uma mensagem no chat':'Enviou uma mensagem no chat',data?.id||null,{message_type:canEdit()?'master':'chat'});}catch(e){toast(e.message||'Não foi possível enviar a mensagem.','error');}finally{input.disabled=false;input.focus();}}
 function wireChatControls(){$('campaignChatSend')?.addEventListener('click',sendChatMessage);$('campaignChatInput')?.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendChatMessage();}});}
 
 async function loadCampaignData(){
