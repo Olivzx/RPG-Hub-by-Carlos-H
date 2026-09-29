@@ -40,6 +40,10 @@
     .authFoot{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:18px;padding-top:16px;border-top:1px solid rgba(255,255,255,.055);color:#626a78;font-size:10px}
     .authFoot a{color:#777f8d;text-decoration:none}.authFoot a:hover{color:#bcb5ff}
     .textButton{appearance:none;border:0;background:none;color:#a79fff;font-size:10px;padding:0;cursor:pointer}.textButton:hover{color:#c9c3ff}
+    .authCreator{display:flex;align-items:center;justify-content:center;gap:8px;margin-top:22px;color:#5f6878;font-size:10px;letter-spacing:.02em;text-align:center}
+    .authCreator .creatorMark{width:22px;height:22px;border-radius:7px;display:grid;place-items:center;color:var(--auth-accent);background:rgba(148,135,255,.1);border:1px solid rgba(148,135,255,.16);font-size:10px;box-shadow:0 0 18px rgba(148,135,255,.08)}
+    .authCreator strong{color:#b8b0ff;font-weight:750}
+    .authCreator .creatorDot{opacity:.45}
     .hidden{display:none!important}
     @media(max-width:560px){.authShell{padding:82px 15px 25px}.authBrand{top:20px;left:20px}.authCard{padding:22px 18px;border-radius:17px}.authHeader h1{font-size:25px}.authFoot{align-items:flex-start;flex-direction:column}}
     @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;transition:none!important}}
@@ -62,6 +66,7 @@
       </form>
       <div id="authMessage" class="formMessage" role="status"></div>
       <div class="authFoot"><a href="index.html">← Voltar para o início</a><button id="forgotBtn" class="textButton" type="button">Esqueci minha senha</button></div>
+      <div class="authCreator" aria-label="Créditos do projeto"><span class="creatorMark">✦</span><span>Desenvolvido por <strong>Carlos Henrique</strong><span class="creatorDot"> · </span>RPG HUB</span></div>
     </section>
   </main>
   <script>
