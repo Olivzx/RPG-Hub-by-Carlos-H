@@ -405,6 +405,16 @@
       else if(p.eventType==='DELETE')vtt.aoe=vtt.aoe.filter(x=>x.id!==r.id);
       renderAoe();
     });
+    ch.on('postgres_changes',{event:'*',schema:'public',table:'combat_encounters',filter:'campaign_id=eq.'+c},p=>{
+      const r=p.new||p.old;if(!r||r.session_id!==(typeof currentSession==='function'?currentSession()?.id:null))return;
+      vtt.conditionCache={key:null,rows:[],promise:null};
+      if(state.view==='table')setTimeout(decorateTokens,40);
+    });
+    ch.on('postgres_changes',{event:'*',schema:'public',table:'combatants'},p=>{
+      const r=p.new||p.old;if(!r)return;
+      vtt.conditionCache={key:null,rows:[],promise:null};
+      if(state.view==='table')setTimeout(decorateTokens,40);
+    });
     ch.subscribe((status,error)=>{if(status==='CHANNEL_ERROR'||status==='TIMED_OUT')console.warn('RPG HUB VTT realtime:',status,error);});
     vtt.channel=ch;vtt.campaignId=c;
   }
