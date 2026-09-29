@@ -43,6 +43,9 @@ function entityVisibleOnMap(entity){
 }
 function roomVisibleOnMap(room){
   if(!room) return false;
+  try{
+    if(typeof window.rpgVttRoomVisible === 'function') return !!window.rpgVttRoomVisible(room.x,room.y,room.width,room.height);
+  }catch(err){ console.warn('RPG HUB room visibility:',err); }
   return mapPointVisible(Number(room.x)+Number(room.width)/2, Number(room.y)+Number(room.height)/2);
 }
 
