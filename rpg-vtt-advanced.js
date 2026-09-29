@@ -56,7 +56,7 @@
       grid_size:5,
       unit_per_cell:5,
       fog_enabled:false,
-      vision_enabled:true
+      vision_enabled:false
     };
   }
 
