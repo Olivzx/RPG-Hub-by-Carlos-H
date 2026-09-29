@@ -140,7 +140,7 @@
       else if(p.eventType==='DELETE')cs.combatants=cs.combatants.filter(x=>x.id!==row.id);
       render();
     });
-    ch.subscribe((status,error)=>{if(status==='SUBSCRIBED'){loadCombat(true).catch(()=>{});}if(status==='CHANNEL_ERROR'||status==='TIMED_OUT'){console.warn('RPG HUB combat realtime:',status,error);setTimeout(()=>{if(cs.channel===ch){realtime().catch(()=>{});loadCombat(true).catch(()=>{});}},1200);}});
+    ch.subscribe((status,error)=>{if(status==='SUBSCRIBED'){loadCombat(true).catch(()=>{});}if(status==='CHANNEL_ERROR'||status==='TIMED_OUT'){console.warn('RPG HUB combat realtime:',status,error);setTimeout(()=>{if(cs.channel===ch){cs.channel=null;realtime().catch(()=>{});loadCombat(true).catch(()=>{});}},1200);}});
     cs.channel=ch;cs.campaignId=c;
   }
 
