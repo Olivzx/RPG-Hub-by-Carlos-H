@@ -463,6 +463,7 @@
   window.rpgVttRefreshMapLayout=refreshMapLayout;
   window.rpgVttSetTool=setTool;
   window.rpgVttSetGrid=enabled=>saveSettings({grid_enabled:!!enabled});
+  window.rpgVttGetGrid=()=>!!vtt.settings?.grid_enabled;
   window.rpgVttContextChanged=()=>loadFloorDataWhenChanged();
   window.rpgVttSnapRoomGeometry=()=>{
     const s=['roomX','roomY','roomW','roomH'];if(s.some(id=>!$(id)))return;
