@@ -203,7 +203,7 @@
   }
   async function saveWall(s,e){
     const dx=e.x-s.x,dy=e.y-s.y;if(Math.hypot(dx,dy)<1)return;
-    const q=await sb().from('map_walls').insert({campaign_id:cid(),floor_id:fid(),x1:clamp(s.x),y1:clamp(s.y),x2:clamp(e.x),y2:clamp(e.y),thickness:2,blocks_vision:true,created_by:window.state.user.id}).select().single();
+    const q=await sb().from('map_walls').insert({campaign_id:cid(),floor_id:fid(),x1:clamp(s.x),y1:clamp(s.y),x2:clamp(e.x),y2:clamp(e.y),thickness:2,blocks_vision:true,created_by:window.state.user.id}).select().maybeSingle();
     if(q.error)return window.toast?.(q.error.message||'Não foi possível salvar a parede.','error');V.walls.push(q.data);queue();window.setSave?.('Parede salva')
   }
   async function removeWall(id){
@@ -219,7 +219,7 @@
   const up=async e=>{if(V.activeTool!=='wall'||!V.drag)return;const d=V.drag,p=point(e);d.line.remove();V.drag=null;await saveWall(d.s,p)};
 
   async function setVisionEnabled(v){
-    if(!master())return;const q=await sb().from('map_settings').upsert({...V.settings,campaign_id:cid(),floor_id:fid(),vision_enabled:!!v,updated_by:window.state.user.id},{onConflict:'campaign_id,floor_id'}).select().single();
+    if(!master())return;const q=await sb().from('map_settings').upsert({...V.settings,campaign_id:cid(),floor_id:fid(),vision_enabled:!!v,updated_by:window.state.user.id},{onConflict:'campaign_id,floor_id'}).select().maybeSingle();
     if(q.error)return window.toast?.(q.error.message||'Não foi possível salvar a configuração.','error');V.settings=q.data;queue()
   }
 
@@ -230,7 +230,7 @@
     const sel=$('rpgVisionEntity'),range=$('rpgVisionRange'),meta=$('rpgVisionEntityMeta'),enabled=$('rpgVisionEnabled');
     const sync=()=>{const e=ents.find(x=>x.id===sel?.value),s=existing.get(sel?.value);if(!e){if(meta)meta.textContent='Nenhum token disponível neste andar.';return}range.value=String(s?n(s.range_units,60):60);meta.textContent=(e.character_id?'Personagem vinculado ao jogador.':e.npc_id?'NPC / monstro.':'Entidade manual.')+' · sem configuração salva, o padrão é 60 unidades.'};
     sel?.addEventListener('change',sync);sync();enabled?.addEventListener('change',()=>setVisionEnabled(enabled.checked));
-    $('rpgVisionSave')?.addEventListener('click',async()=>{const e=ents.find(x=>x.id===sel.value);if(!e)return;const old=existing.get(e.id),payload={campaign_id:cid(),floor_id:fid(),entity_id:e.id,enabled:true,range_units:Math.max(0,Number(range.value||60)),updated_by:window.state.user.id,created_by:old?.created_by||window.state.user.id};const q=await sb().from('vision_sources').upsert(payload,{onConflict:'campaign_id,floor_id,entity_id'}).select().single();if(q.error)return window.toast?.(q.error.message||'Não foi possível salvar a visão.','error');existing.set(e.id,q.data);V.sources=[...existing.values()];queue();window.toast?.('Visão de '+e.display_name+' salva');sync()});
+    $('rpgVisionSave')?.addEventListener('click',async()=>{const e=ents.find(x=>x.id===sel.value);if(!e)return;const old=existing.get(e.id),payload={campaign_id:cid(),floor_id:fid(),entity_id:e.id,enabled:true,range_units:Math.max(0,Number(range.value||60)),updated_by:window.state.user.id,created_by:old?.created_by||window.state.user.id};const q=await sb().from('vision_sources').upsert(payload,{onConflict:'campaign_id,floor_id,entity_id'}).select().maybeSingle();if(q.error)return window.toast?.(q.error.message||'Não foi possível salvar a visão.','error');existing.set(e.id,q.data);V.sources=[...existing.values()];queue();window.toast?.('Visão de '+e.display_name+' salva');sync()});
     $('rpgVisionClear')?.addEventListener('click',async()=>{const e=ents.find(x=>x.id===sel.value),old=existing.get(e?.id);if(!old)return window.toast?.('Esse token já usa o padrão.');const q=await sb().from('vision_sources').delete().eq('id',old.id);if(q.error)return window.toast?.(q.error.message||'Não foi possível remover.','error');existing.delete(e.id);V.sources=[...existing.values()];queue();sync();window.toast?.('Configuração removida; volta ao padrão de 60 unidades.')});
   }
 
