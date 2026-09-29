@@ -82,14 +82,14 @@
         if(!payload.name)return toast('Informe o nome da habilidade.','error');
         const q=editing.id?await api().from('character_abilities').update(payload).eq('id',editing.id).select('*').maybeSingle():await api().from('character_abilities').insert({...payload,id:crypto.randomUUID()}).select('*').maybeSingle();
         if(q.error)return toast(q.error.message,'error');const saved=q.data;if(!saved)return toast('O servidor não confirmou a habilidade.','error');
-        data.abilities=editing.id?data.abilities.map(x=>x.id===editing.id?saved:x):[...data.abilities,saved];editing=null;editingType=null;render();await log((editing.id?'Editou ':'Criou ')+saved.name,characterId);toast('Habilidade salva');
+        const wasEdit=!!editing.id;data.abilities=wasEdit?data.abilities.map(x=>x.id===editing.id?saved:x):[...data.abilities,saved];editing=null;editingType=null;render();await log((wasEdit?'Editou ':'Criou ')+saved.name,characterId);toast('Habilidade salva');
       });
       $('loadoutBody').querySelectorAll('[data-loadout-save-item]').forEach(b=>b.onclick=async()=>{
         const payload={campaign_id:st().campaign.id,character_id:characterId,name:$('loadItemName').value.trim(),quantity:Math.max(0,Number($('loadItemQty').value||1)),weight:Math.max(0,Number($('loadItemWeight').value||0)),slot:$('loadItemSlot').value.trim(),equipped:$('loadItemEquipped').checked,description:$('loadItemDescription').value.trim(),updated_at:new Date().toISOString(),created_by:st().user.id};
         if(!payload.name)return toast('Informe o nome do item.','error');
         const q=editing.id?await api().from('character_inventory').update(payload).eq('id',editing.id).select('*').maybeSingle():await api().from('character_inventory').insert({...payload,id:crypto.randomUUID()}).select('*').maybeSingle();
         if(q.error)return toast(q.error.message,'error');const saved=q.data;if(!saved)return toast('O servidor não confirmou o item.','error');
-        data.inventory=editing.id?data.inventory.map(x=>x.id===editing.id?saved:x):[...data.inventory,saved];editing=null;editingType=null;render();await log((editing.id?'Editou ':'Criou ')+saved.name,characterId);toast('Item salvo');
+        const wasEdit=!!editing.id;data.inventory=wasEdit?data.inventory.map(x=>x.id===editing.id?saved:x):[...data.inventory,saved];editing=null;editingType=null;render();await log((wasEdit?'Editou ':'Criou ')+saved.name,characterId);toast('Item salvo');
       });
     };
     window.showModal?.('<div class="modalHeader"><div><div class="eyebrow">PERSONAGEM</div><h3>Habilidades, magias e inventário</h3><p class="modalHint">'+esc(c.name)+'</p></div><button class="closeButton" data-close>×</button></div><div class="rpgLoadout"><div class="rpgLoadoutTabs"><button class="rpgLoadoutTab active" data-loadout-tab="abilities">Habilidades / magias</button><button class="rpgLoadoutTab" data-loadout-tab="inventory">Inventário / equipamento</button></div><div id="loadoutBody"></div></div>',true);
