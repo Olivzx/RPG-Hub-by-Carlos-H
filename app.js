@@ -71,8 +71,8 @@ async function ensureProfile(){
   const {data,error}=await sb.from('profiles').select('*').eq('id',state.user.id).maybeSingle(); if(error) throw error;
   if(data){state.profile=data;return;}
   const display=state.user.user_metadata?.display_name || state.user.email?.split('@')[0] || 'Aventureiro';
-  const {data:created,error:insertError}=await sb.from('profiles').insert({id:state.user.id,display_name:display,account_type:'player'}).select('*').single();
-  if(insertError) throw insertError; state.profile=created;
+  const {data:created,error:insertError}=await sb.from('profiles').insert({id:state.user.id,display_name:display,account_type:'player' }).select('*').maybeSingle();
+  if(insertError) throw insertError; if(!created) throw new Error('O perfil não foi confirmado pelo servidor.'); state.profile=created;
 }
 
 async function loadCampaigns(){
@@ -1471,8 +1471,8 @@ async function saveAudioAsset(asset){
   const {data,error}=await sb.from('audio_assets').insert({
     campaign_id:state.campaign.id,name:asset.name,kind:asset.kind,url:asset.url,loop:asset.loop,
     default_volume:asset.volume,created_by:state.user.id,storage_path:asset.storagePath||null
-  }).select().single();
-  if(error)throw error;
+  }).select().maybeSingle();
+  if(error)throw error; if(!data)throw new Error('O áudio não foi confirmado pelo servidor.');
   state.audioAssets=[...state.audioAssets,data];
   return data;
 }
@@ -1498,8 +1498,8 @@ async function openEditAudioAssetModal(id){
       if(!url)throw new Error('Informe uma URL ou selecione um arquivo.');
       const oldPath=getAudioStoragePath(asset);
       const payload={name,kind:$('editAudioKind').value,url,loop:$('editAudioLoop').checked,default_volume:Number($('editAudioVolume').value)||0.75,storage_path:storagePath};
-      const {data,error}=await sb.from('audio_assets').update(payload).eq('id',id).select().single();
-      if(error)throw error;
+      const {data,error}=await sb.from('audio_assets').update(payload).eq('id',id).select().maybeSingle();
+      if(error)throw error; if(!data)throw new Error('O áudio foi alterado ou removido em outra sessão.');
       if(file&&oldPath&&oldPath!==storagePath){try{await sb.storage.from('rpg-media').remove([oldPath]);}catch(e){console.warn('Arquivo anterior não pôde ser removido',e);}}
       for(const [layerId,layer] of state.audioLayers.entries()){if(layer.asset_id===id)await stopAudioLayer(layerId,{broadcast:true});}
       state.audioAssets=state.audioAssets.map(x=>x.id===id?data:x);
@@ -1790,7 +1790,7 @@ function openAudioLibraryModal(){
   document.querySelectorAll('[data-play-playlist]').forEach(b=>b.onclick=()=>{closeModal();playPlaylist(b.dataset.playPlaylist);});
   document.querySelectorAll('[data-edit-playlist]').forEach(b=>b.onclick=()=>openEditAudioPlaylistModal(b.dataset.editPlaylist));
   document.querySelectorAll('[data-delete-playlist]').forEach(b=>b.onclick=()=>deleteAudioPlaylist(b.dataset.deletePlaylist));
-  $('createPlaylistBtn').onclick=async()=>{try{const name=$('playlistName').value.trim();if(!name){toast('Dê um nome para a playlist.','error');return;}const selected=[...document.querySelectorAll('[data-audio-select]:checked')].map(x=>x.dataset.audioSelect);if(!selected.length){toast('Selecione pelo menos um áudio.','error');return;}const {data:playlist,error}=await sb.from('audio_playlists').insert({campaign_id:state.campaign.id,name,description:$('playlistDesc').value.trim()||null,created_by:state.user.id}).select().single();if(error)throw error;const rows=selected.map((id,index)=>({playlist_id:playlist.id,audio_asset_id:id,sort_order:index}));const {data:items,error:itemError}=await sb.from('audio_playlist_items').insert(rows).select();if(itemError)throw itemError;state.audioPlaylists=[...state.audioPlaylists,playlist];state.audioPlaylistItems=[...state.audioPlaylistItems,...(items||[])];closeModal();toast('Playlist criada');renderDice();openAudioLibraryModal();}catch(e){toast(e.message||'Não foi possível criar a playlist.','error');}};
+  $('createPlaylistBtn').onclick=async()=>{try{const name=$('playlistName').value.trim();if(!name){toast('Dê um nome para a playlist.','error');return;}const selected=[...document.querySelectorAll('[data-audio-select]:checked')].map(x=>x.dataset.audioSelect);if(!selected.length){toast('Selecione pelo menos um áudio.','error');return;}const {data:playlist,error}=await sb.from('audio_playlists').insert({campaign_id:state.campaign.id,name,description:$('playlistDesc').value.trim()||null,created_by:state.user.id}).select().maybeSingle();if(error)throw error;if(!playlist)throw new Error('A playlist não foi confirmada pelo servidor.');const rows=selected.map((id,index)=>({playlist_id:playlist.id,audio_asset_id:id,sort_order:index}));const {data:items,error:itemError}=await sb.from('audio_playlist_items').insert(rows).select();if(itemError)throw itemError;state.audioPlaylists=[...state.audioPlaylists,playlist];state.audioPlaylistItems=[...state.audioPlaylistItems,...(items||[])];closeModal();toast('Playlist criada');renderDice();openAudioLibraryModal();}catch(e){toast(e.message||'Não foi possível criar a playlist.','error');}};
 }
 async function openEditAudioPlaylistModal(id){
   if(!canEdit())return;
@@ -1808,8 +1808,8 @@ async function openEditAudioPlaylistModal(id){
   document.querySelectorAll('[data-audio-manage-play]').forEach(b=>b.onclick=async()=>{const asset=state.audioAssets.find(x=>x.id===b.dataset.audioManagePlay);if(asset)await playAudioLayer({url:asset.url,name:asset.name,kind:asset.kind,loop:asset.loop,volume:asset.default_volume,asset_id:asset.id});});
   document.querySelectorAll('[data-audio-manage-edit]').forEach(b=>b.onclick=()=>openEditAudioAssetModal(b.dataset.audioManageEdit));
   document.querySelectorAll('[data-playlist-remove]').forEach(b=>b.onclick=async()=>{const item=state.audioPlaylistItems.find(x=>x.id===b.dataset.playlistRemove);if(!item)return;const {error}=await sb.from('audio_playlist_items').delete().eq('id',item.id);if(error){toast(error.message,'error');return;}state.audioPlaylistItems=state.audioPlaylistItems.filter(x=>x.id!==item.id);closeModal();openEditAudioPlaylistModal(id);toast('Áudio removido da playlist');});
-  $('addPlaylistAsset').onclick=async()=>{const aid=$('playlistAddAsset').value;if(!aid){toast('Selecione um áudio.','error');return;}const order=state.audioPlaylistItems.filter(i=>i.playlist_id===id).length;const {data,error}=await sb.from('audio_playlist_items').insert({playlist_id:id,audio_asset_id:aid,sort_order:order}).select().single();if(error){toast(error.message,'error');return;}state.audioPlaylistItems.push(data);closeModal();openEditAudioPlaylistModal(id);toast('Áudio adicionado à playlist');};
-  $('savePlaylistChanges').onclick=async()=>{try{const name=$('editPlaylistName').value.trim();if(!name){toast('Informe um nome.','error');return;}const {data,error}=await sb.from('audio_playlists').update({name,description:$('editPlaylistDesc').value.trim()||null}).eq('id',id).select().single();if(error)throw error;state.audioPlaylists=state.audioPlaylists.map(x=>x.id===id?data:x);closeModal();openAudioLibraryModal();toast('Playlist atualizada');}catch(e){toast(e.message||'Não foi possível atualizar a playlist.','error');}};
+  $('addPlaylistAsset').onclick=async()=>{const aid=$('playlistAddAsset').value;if(!aid){toast('Selecione um áudio.','error');return;}const order=state.audioPlaylistItems.filter(i=>i.playlist_id===id).length;const {data,error}=await sb.from('audio_playlist_items').insert({playlist_id:id,audio_asset_id:aid,sort_order:order}).select().maybeSingle();if(error){toast(error.message,'error');return;}if(!data){toast('O áudio não foi adicionado à playlist.','error');return;}state.audioPlaylistItems.push(data);closeModal();openEditAudioPlaylistModal(id);toast('Áudio adicionado à playlist');};
+  $('savePlaylistChanges').onclick=async()=>{try{const name=$('editPlaylistName').value.trim();if(!name){toast('Informe um nome.','error');return;}const {data,error}=await sb.from('audio_playlists').update({name,description:$('editPlaylistDesc').value.trim()||null}).eq('id',id).select().maybeSingle();if(error)throw error;if(!data)throw new Error('A playlist foi alterada ou removida em outra sessão.');state.audioPlaylists=state.audioPlaylists.map(x=>x.id===id?data:x);closeModal();openAudioLibraryModal();toast('Playlist atualizada');}catch(e){toast(e.message||'Não foi possível atualizar a playlist.','error');}};
 }
 
 async function deleteAudioPlaylist(id){if(!canEdit())return;const p=state.audioPlaylists.find(x=>x.id===id);if(!p)return;if(!confirm('Excluir a playlist "'+p.name+'"? Os áudios da biblioteca serão mantidos.'))return;const {error}=await sb.from('audio_playlists').delete().eq('id',id);if(error){toast(error.message,'error');return;}state.audioPlaylistItems=state.audioPlaylistItems.filter(i=>i.playlist_id!==id);state.audioPlaylists=state.audioPlaylists.filter(x=>x.id!==id);closeModal();renderDice();openAudioLibraryModal();toast('Playlist excluída');}
@@ -2056,7 +2056,7 @@ function openAddCharacterFieldModal(){
       const options=type==='select'?$('newFieldOptions').value.split(',').map(x=>x.trim()).filter(Boolean):[];
       const next=(state.characterFields||[]).reduce((m,f)=>Math.max(m,Number(f.sort_order)||0),0)+10;
       const payload={campaign_id:state.campaign.id,field_key:key,label,field_type:type,data_key:'sheet_data.'+key,options,enabled:$('newFieldEnabled').checked,player_visible:$('newFieldVisible').checked,player_editable:$('newFieldEditable').checked,required:$('newFieldRequired').checked,sort_order:next};
-      const {data,error}=await sb.from('character_field_definitions').insert(payload).select().single();if(error)throw error;state.characterFields.push(data);closeModal();openCharacterFieldConfig();toast('Campo adicionado');
+      const {data,error}=await sb.from('character_field_definitions').insert(payload).select().maybeSingle();if(error)throw error;if(!data)throw new Error('O campo não foi confirmado pelo servidor.');state.characterFields.push(data);closeModal();openCharacterFieldConfig();toast('Campo adicionado');
     }catch(e){toast(e.message||'Não foi possível adicionar o campo.','error');}
   };
 }
@@ -2629,8 +2629,8 @@ async function profileModal(){
     try{
       let avatar=$('profileUrl').value.trim()||null;const file=$('profileFile').files[0];if(file)avatar=await uploadMedia(file,'profile');
       const account_type=$('profileAccountType').value;
-      const {data,error}=await sb.from('profiles').update({display_name:$('profileName').value.trim()||'Aventureiro',account_type,avatar_url:avatar,bio:$('profileBio').value.trim()}).eq('id',state.user.id).select().single();
-      if(error)throw error;state.profile=data;closeModal();renderAll();toast(account_type==='master'?'Conta definida como Mestre':'Conta definida como Jogador');
+      const {data,error}=await sb.from('profiles').update({display_name:$('profileName').value.trim()||'Aventureiro',account_type,avatar_url:avatar,bio:$('profileBio').value.trim()}).eq('id',state.user.id).select().maybeSingle();
+      if(error)throw error;if(!data)throw new Error('O perfil não foi confirmado pelo servidor.');state.profile=data;closeModal();renderAll();toast(account_type==='master'?'Conta definida como Mestre':'Conta definida como Jogador');
     }catch(e){toast(e.message||'Não foi possível salvar o perfil.','error');}
   };
 }
