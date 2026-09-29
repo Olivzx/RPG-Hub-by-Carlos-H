@@ -441,8 +441,10 @@ function startEntityDrag(e,el){
   el.classList.add('dragging');
 
   const move=ev=>{
-    const x=Math.max(3,Math.min(97,((ev.clientX-rect.left)/rect.width)*100));
-    const y=Math.max(7,Math.min(93,((ev.clientY-rect.top)/rect.height)*100));
+    const rawX=Math.max(3,Math.min(97,((ev.clientX-rect.left)/rect.width)*100));
+    const rawY=Math.max(7,Math.min(93,((ev.clientY-rect.top)/rect.height)*100));
+    const snapped=typeof window.rpgSnapPoint==='function'?window.rpgSnapPoint(rawX,rawY):{x:rawX,y:rawY};
+    const x=snapped.x, y=snapped.y;
     latestX=x; latestY=y;
     const room=roomAtPosition(x,y,current.floor_id||state.floor);
     state.entities=state.entities.map(item=>item.id===id?{...item,x,y,room_id:room?.id||null}:item);
@@ -484,8 +486,11 @@ function startRoomDrag(e,el){
   let latestX=ox,latestY=oy;
 
   const move=ev=>{
-    latestX=Math.max(2,Math.min(98-Number(r.width),ox+((ev.clientX-sx)/rect.width)*100));
-    latestY=Math.max(5,Math.min(95-Number(r.height),oy+((ev.clientY-sy)/rect.height)*100));
+    const rawX=Math.max(2,Math.min(98-Number(r.width),ox+((ev.clientX-sx)/rect.width)*100));
+    const rawY=Math.max(5,Math.min(95-Number(r.height),oy+((ev.clientY-sy)/rect.height)*100));
+    const snapped=typeof window.rpgSnapPoint==='function'?window.rpgSnapPoint(rawX,rawY):{x:rawX,y:rawY};
+    latestX=Math.max(2,Math.min(98-Number(r.width),snapped.x));
+    latestY=Math.max(5,Math.min(95-Number(r.height),snapped.y));
     state.rooms=state.rooms.map(item=>item.id===r.id?{...item,x:latestX,y:latestY}:item);
     el.style.left=latestX+'%';
     el.style.top=latestY+'%';
@@ -523,8 +528,11 @@ function startRoomResize(e,el){
   let latestW=ow,latestH=oh;
 
   const move=ev=>{
-    latestW=Math.max(10,Math.min(85,ow+((ev.clientX-sx)/rect.width)*100));
-    latestH=Math.max(8,Math.min(75,oh+((ev.clientY-sy)/rect.height)*100));
+    const rawW=Math.max(10,Math.min(85,ow+((ev.clientX-sx)/rect.width)*100));
+    const rawH=Math.max(8,Math.min(75,oh+((ev.clientY-sy)/rect.height)*100));
+    const snapped=typeof window.rpgSnapSize==='function'?window.rpgSnapSize(rawW,rawH):{width:rawW,height:rawH};
+    latestW=Math.min(85,Math.max(10,snapped.width));
+    latestH=Math.min(75,Math.max(8,snapped.height));
     state.rooms=state.rooms.map(item=>item.id===r.id?{...item,width:latestW,height:latestH}:item);
     el.style.width=latestW+'%';
     el.style.height=latestH+'%';
