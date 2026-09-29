@@ -9,7 +9,7 @@ const colors = ['#9487ff','#6ee7b7','#e8c986','#7dd3fc','#f3a8ca','#fb7185','#f5
 const state = {
   user:null, profile:null, campaigns:[], campaign:null, role:'player', members:[], profiles:new Map(),
   locations:[], floors:[], rooms:[], characters:[], characterFields:[], npcs:[], entities:[], sessions:[], rolls:[], audioAssets:[], audioPlaylists:[], audioPlaylistItems:[],
-  location:null, floor:null, selected:null, view:'table', tool:'move', zoom:100, npcFilter:'all', campaignChannel:null, sessionChannel:null, audioPlayers:new Map(), audioLayers:new Map(),
+  location:null, floor:null, selected:null, view:'table', tool:'move', zoom:100, campaignChannel:null, sessionChannel:null, audioPlayers:new Map(), audioLayers:new Map(),
   audioEnabled:false, presenceChannel:null, online:1, isLoading:true, campaignChronicle:null, campaignAudioState:null
 };
 
@@ -69,8 +69,7 @@ async function ensureProfile(){
   const {data,error}=await sb.from('profiles').select('*').eq('id',state.user.id).maybeSingle(); if(error) throw error;
   if(data){state.profile=data;return;}
   const display=state.user.user_metadata?.display_name || state.user.email?.split('@')[0] || 'Aventureiro';
-  const accountType=state.user.user_metadata?.account_type==='master'?'master':'player';
-  const {data:created,error:insertError}=await sb.from('profiles').insert({id:state.user.id,display_name:display,account_type:accountType}).select('*').single();
+  const {data:created,error:insertError}=await sb.from('profiles').insert({id:state.user.id,display_name:display,account_type:'player'}).select('*').single();
   if(insertError) throw insertError; state.profile=created;
 }
 
@@ -484,7 +483,7 @@ function renderTable(){
     if(selectedRoom && !roomVisibleOnMap(selectedRoom)) state.selected=null;
   }
 
-  $('roomLayer').innerHTML=rooms.map(r=>`<div class="room ${state.selected?.type==='room'&&state.selected.id===r.id?'roomSelected':''}" data-room-id="${r.id}" style="left:${r.x}%;top:${r.y}%;width:${r.width}%;height:${r.height}%;transform:rotate(${Number(r.rotation)||0}deg)"><span>${escapeHtml(r.name)}</span><div class="roomResize roomResizeNW" data-resize-dir="nw" title="Redimensionar canto superior esquerdo"></div><div class="roomResize roomResizeN" data-resize-dir="n" title="Redimensionar cima"></div><div class="roomResize roomResizeNE" data-resize-dir="ne" title="Redimensionar canto superior direito"></div><div class="roomResize roomResizeE" data-resize-dir="e" title="Redimensionar direita"></div><div class="roomResize roomResizeSE" data-resize-dir="se" title="Redimensionar canto inferior direito"></div><div class="roomResize roomResizeS" data-resize-dir="s" title="Redimensionar baixo"></div><div class="roomResize roomResizeSW" data-resize-dir="sw" title="Redimensionar canto inferior esquerdo"></div><div class="roomResize roomResizeW" data-resize-dir="w" title="Redimensionar esquerda"></div></div>`).join('');
+  $('roomLayer').innerHTML=rooms.map(r=>`<div class="room ${state.selected?.type==='room'&&state.selected.id===r.id?'roomSelected':''}" data-room-id="${r.id}" style="left:${r.x}%;top:${r.y}%;width:${r.width}%;height:${r.height}%;transform:rotate(${Number(r.rotation)||0}deg)"><span>${escapeHtml(r.name)}</span><div class="roomResize" title="Redimensionar"></div></div>`).join('');
   $('roomList').innerHTML=rooms.map(r=>`<button class="roomItem ${state.selected?.type==='room'&&state.selected.id===r.id?'roomChosen':''}" data-room-list="${r.id}"><span class="roomIcon">▧</span><div><b>${escapeHtml(r.name)}</b><small>${escapeHtml(r.description||'Sem descrição')}</small></div><span>›</span></button>`).join('') || '<div class="emptySelect">Nenhum cômodo visível neste momento.</div>';
   $('entityCount').textContent=entities.length;
   $('tokenLayer').innerHTML=entities.map(e=>`<div class="tokenBig ${state.selected?.type==='entity'&&state.selected.id===e.id?'selected':''}" data-entity-id="${e.id}" style="left:${e.x}%;top:${e.y}%;--token-color:${escapeHtml(e.color||'#9487ff')}">${entityAvatarMarkup(e)}<span>${escapeHtml(e.display_name)}</span></div>`).join('');
@@ -508,7 +507,7 @@ function bindTableInteractions(){
   document.querySelectorAll('[data-move-entity]').forEach(b=>b.onclick=()=>{const select=b.closest('.selectionMoveFloor')?.querySelector('[data-selected-entity-floor]');moveEntityToFloor(b.dataset.moveEntity,select?.value);});
   document.querySelectorAll('.tokenBig').forEach(el=>{el.onpointerdown=e=>startEntityDrag(e,el);el.onclick=e=>{e.stopPropagation();state.selected={type:'entity',id:el.dataset.entityId};renderTable();};});
   document.querySelectorAll('.room').forEach(el=>{el.onclick=e=>{if(e.target.closest('.roomResize')||e.target.closest('.rpgRoomRotateHandle'))return;state.selected={type:'room',id:el.dataset.roomId};renderTable();};el.onpointerdown=e=>startRoomDrag(e,el);});
-  document.querySelectorAll('.roomResize').forEach(el=>el.onpointerdown=e=>startRoomResize(e,el.parentElement,el));
+  document.querySelectorAll('.roomResize').forEach(el=>el.onpointerdown=e=>startRoomResize(e,el.parentElement));
 }
 function clientToBoardPercent(clientX,clientY,rect){
   return {x:Math.max(0,Math.min(100,(clientX-rect.left)/Math.max(1,rect.width)*100)),y:Math.max(0,Math.min(100,(clientY-rect.top)/Math.max(1,rect.height)*100))};
@@ -555,37 +554,35 @@ function startRoomDrag(e,el){
   if(!canEdit()||state.tool!=='move'||e.target.closest('.roomResize')||e.target.closest('.rpgRoomRotateHandle'))return;
   e.preventDefault();e.stopPropagation();
   const r=state.rooms.find(x=>x.id===el.dataset.roomId);if(!r)return;
-  const board=$('board'),rect=board.getBoundingClientRect(),click=clientToBoardPercent(e.clientX,e.clientY,rect);
-  const ox=Number(r.x)||0,oy=Number(r.y)||0,grabOffset={x:click.x-ox,y:click.y-oy},previous={x:ox,y:oy};
+  const board=$('board'),rect=board.getBoundingClientRect(),click=clientToBoardPercent(e.clientX,e.clientY,rect),ox=Number(r.x),oy=Number(r.y),grabOffset={x:click.x-ox,y:click.y-oy},previous={x:ox,y:oy};
   let latestX=ox,latestY=oy,finished=false;el.classList.add('dragging');el.setPointerCapture?.(e.pointerId);
   const cleanup=()=>{if(finished)return;finished=true;try{el.releasePointerCapture?.(e.pointerId)}catch(_){}el.classList.remove('dragging');el.removeEventListener('pointermove',move);el.removeEventListener('pointerup',up);el.removeEventListener('pointercancel',cancel);};
-  const move=ev=>{const p=clientToBoardPercent(ev.clientX,ev.clientY,rect),raw={x:p.x-grabOffset.x,y:p.y-grabOffset.y},snapped=window.rpgSnapPoint?window.rpgSnapPoint(raw.x,raw.y):raw,constrained=constrainRoomPosition({...r,x:latestX,y:latestY},snapped.x,snapped.y);latestX=constrained.x;latestY=constrained.y;state.rooms=state.rooms.map(item=>item.id===r.id?{...item,x:latestX,y:latestY}:item);el.style.left=latestX+'%';el.style.top=latestY+'%';};
-  const up=async()=>{cleanup();const result=await sb.from('rooms').update({x:latestX,y:latestY}).eq('id',r.id).select('*').maybeSingle();if(result.error||!result.data){state.rooms=state.rooms.map(item=>item.id===r.id?{...item,...previous}:item);renderTable();toast(result.error?.message||'Não foi possível salvar a posição deste cômodo.','error');return;}state.rooms=state.rooms.map(item=>item.id===r.id?result.data:item);await broadcastRoomMove({room_id:r.id,x:latestX,y:latestY});setSave('Cômodo reposicionado');};
+  const move=ev=>{
+    const p=clientToBoardPercent(ev.clientX,ev.clientY,rect),raw={x:p.x-grabOffset.x,y:p.y-grabOffset.y},snapped=window.rpgSnapPoint?window.rpgSnapPoint(raw.x,raw.y):raw;
+    const constrained=constrainRoomPosition({...r,x:latestX,y:latestY},snapped.x,snapped.y);latestX=constrained.x;latestY=constrained.y;
+    state.rooms=state.rooms.map(item=>item.id===r.id?{...item,x:latestX,y:latestY}:item);el.style.left=latestX+'%';el.style.top=latestY+'%';
+  };
+  const up=async()=>{cleanup();const {data,error}=await sb.from('rooms').update({x:latestX,y:latestY}).eq('id',r.id).select().single();if(error){state.rooms=state.rooms.map(item=>item.id===r.id?{...item,...previous}:item);renderTable();toast(error.message||'Não foi possível salvar a posição.','error');return;}state.rooms=state.rooms.map(item=>item.id===r.id?data:item);await broadcastRoomMove({room_id:r.id,x:latestX,y:latestY});setSave('Cômodo reposicionado');};
   const cancel=()=>{cleanup();state.rooms=state.rooms.map(item=>item.id===r.id?{...item,...previous}:item);renderTable();};
   el.addEventListener('pointermove',move);el.addEventListener('pointerup',up,{once:true});el.addEventListener('pointercancel',cancel,{once:true});
 }
-function startRoomResize(e,roomEl,handle){
+function startRoomResize(e,el){
   if(!canEdit()||state.tool!=='move')return;
   e.preventDefault();e.stopPropagation();
-  const r=state.rooms.find(x=>x.id===roomEl.dataset.roomId);if(!r)return;
-  const board=$('board'),rect=board.getBoundingClientRect(),sx=e.clientX,sy=e.clientY,ow=Number(r.width)||5,oh=Number(r.height)||5,ox=Number(r.x)||0,oy=Number(r.y)||0;
-  const dir=String(handle?.dataset?.resizeDir||'se').toLowerCase(),rotation=(Number(r.rotation)||0)*Math.PI/180,previous={x:ox,y:oy,width:ow,height:oh};
-  let latestW=ow,latestH=oh,latestX=ox,latestY=oy,finished=false;roomEl.setPointerCapture?.(e.pointerId);roomEl.classList.add('resizing');
-  const cleanup=()=>{if(finished)return;finished=true;try{roomEl.releasePointerCapture?.(e.pointerId)}catch(_){}roomEl.classList.remove('resizing');roomEl.removeEventListener('pointermove',move);roomEl.removeEventListener('pointerup',up);roomEl.removeEventListener('pointercancel',cancel);};
+  const r=state.rooms.find(x=>x.id===el.dataset.roomId);if(!r)return;
+  const board=$('board'),rect=board.getBoundingClientRect(),sx=e.clientX,sy=e.clientY,ow=Number(r.width),oh=Number(r.height),previous={x:Number(r.x),y:Number(r.y),width:ow,height:oh};
+  let latestW=ow,latestH=oh,latestX=previous.x,latestY=previous.y,finished=false;el.setPointerCapture?.(e.pointerId);el.classList.add('resizing');
+  const cleanup=()=>{if(finished)return;finished=true;try{el.releasePointerCapture?.(e.pointerId)}catch(_){}el.classList.remove('resizing');el.removeEventListener('pointermove',move);el.removeEventListener('pointerup',up);el.removeEventListener('pointercancel',cancel);};
   const move=ev=>{
-    const dx=ev.clientX-sx,dy=ev.clientY-sy,localX=((dx*Math.cos(rotation)+dy*Math.sin(rotation))/Math.max(1,rect.width))*100,localY=((-dx*Math.sin(rotation)+dy*Math.cos(rotation))/Math.max(1,rect.height))*100;
-    let nextW=ow,nextH=oh,nextX=ox,nextY=oy;if(dir.includes('e'))nextW=ow+localX;if(dir.includes('w'))nextW=ow-localX;if(dir.includes('s'))nextH=oh+localY;if(dir.includes('n'))nextH=oh-localY;
-    nextW=Math.max(5,Math.min(90,nextW));nextH=Math.max(5,Math.min(90,nextH));
-    const snapped=window.rpgSnapSize?window.rpgSnapSize(nextW,nextH):{width:nextW,height:nextH};latestW=Math.max(5,Math.min(90,snapped.width));latestH=Math.max(5,Math.min(90,snapped.height));
-    if(dir.includes('w'))nextX=ox+(ow-latestW);if(dir.includes('n'))nextY=oy+(oh-latestH);
-    const pos=window.rpgSnapPoint?window.rpgSnapPoint(nextX,nextY):{x:nextX,y:nextY},constrained=constrainRoomPosition({...r,width:latestW,height:latestH},pos.x,pos.y);latestX=constrained.x;latestY=constrained.y;
-    state.rooms=state.rooms.map(item=>item.id===r.id?{...item,width:latestW,height:latestH,x:latestX,y:latestY}:item);roomEl.style.width=latestW+'%';roomEl.style.height=latestH+'%';roomEl.style.left=latestX+'%';roomEl.style.top=latestY+'%';
+    const rawW=Math.max(5,Math.min(90,ow+(ev.clientX-sx)/Math.max(1,rect.width)*100)),rawH=Math.max(5,Math.min(90,oh+(ev.clientY-sy)/Math.max(1,rect.height)*100)),snapped=window.rpgSnapSize?window.rpgSnapSize(rawW,rawH):{width:rawW,height:rawH};
+    latestW=Math.max(5,Math.min(90,snapped.width));latestH=Math.max(5,Math.min(90,snapped.height));
+    const constrained=constrainRoomPosition({...r,width:latestW,height:latestH},latestX,latestY);latestX=constrained.x;latestY=constrained.y;
+    state.rooms=state.rooms.map(item=>item.id===r.id?{...item,width:latestW,height:latestH,x:latestX,y:latestY}:item);el.style.width=latestW+'%';el.style.height=latestH+'%';el.style.left=latestX+'%';el.style.top=latestY+'%';
   };
-  const up=async()=>{cleanup();const result=await sb.from('rooms').update({width:latestW,height:latestH,x:latestX,y:latestY}).eq('id',r.id).select('*').maybeSingle();if(result.error||!result.data){state.rooms=state.rooms.map(item=>item.id===r.id?{...item,...previous}:item);renderTable();toast(result.error?.message||'Não foi possível salvar o redimensionamento deste cômodo.','error');return;}state.rooms=state.rooms.map(item=>item.id===r.id?result.data:item);await broadcastRoomResize({room_id:r.id,width:latestW,height:latestH,x:latestX,y:latestY});setSave('Tamanho do cômodo salvo');};
+  const up=async()=>{cleanup();const {data,error}=await sb.from('rooms').update({width:latestW,height:latestH,x:latestX,y:latestY}).eq('id',r.id).select().single();if(error){state.rooms=state.rooms.map(item=>item.id===r.id?{...item,...previous}:item);renderTable();toast(error.message||'Não foi possível salvar o tamanho.','error');return;}state.rooms=state.rooms.map(item=>item.id===r.id?data:item);await broadcastRoomResize({room_id:r.id,width:latestW,height:latestH,x:latestX,y:latestY});setSave('Área do cômodo salva');};
   const cancel=()=>{cleanup();state.rooms=state.rooms.map(item=>item.id===r.id?{...item,...previous}:item);renderTable();};
-  roomEl.addEventListener('pointermove',move);roomEl.addEventListener('pointerup',up,{once:true});roomEl.addEventListener('pointercancel',cancel,{once:true});
+  el.addEventListener('pointermove',move);el.addEventListener('pointerup',up,{once:true});el.addEventListener('pointercancel',cancel,{once:true});
 }
-
 function applyZoom(){
   const board=$('board');
   if(!board)return;
@@ -664,7 +661,7 @@ function renderWorld(){
             <p>${escapeHtml(l.description||'Sem descrição')}</p>
           </div>
         </div>
-        ${canEdit()?'<div class="worldActionGroup">'+(locationFloors[0]?'<button class="softButton" data-open-location="'+l.id+'">Abrir na mesa</button>':'')+'<button class="softButton" data-edit-location="'+l.id+'">Editar local</button><button class="dangerGhost" data-delete-location="'+l.id+'">Excluir</button></div>':''}
+        ${canEdit()?'<div class="worldActionGroup"><button class="softButton" data-edit-location="'+l.id+'">Editar local</button><button class="dangerGhost" data-delete-location="'+l.id+'">Excluir</button></div>':''}
       </div>
       ${l.notes?`<div class="worldNote"><span>ANOTAÇÕES DO MESTRE</span><p>${escapeHtml(l.notes)}</p></div>`:''}
       <div class="worldFloorSection">
@@ -698,7 +695,6 @@ function renderWorld(){
   $('worldLocations').innerHTML=locations||'<div class="emptyPanel">Nenhum local cadastrado. Crie o primeiro local para começar a construir seu mundo.</div>';
 
   $('newLocationWorldBtn')?.addEventListener('click',openLocationCreateModal);
-  document.querySelectorAll('[data-open-location]').forEach(b=>b.onclick=async()=>{const loc=state.locations.find(l=>l.id===b.dataset.openLocation);const floor=state.floors.find(f=>f.location_id===loc?.id);if(!floor){toast('Este local ainda não possui andares cadastrados.','error');return;}await setActiveScene(floor.id,null);});
   document.querySelectorAll('[data-edit-location]').forEach(b=>b.onclick=()=>openLocationModal(b.dataset.editLocation));
   document.querySelectorAll('[data-delete-location]').forEach(b=>b.onclick=()=>openDeleteLocationModal(b.dataset.deleteLocation));
   document.querySelectorAll('[data-new-floor]').forEach(b=>b.onclick=()=>openFloorModal(null,b.dataset.newFloor));
@@ -932,18 +928,9 @@ async function saveCampaignChronicle(){
 }
 
 function renderNpcs(){
-  const filter=state.npcFilter||'all';
-  const rows=(state.npcs||[]).filter(n=>filter==='all'||n.npc_type===filter);
-  const toolbar='<div class="dataFilterBar" id="npcFilterBar"><button class="'+(filter==='all'?'active':'')+'" data-npc-filter="all">Todos <b>'+state.npcs.length+'</b></button><button class="'+(filter==='npc'?'active':'')+'" data-npc-filter="npc">NPCs <b>'+state.npcs.filter(n=>n.npc_type==='npc').length+'</b></button><button class="'+(filter==='monster'?'active':'')+'" data-npc-filter="monster">Monstros <b>'+state.npcs.filter(n=>n.npc_type==='monster').length+'</b></button></div>';
-  $('npcsGrid').innerHTML=toolbar+(rows.map(n=>{
-    const isMonster=n.npc_type==='monster';
-    return '<article class="dataCard"><div class="cardAvatar npc">'+(n.avatar_url?'<img src="'+escapeHtml(n.avatar_url)+'" alt="">':'♜')+'</div><div class="dataCardMain"><div class="cardKicker">'+(isMonster?'MONSTRO':'NPC')+'</div><h3>'+escapeHtml(n.name)+'</h3><p>'+escapeHtml(n.description||'Sem descrição')+'</p><small class="privateNote">Tipo: '+(isMonster?'Monstro':'NPC')+' · Anotação do mestre: '+escapeHtml(n.notes_private||'—')+'</small></div><div class="cardActions"><button data-edit-npc="'+n.id+'">Editar</button>'+(canEdit()?'<button class="softButton" data-add-npc="'+n.id+'">'+(state.entities.some(e=>e.npc_id===n.id)?'Na mesa':'Colocar na mesa')+'</button>':'')+'</div></article>';
-  }).join('') || '<div class="emptyPanel">Nenhum registro nesta categoria.</div>');
-  document.querySelectorAll('[data-npc-filter]').forEach(b=>b.onclick=()=>{state.npcFilter=b.dataset.npcFilter;renderNpcs();});
-  document.querySelectorAll('[data-edit-npc]').forEach(b=>b.onclick=()=>openNpcModal(b.dataset.editNpc));
-  document.querySelectorAll('[data-add-npc]').forEach(b=>b.onclick=()=>addNpcToBoard(b.dataset.addNpc));
+  $('npcsGrid').innerHTML=state.npcs.map(n=>`<article class="dataCard"><div class="cardAvatar npc">${n.avatar_url?`<img src="${escapeHtml(n.avatar_url)}" alt="">`:'♜'}</div><div class="dataCardMain"><div class="cardKicker">NPC / MONSTRO</div><h3>${escapeHtml(n.name)}</h3><p>${escapeHtml(n.description||'Sem descrição')}</p><small class="privateNote">Anotação do mestre: ${escapeHtml(n.notes_private||'—')}</small></div><div class="cardActions"><button data-edit-npc="${n.id}">Editar</button>${canEdit()?`<button class="softButton" data-add-npc="${n.id}">${state.entities.some(e=>e.npc_id===n.id)?'Na mesa':'Colocar na mesa'}</button>`:''}</div></article>`).join('') || '<div class="emptyPanel">Nenhum NPC ou monstro cadastrado.</div>';
+  document.querySelectorAll('[data-edit-npc]').forEach(b=>b.onclick=()=>openNpcModal(b.dataset.editNpc));document.querySelectorAll('[data-add-npc]').forEach(b=>b.onclick=()=>addNpcToBoard(b.dataset.addNpc));
 }
-
 function renderDice(){
   const active=currentSession();
   const history=$('masterDashboardRollHistory');
@@ -1300,7 +1287,6 @@ async function seedCharacterFieldsForCampaign(campaignId){
     ['avatar_url','Foto / avatar','url','avatar_url',false,150],
     ['notes','Ficha complementar','textarea','notes',false,160],
     ['current_items','Itens atuais / equipamentos em uso','textarea','sheet_data.current_items',false,165],
-    ['weapons','Armas','textarea','sheet_data.weapons',false,168],
   ];
   const payload=defaults.map(([field_key,label,field_type,data_key,required,sort_order])=>({campaign_id:campaignId,field_key,label,field_type,data_key,required,sort_order}));
   const {error}=await sb.from('character_field_definitions').insert(payload);
@@ -1309,41 +1295,8 @@ async function seedCharacterFieldsForCampaign(campaignId){
 }
 
 async function ensureCharacterFields(){
-  if(!state.campaign||!canEdit())return;
-  const defaults=[
-    ['name','Nome do personagem','text','name',true,0],
-    ['class_name','Classe / função','text','class_name',false,10],
-    ['ancestry_name','Origem / ancestralidade','text','ancestry_name',false,20],
-    ['level','Nível','number','level',false,30],
-    ['hp_current','Vida atual','number','hp_current',false,40],
-    ['hp_max','Vida máxima','number','hp_max',false,50],
-    ['armor_class','Defesa / CA','number','armor_class',false,60],
-    ['luck','Sorte','number','luck',false,70],
-    ['luck_points','Pontos de sorte','number','luck_points',false,80],
-    ['attr_forca','Força','number','attributes.forca',false,90],
-    ['attr_destreza','Destreza','number','attributes.destreza',false,100],
-    ['attr_constituicao','Constituição','number','attributes.constituicao',false,110],
-    ['attr_inteligencia','Inteligência','number','attributes.inteligencia',false,120],
-    ['attr_sabedoria','Sabedoria','number','attributes.sabedoria',false,130],
-    ['attr_carisma','Carisma','number','attributes.carisma',false,140],
-    ['avatar_url','Foto / avatar','url','avatar_url',false,150],
-    ['notes','Ficha complementar','textarea','notes',false,160],
-    ['current_items','Itens atuais / equipamentos em uso','textarea','sheet_data.current_items',false,165],
-    ['weapons','Armas','textarea','sheet_data.weapons',false,168]
-  ];
-  const {data:existing,error:readError}=await sb.from('character_field_definitions').select('*').eq('campaign_id',state.campaign.id);
-  if(readError)throw readError;
-  const existingKeys=new Set((existing||[]).map(f=>f.field_key));
-  const missing=defaults.filter(([field_key])=>!existingKeys.has(field_key)).map(([field_key,label,field_type,data_key,required,sort_order])=>({
-    campaign_id:state.campaign.id,field_key,label,field_type,data_key,required,sort_order,enabled:true,player_visible:true,player_editable:true,options:[]
-  }));
-  if(missing.length){
-    const {error}=await sb.from('character_field_definitions').insert(missing);
-    if(error)throw error;
-  }
-  const {data:rows,error}=await sb.from('character_field_definitions').select('*').eq('campaign_id',state.campaign.id).order('sort_order');
-  if(error)throw error;
-  state.characterFields=rows||[];
+  if(state.characterFields.length||!state.campaign)return;
+  if(canEdit()){await seedCharacterFieldsForCampaign(state.campaign.id);}
 }
 
 async function createCampaign(name,description){
@@ -1566,22 +1519,25 @@ function fieldInputHtml(field,character,isMasterEditor){
   const id='field_'+field.id;
   const options=Array.isArray(field.options)?field.options:[];
   if(field.data_key==='avatar_url'){
-    return \`<label class="dynamicField">\${escapeHtml(field.label)} \${req}<input id="\${id}" data-field-id="\${field.id}" data-data-key="\${escapeHtml(field.data_key)}" data-type="url" value="\${escapeHtml(value)}" placeholder="https://.../imagem.webp" \${disabled} \${required}><input id="\${id}_file" class="dynamicFile" type="file" accept="image/*" \${disabled}><small>URL ou envio de arquivo</small></label>\`;
+    return `<label class="dynamicField">${escapeHtml(field.label)} ${req}<input id="${id}" data-field-id="${field.id}" data-data-key="${escapeHtml(field.data_key)}" data-type="url" value="${escapeHtml(value)}" placeholder="https://.../imagem.webp" ${disabled} ${required}><input id="${id}_file" class="dynamicFile" type="file" accept="image/*" ${disabled}><small>URL ou envio de arquivo</small></label>`;
   }
   if(field.field_type==='textarea'){
     const isItems=field.data_key==='sheet_data.current_items';
-    const isWeapons=field.data_key==='sheet_data.weapons';
-    const placeholder=isWeapons?'Ex.: Espada longa — ataque +5 — dano 1d8\\nArco — ataque +4 — dano 1d6 — alcance 18m':isItems?'Ex.: Poção de cura x2\\nTocha x3\\nKit de ferramentas x1':'Digite as informações deste campo';
-    const hint=disabled?'Somente o mestre':isWeapons?'Cadastre uma arma por linha. Inclua ataque, dano, alcance e observações quando precisar.':isItems?'Cadastre um item/equipamento por linha, com quantidade quando fizer sentido.':'Campo da ficha';
-    const rows=isWeapons||isItems?8:6;
-    return '<label class="dynamicField">'+escapeHtml(field.label)+' '+req+'<textarea id="'+id+'" data-field-id="'+field.id+'" data-data-key="'+escapeHtml(field.data_key)+'" data-type="textarea" rows="'+rows+'" placeholder="'+escapeHtml(placeholder)+'" '+disabled+' '+required+'>'+escapeHtml(value)+'</textarea><small>'+hint+'</small></label>';
+    const placeholder=isItems?'Ex.: Espada longa x1\\nPoção de cura x2\\nTocha x3':'Digite as informações deste campo';
+    const hint=disabled?'Somente o mestre':isItems?'Cadastre um item por linha, com quantidade quando fizer sentido.':'Campo da ficha';
+    return '<label class="dynamicField">'+escapeHtml(field.label)+' '+req+'<textarea id="'+id+'" data-field-id="'+field.id+'" data-data-key="'+escapeHtml(field.data_key)+'" data-type="textarea" rows="'+(isItems?7:6)+'" placeholder="'+escapeHtml(placeholder)+'" '+disabled+' '+required+'>'+escapeHtml(value)+'</textarea><small>'+hint+'</small></label>';
   }
-  if(field.field_type==='number')return \`<label class="dynamicField">\${escapeHtml(field.label)} \${req}<input id="\${id}" data-field-id="\${field.id}" data-data-key="\${escapeHtml(field.data_key)}" data-type="number" type="number" value="\${escapeHtml(value)}" \${disabled} \${required}>\${disabled?'<small>Somente o mestre</small>':''}</label>\`;
-  if(field.field_type==='select')return \`<label class="dynamicField">\${escapeHtml(field.label)} \${req}<select id="\${id}" data-field-id="\${field.id}" data-data-key="\${escapeHtml(field.data_key)}" data-type="select" \${disabled} \${required}><option value="">Selecione</option>\${options.map(o=>\`<option value="\${escapeHtml(o)}" \${String(value)===String(o)?'selected':''}>\${escapeHtml(o)}</option>\`).join('')}</select>\${disabled?'<small>Somente o mestre</small>':''}</label>\`;
-  if(field.field_type==='checkbox')return \`<label class="dynamicCheck"><input id="\${id}" data-field-id="\${field.id}" data-data-key="\${escapeHtml(field.data_key)}" data-type="checkbox" type="checkbox" \${value?'checked':''} \${disabled}> <span>\${escapeHtml(field.label)}</span>\${field.required?'<span class="requiredMark">*</span>':''}</label>\`;
-  return \`<label class="dynamicField">\${escapeHtml(field.label)} \${req}<input id="\${id}" data-field-id="\${field.id}" data-data-key="\${escapeHtml(field.data_key)}" data-type="\${field.field_type||'text'}" value="\${escapeHtml(value)}" \${disabled} \${required}>\${disabled?'<small>Somente o mestre</small>':''}</label>\`;
+  if(field.field_type==='number'){
+    return `<label class="dynamicField">${escapeHtml(field.label)} ${req}<input id="${id}" data-field-id="${field.id}" data-data-key="${escapeHtml(field.data_key)}" data-type="number" type="number" value="${escapeHtml(value)}" ${disabled} ${required}>${disabled?'<small>Somente o mestre</small>':''}</label>`;
+  }
+  if(field.field_type==='select'){
+    return `<label class="dynamicField">${escapeHtml(field.label)} ${req}<select id="${id}" data-field-id="${field.id}" data-data-key="${escapeHtml(field.data_key)}" data-type="select" ${disabled} ${required}><option value="">Selecione</option>${options.map(o=>`<option value="${escapeHtml(o)}" ${String(value)===String(o)?'selected':''}>${escapeHtml(o)}</option>`).join('')}</select>${disabled?'<small>Somente o mestre</small>':''}</label>`;
+  }
+  if(field.field_type==='checkbox'){
+    return `<label class="dynamicCheck"><input id="${id}" data-field-id="${field.id}" data-data-key="${escapeHtml(field.data_key)}" data-type="checkbox" type="checkbox" ${value?'checked':''} ${disabled}> <span>${escapeHtml(field.label)}</span>${field.required?'<span class="requiredMark">*</span>':''}</label>`;
+  }
+  return `<label class="dynamicField">${escapeHtml(field.label)} ${req}<input id="${id}" data-field-id="${field.id}" data-data-key="${escapeHtml(field.data_key)}" data-type="${field.field_type||'text'}" value="${escapeHtml(value)}" ${disabled} ${required}>${disabled?'<small>Somente o mestre</small>':''}</label>`;
 }
-
 function getDynamicFieldDefinitions(isMasterEditor){
   return (state.characterFields||[]).filter(f=>f.enabled && (isMasterEditor || f.player_visible)).sort((a,b)=>Number(a.sort_order)-Number(b.sort_order));
 }
@@ -1906,58 +1862,10 @@ function openSessionModal(id){
 }
 async function activateSession(id){if(!id)return;const session=state.sessions.find(x=>x.id===id);if(!session)return;state.selectedSessionId=id;state.floor=session.active_floor_id||state.floor;state.selected=session.active_room_id?{type:'room',id:session.active_room_id}:null;state.tool='move';window.rpgVttSetTool?.('move');window.rpgVttContextChanged?.();const af=state.floors.find(f=>f.id===state.floor);if(af)state.location=state.locations.find(l=>l.id===af.location_id)||state.location;renderAll();await subscribeRealtime();toast(`Sessão #${session.session_number} aberta`);}
 
-function openNpcModal(id){
-  if(!requireMaster())return;
-  const n=id?state.npcs.find(x=>x.id===id):null;
-  const v=n||{name:'',npc_type:'npc',description:'',notes_private:'',avatar_url:'',data:{}};
-  showModal(
-    '<div class="modalHeader"><div><div class="eyebrow">BESTIÁRIO</div><h3>'+(n?'Editar ficha':'Nova ficha')+'</h3></div><button class="closeButton" data-close>×</button></div>'+
-    '<div class="formGrid">'+
-      '<label>Nome<input id="npcName" maxlength="120" value="'+escapeHtml(v.name)+'" placeholder="Ex.: Guarda da ponte"></label>'+
-      '<label>Classificação<select id="npcType"><option value="npc" '+(v.npc_type!=='monster'?'selected':'')+'>NPC</option><option value="monster" '+(v.npc_type==='monster'?'selected':'')+'>Monstro</option></select></label>'+
-    '</div>'+
-    '<label>Descrição<textarea id="npcDesc" rows="4" placeholder="Características, papel na história ou comportamento.">'+escapeHtml(v.description||'')+'</textarea></label>'+
-    '<label>Notas privadas do mestre<textarea id="npcNotes" rows="5" placeholder="Informações que somente o mestre deve consultar.">'+escapeHtml(v.notes_private||'')+'</textarea></label>'+
-    '<label>Avatar URL<input id="npcAvatar" value="'+escapeHtml(v.avatar_url||'')+'" placeholder="https://..."></label>'+
-    '<label>Avatar do NPC<input id="npcFile" type="file" accept="image/*"></label>'+
-    '<label>Dados / ficha complementar (JSON)<textarea id="npcData" rows="8">'+escapeHtml(JSON.stringify(v.data||{},null,2))+'</textarea></label>'+
-    '<div class="modalHint">A classificação fica salva na ficha e também é usada na mesa para diferenciar NPCs e monstros.</div>'+
-    '<div class="modalActions"><button class="softButton" data-close>Cancelar</button><button id="saveNpc" class="primarySmall">Salvar ficha</button></div>'
-  );
-  $('saveNpc').onclick=async()=>{
-    try{
-      const payload={
-        campaign_id:state.campaign.id,
-        npc_type:$('npcType').value==='monster'?'monster':'npc',
-        name:$('npcName').value.trim(),
-        description:$('npcDesc').value.trim(),
-        notes_private:$('npcNotes').value.trim(),
-        avatar_url:$('npcAvatar').value.trim()||null,
-        data:JSON.parse($('npcData').value||'{}')
-      };
-      if(!payload.name)throw new Error('Informe o nome.');
-      const file=$('npcFile').files[0];
-      if(file)payload.avatar_url=await uploadMedia(file,'npcs/'+uid());
-      const result=n?
-        await sb.from('npcs').update(payload).eq('id',n.id).select('*').maybeSingle():
-        await sb.from('npcs').insert(payload).select('*').single();
-      if(result.error||!result.data)throw result.error||new Error('Não foi possível salvar esta ficha.');
-      if(n)state.npcs=state.npcs.map(x=>x.id===n.id?result.data:x);else state.npcs.push(result.data);
-      if(n){
-        const linked=state.entities.find(e=>e.npc_id===n.id);
-        if(linked){
-          const kind=result.data.npc_type==='monster'?'monster':'npc';
-          const icon=kind==='monster'?'☠':'♜';
-          const entityResult=await sb.from('world_entities').update({entity_kind:kind,display_name:result.data.name,icon}).eq('id',linked.id).select('*').maybeSingle();
-          if(entityResult.data)state.entities=state.entities.map(e=>e.id===linked.id?entityResult.data:e);
-        }
-      }
-      closeModal();renderAll();toast(payload.npc_type==='monster'?'Monstro salvo':'NPC salvo');
-    }catch(e){toast(e.message||'Não foi possível salvar a ficha.','error');}
-  };
-}
+function openNpcModal(id){if(!requireMaster())return;const n=id?state.npcs.find(x=>x.id===id):null;const v=n||{name:'',description:'',notes_private:'',avatar_url:'',data:{}};showModal(`<div class="modalHeader"><div><div class="eyebrow">BESTIÁRIO</div><h3>${n?'Editar entidade':'Novo NPC / monstro'}</h3></div><button class="closeButton" data-close>×</button></div><label>Nome<input id="npcName" value="${escapeHtml(v.name)}"></label><label>Descrição<textarea id="npcDesc" rows="4">${escapeHtml(v.description||'')}</textarea></label><label>Notas privadas do mestre<textarea id="npcNotes" rows="5">${escapeHtml(v.notes_private||'')}</textarea></label><label>Avatar URL<input id="npcAvatar" value="${escapeHtml(v.avatar_url||'')}" placeholder="https://..."></label><label>Avatar do NPC<input id="npcFile" type="file" accept="image/*"></label><label>Dados / ficha (JSON)<textarea id="npcData" rows="6">${escapeHtml(JSON.stringify(v.data||{},null,2))}</textarea></label><div class="modalActions"><button class="softButton" data-close>Cancelar</button><button id="saveNpc" class="primarySmall">Salvar</button></div>`);$('saveNpc').onclick=async()=>{try{const payload={campaign_id:state.campaign.id,name:$('npcName').value.trim(),description:$('npcDesc').value.trim(),notes_private:$('npcNotes').value.trim(),avatar_url:$('npcAvatar').value.trim()||null,data:JSON.parse($('npcData').value||'{}')};if(!payload.name)throw new Error('Informe o nome.');const file=$('npcFile').files[0];if(file)payload.avatar_url=await uploadMedia(file,`npcs/${uid()}`);const result=n?await sb.from('npcs').update(payload).eq('id',n.id).select().single():await sb.from('npcs').insert(payload).select().single();if(result.error)throw result.error;if(n)state.npcs=state.npcs.map(x=>x.id===n.id?result.data:x);else state.npcs.push(result.data);closeModal();renderAll();toast('NPC salvo');}catch(e){toast(e.message,'error');}};}
+
 async function addCharacterToBoard(id){if(!requireMaster())return;const c=state.characters.find(x=>x.id===id);if(!c)return;if(state.entities.some(e=>e.character_id===id)){toast('Esse personagem já está na mesa.');return;}const payload={campaign_id:state.campaign.id,character_id:id,entity_kind:'character',display_name:c.name,icon:'♙',color:colors[state.entities.length%colors.length],floor_id:state.floor,x:50,y:50,room_id:null,visible:true,metadata:{}};const {data,error}=await sb.from('world_entities').insert(payload).select().single();if(error){toast(error.message,'error');return;}state.entities.push(data);renderAll();toast(`${c.name} entrou na mesa`);}
-async function addNpcToBoard(id){if(!requireMaster())return;const n=state.npcs.find(x=>x.id===id);if(!n)return;if(state.entities.some(e=>e.npc_id===id)){toast('Essa entidade já está na mesa.');return;}const kind=n.npc_type==='monster'?'monster':'npc';const payload={campaign_id:state.campaign.id,npc_id:id,entity_kind:kind,display_name:n.name,icon:kind==='monster'?'☠':'♜',color:colors[state.entities.length%colors.length],floor_id:state.floor,x:50,y:50,room_id:null,visible:true,metadata:{}};const {data,error}=await sb.from('world_entities').insert(payload).select().single();if(error){toast(error.message,'error');return;}state.entities.push(data);renderAll();toast(`${n.name} entrou na mesa`);}
+async function addNpcToBoard(id){if(!requireMaster())return;const n=state.npcs.find(x=>x.id===id);if(!n)return;if(state.entities.some(e=>e.npc_id===id)){toast('Essa entidade já está na mesa.');return;}const payload={campaign_id:state.campaign.id,npc_id:id,entity_kind:'npc',display_name:n.name,icon:'♜',color:colors[state.entities.length%colors.length],floor_id:state.floor,x:50,y:50,room_id:null,visible:true,metadata:{}};const {data,error}=await sb.from('world_entities').insert(payload).select().single();if(error){toast(error.message,'error');return;}state.entities.push(data);renderAll();toast(`${n.name} entrou na mesa`);}
 function roomAtPosition(x,y,floorId){
   return state.rooms.find(r=>r.floor_id===floorId&&pointInsideRoom(x,y,r))||null;
 }
@@ -2069,8 +1977,8 @@ async function profileModal(){
     try{
       let avatar=$('profileUrl').value.trim()||null;const file=$('profileFile').files[0];if(file)avatar=await uploadMedia(file,'profile');
       const account_type=$('profileAccountType').value;
-      const {data,error}=await sb.from('profiles').update({display_name:$('profileName').value.trim()||'Aventureiro',account_type,avatar_url:avatar,bio:$('profileBio').value.trim()}).eq('id',state.user.id).select('*').maybeSingle();
-      if(error||!data)throw error||new Error('Não foi possível atualizar o tipo da conta.');state.profile=data;closeModal();renderAll();toast(account_type==='master'?'Conta definida como Mestre':'Conta definida como Jogador');
+      const {data,error}=await sb.from('profiles').update({display_name:$('profileName').value.trim()||'Aventureiro',account_type,avatar_url:avatar,bio:$('profileBio').value.trim()}).eq('id',state.user.id).select().single();
+      if(error)throw error;state.profile=data;closeModal();renderAll();toast(account_type==='master'?'Conta definida como Mestre':'Conta definida como Jogador');
     }catch(e){toast(e.message||'Não foi possível salvar o perfil.','error');}
   };
 }
