@@ -14,6 +14,13 @@
       action_costs:s.action_costs&&typeof s.action_costs==='object'?s.action_costs:{}
     };
   };
+  const PRESETS={
+    generic:{name:'Genérico',abilityActions:true,weaponDamage:true,movementUnits:6,criticalMultiplier:2},
+    dnd5e:{name:'D&D 5e',abilityActions:true,weaponDamage:true,movementUnits:6,criticalMultiplier:2},
+    pathfinder2e:{name:'Pathfinder 2e',abilityActions:true,weaponDamage:true,movementUnits:6,criticalMultiplier:2},
+    tormenta20:{name:'Tormenta 20',abilityActions:true,weaponDamage:true,movementUnits:6,criticalMultiplier:2}
+  };
+  function preset(name){return PRESETS[String(name||'generic').toLowerCase()]||PRESETS.generic}
   function multiplier(r,type){
     const t=String(type||'physical').trim().toLowerCase(),s=stateOf(r);
     if(s.immunities.includes(t))return 0;
@@ -84,5 +91,5 @@
       try{const saved=await persist(r.id,payload);window.dispatchEvent(new CustomEvent('rpg:combat-rules-updated',{detail:saved}));window.closeModal?.();window.toast?.('Regras salvas.')}catch(err){window.toast?.(err.message||'Não foi possível salvar as regras.','error')}
     };
   }
-  window.rpgCombatRules={stateOf,multiplier,applyDamage,addCondition,removeCondition,tick,saveBonus,rollSave,configureModal};
+  window.rpgCombatRules={stateOf,multiplier,applyDamage,addCondition,removeCondition,tick,saveBonus,rollSave,configureModal,preset,PRESETS};
 })();
