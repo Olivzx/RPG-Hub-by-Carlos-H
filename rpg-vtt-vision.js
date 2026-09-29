@@ -313,7 +313,8 @@
     else if(!master()&&V.settings?.fog_enabled&&V.settings?.vision_enabled)revealVisibleCells().catch(()=>{});
   }
 
-  function init(){
+    window.addEventListener('rpg:realtime-reconnect',()=>{if(V.channel){sb()?.removeChannel(V.channel).catch(()=>{});V.channel=null;}realtime();load();queue();});
+function init(){
     if(V.initialized)return;inject();V.initialized=true;const b=$('board');
     if(b){b.addEventListener('pointerdown',down,true);b.addEventListener('pointermove',move,true);b.addEventListener('pointerup',up,true);b.addEventListener('pointercancel',up,true)}
     setInterval(tick,2500);tick();
