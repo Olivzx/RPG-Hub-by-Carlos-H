@@ -1827,10 +1827,14 @@ async function openEditAudioPlaylistModal(id){
 
 async function deleteAudioPlaylist(id){if(!canEdit())return;const p=state.audioPlaylists.find(x=>x.id===id);if(!p)return;if(!confirm('Excluir a playlist "'+p.name+'"? Os áudios da biblioteca serão mantidos.'))return;const {error}=await sb.from('audio_playlists').delete().eq('id',id);if(error){toast(error.message,'error');return;}state.audioPlaylistItems=state.audioPlaylistItems.filter(i=>i.playlist_id!==id);state.audioPlaylists=state.audioPlaylists.filter(x=>x.id!==id);closeModal();renderDice();openAudioLibraryModal();toast('Playlist excluída');}
 function openNoCampaignState(){
-  showModal(`<div class="modalHeader"><div><div class="eyebrow">PRIMEIRO PASSO</div><h3>Você ainda não participa de uma campanha</h3></div></div>
-  <p class="modalHint">Sua conta está configurada como Jogador. Para entrar em uma campanha, use um convite/código do mestre. Você também pode mudar seu tipo de conta para Mestre no seu perfil sem ganhar acesso às campanhas de outras pessoas.</p>
-  <div class="modalActions"><button class="primarySmall" id="openProfileFromEmpty">Abrir perfil</button><button class="softButton" data-close>Fechar</button></div>`);
-  $('openProfileFromEmpty').onclick=()=>{closeModal();profileModal();};
+  // Não bloquear a Mesa inteira com um modal quando a conta ainda não possui campanha.
+  // O usuário precisa continuar conseguindo usar Perfil, Entrar em campanha e Criar campanha.
+  closeModal();
+  if(canCreateCampaign()){
+    toast('Você ainda não possui uma campanha. Use “Nova campanha” para começar.');
+  }else{
+    toast('Você ainda não participa de uma campanha. Use “Entrar em campanha” ou abra seu perfil.');
+  }
 }
 
 async function seedCharacterFieldsForCampaign(campaignId){
