@@ -316,3 +316,17 @@ input:focus,select:focus,textarea:focus,.authCard input:focus,.authCard select:f
 
 /* Campaign realtime chat */
 .campaignChatCard{margin-top:18px;border:1px solid rgba(148,135,255,.18);border-radius:20px;padding:18px;background:rgba(255,255,255,.025)}.chatCardHead{display:flex;justify-content:space-between;gap:16px;align-items:flex-start}.chatCardHead h3{margin:3px 0}.chatCardHead p{margin:5px 0 0;opacity:.65;font-size:13px}.chatLiveBadge{font-size:10px;letter-spacing:.12em;padding:6px 9px;border-radius:999px;background:rgba(110,231,183,.1);color:#6ee7b7}.campaignChatMessages{height:260px;overflow:auto;margin:16px 0;padding:4px}.chatMessage{max-width:82%;margin:8px 0;padding:10px 12px;border-radius:14px;background:rgba(255,255,255,.05)}.chatMessage.mine{margin-left:auto;background:rgba(148,135,255,.13)}.chatMessageMeta{display:flex;justify-content:space-between;gap:14px;font-size:11px;margin-bottom:5px}.chatMessageMeta time{opacity:.5}.chatMessageBody{font-size:14px;line-height:1.45;word-break:break-word}.chatEmpty{text-align:center;opacity:.5;padding:70px 20px;font-size:13px}.campaignChatComposer{display:flex;gap:10px}.campaignChatComposer textarea{flex:1;resize:none;border-radius:12px;padding:11px 12px;border:1px solid rgba(255,255,255,.1);background:rgba(0,0,0,.16);color:inherit}.campaignChatComposer button{align-self:stretch}@media(max-width:700px){.campaignChatComposer{align-items:stretch}.campaignChatComposer button{min-width:80px}.chatMessage{max-width:92%}}
+
+
+/* Campaign realtime activity */
+.activityHead{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-top:22px;padding-top:18px;border-top:1px solid rgba(255,255,255,.07)}
+.activityHead small{display:block;opacity:.55;margin-top:4px}
+.campaignActivityList{height:210px;overflow:auto;margin-top:10px;padding:2px 4px}
+.activityItem{display:flex;gap:10px;align-items:flex-start;padding:10px 4px;border-bottom:1px solid rgba(255,255,255,.05)}
+.activityItem:last-child{border-bottom:0}
+.activityIcon{width:24px;height:24px;display:grid;place-items:center;border-radius:8px;background:rgba(148,135,255,.12);color:#b7adff;flex:0 0 24px}
+.activityBody{min-width:0;display:grid;gap:3px}
+.activityBody b{font-size:12px}
+.activityBody span{font-size:13px;line-height:1.35;opacity:.82}
+.activityBody time{font-size:10px;opacity:.4}
+.activityEmpty{text-align:center;opacity:.45;padding:70px 16px;font-size:12px}
