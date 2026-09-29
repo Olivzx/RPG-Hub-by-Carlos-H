@@ -49,7 +49,7 @@ function roomVisibleOnMap(room){
   return mapPointVisible(Number(room.x)+Number(room.width)/2, Number(room.y)+Number(room.height)/2);
 }
 
-async window.addEventListener('online',()=>scheduleRealtimeRecovery('browser-online'));
+window.addEventListener('online',()=>scheduleRealtimeRecovery('browser-online'));
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')scheduleRealtimeRecovery('tab-visible')});
 function boot(){
   try{
