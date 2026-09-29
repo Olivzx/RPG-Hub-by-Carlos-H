@@ -1,6 +1,6 @@
 @import url("https://cdn.jsdelivr.net/gh/Olivzx/RPG-Hub-by-Carlos-H@d105e395f1c67508aed725a5013333a5e12cb8e4/styles.css");
 
-/* RPG HUB — camada de personalização de temas e identidade visual premium. */
+/* RPG HUB — identidade visual + adaptação responsiva */
 :root{
   --rpg-accent:#8b5cf6;
   --rpg-accent-strong:#6d4ad8;
@@ -18,49 +18,110 @@
 .roomSelected{box-shadow:0 0 0 1px rgba(var(--rpg-accent-rgb),.20),0 0 30px rgba(var(--rpg-accent-rgb),.10)!important}
 input:focus,select:focus,textarea:focus,.authCard input:focus,.authCard select:focus,.modalCard input:focus,.modalCard textarea:focus,.modalCard select:focus,.diceCard input:focus,.diceCard select:focus{border-color:var(--rpg-accent)!important;box-shadow:0 0 0 3px rgba(var(--rpg-accent-rgb),.12)!important}
 .rollQuickRow button:hover,.textButton:hover,.sectionTitle button,.cardActions button,.sessionCardActions button{color:var(--rpg-accent)!important}
-.bigRoll,.rollResult b,.diceResult,.hero h1 em,.manifesto em{color:var(--rpg-accent)!important}
-.audioActions input[type=range]{accent-color:var(--rpg-accent)!important}
-.rpg-theme-trigger{color:#9ca5b5!important}.rpg-theme-trigger:hover{color:#fff!important}.rpg-theme-panel{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
 
-.workspace{background:radial-gradient(circle at 72% 0%,rgba(var(--rpg-accent-rgb),.045),transparent 34%),#070a10}
-.workspaceTop{border-bottom:1px solid rgba(255,255,255,.055);background:linear-gradient(180deg,rgba(8,11,18,.94),rgba(8,11,18,.72));backdrop-filter:blur(18px)}
-.workspaceTop h1{letter-spacing:-.035em}
-.view{animation:rpgViewIn .35s ease both}
-@keyframes rpgViewIn{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:none}}
-.rpg-dashboard{display:flex;flex-direction:column;gap:18px;margin:0 0 24px}
-.rpg-dashboard-hero{position:relative;min-height:286px;overflow:hidden;border:1px solid rgba(255,255,255,.08);border-radius:18px;background:radial-gradient(circle at 75% 30%,rgba(var(--rpg-accent-rgb),.22),transparent 28%),radial-gradient(circle at 92% 90%,rgba(45,70,160,.18),transparent 30%),linear-gradient(115deg,#0b0c16 0%,#0b0e19 45%,#101326 100%);box-shadow:0 22px 60px rgba(0,0,0,.24),inset 0 1px 0 rgba(255,255,255,.035)}
-.rpg-dashboard-hero:before{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(6,8,14,.96) 0%,rgba(6,8,14,.82) 42%,rgba(6,8,14,.18) 100%);pointer-events:none}
-.rpg-dashboard-hero-content{position:relative;z-index:2;max-width:680px;padding:42px 48px}.rpg-dashboard-kicker{display:block;color:#8d96aa;font-size:10px;font-weight:800;letter-spacing:.18em;text-transform:uppercase}.rpg-dashboard-hero h2{margin:10px 0 9px;font-size:clamp(30px,3vw,48px);line-height:1.02;letter-spacing:-.045em;color:#f7f5ff}.rpg-dashboard-hero h2:after{content:"";display:block;width:150px;height:2px;margin-top:14px;background:linear-gradient(90deg,var(--rpg-accent),transparent);opacity:.75}.rpg-dashboard-hero p{max-width:590px;margin:0;color:#aab2c4;font-size:14px;line-height:1.65}.rpg-dashboard-actions{display:flex;gap:12px;margin-top:24px}.rpg-dashboard-primary,.rpg-dashboard-secondary{height:44px;padding:0 18px;border-radius:11px;border:1px solid rgba(var(--rpg-accent-rgb),.6);display:inline-flex;align-items:center;gap:9px;font-weight:750;cursor:pointer;transition:.18s ease}.rpg-dashboard-primary{color:#fff;background:linear-gradient(135deg,var(--rpg-accent),var(--rpg-accent-strong));box-shadow:0 12px 30px rgba(var(--rpg-accent-rgb),.25)}.rpg-dashboard-secondary{color:#e7e5ef;background:rgba(10,12,19,.66);border-color:rgba(var(--rpg-accent-rgb),.45)}.rpg-dashboard-primary:hover,.rpg-dashboard-secondary:hover{transform:translateY(-2px);box-shadow:0 15px 34px rgba(var(--rpg-accent-rgb),.18)}
-.rpg-dashboard-feature-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}.rpg-feature-card{position:relative;min-height:190px;padding:20px;border:1px solid rgba(255,255,255,.075);border-radius:15px;background:linear-gradient(145deg,rgba(14,18,28,.92),rgba(9,12,19,.92));box-shadow:0 12px 34px rgba(0,0,0,.16);transition:.2s ease;cursor:pointer}.rpg-feature-card:hover{transform:translateY(-3px);border-color:rgba(var(--rpg-accent-rgb),.34);box-shadow:0 18px 40px rgba(0,0,0,.22),0 0 24px rgba(var(--rpg-accent-rgb),.06)}.rpg-feature-icon{width:42px;height:42px;display:grid;place-items:center;border-radius:12px;background:rgba(var(--rpg-accent-rgb),.13);border:1px solid rgba(var(--rpg-accent-rgb),.2);color:var(--rpg-accent);font-size:21px}.rpg-feature-card h3{margin:16px 0 7px;color:#edf0f7;font-size:16px}.rpg-feature-card p{margin:0;min-height:44px;color:#8993a8;font-size:11px;line-height:1.55}.rpg-feature-card button{width:100%;height:36px;margin-top:14px;border:1px solid rgba(255,255,255,.10);border-radius:9px;background:rgba(255,255,255,.02);color:#d8caff;font-size:11px;font-weight:700;cursor:pointer}.rpg-feature-card:hover button{border-color:rgba(var(--rpg-accent-rgb),.35);color:#fff}
-.rpg-dashboard-lower{display:grid;grid-template-columns:minmax(0,2.2fr) minmax(250px,.75fr);gap:14px}.rpg-activity-card,.rpg-presence-card{border:1px solid rgba(255,255,255,.075);border-radius:15px;background:linear-gradient(145deg,rgba(12,16,25,.95),rgba(8,11,17,.95));box-shadow:0 12px 34px rgba(0,0,0,.14);overflow:hidden}.rpg-activity-card header{display:flex;align-items:flex-start;justify-content:space-between;padding:20px 20px 14px}.rpg-activity-card h3,.rpg-presence-card h3{margin:5px 0 3px;color:#edf0f7;font-size:15px}.rpg-activity-card header p,.rpg-presence-card header p{margin:0;color:#7f899d;font-size:10px}.rpg-live-pill{display:inline-flex;align-items:center;gap:6px;padding:5px 8px;border-radius:99px;background:rgba(35,209,139,.07);color:#8be5bd;font-size:9px;font-weight:800}.rpg-live-pill i,.rpg-presence-status i{width:6px;height:6px;border-radius:50%;background:#32d48c;box-shadow:0 0 10px #32d48c}.rpg-activity-list{border-top:1px solid rgba(255,255,255,.055)}.rpg-activity-item{display:grid;grid-template-columns:34px 1fr auto;align-items:center;gap:10px;padding:11px 20px;border-bottom:1px solid rgba(255,255,255,.045)}.rpg-activity-avatar{width:31px;height:31px;border-radius:9px;display:grid;place-items:center;background:rgba(var(--rpg-accent-rgb),.11);color:var(--rpg-accent);border:1px solid rgba(var(--rpg-accent-rgb),.16)}.rpg-activity-item b{display:block;color:#dfe4ee;font-size:10px}.rpg-activity-item small{display:block;margin-top:3px;color:#788398;font-size:9px}.rpg-activity-item time{color:#697388;font-size:9px}.rpg-presence-card{padding:20px}.rpg-presence-status{display:flex;align-items:center;gap:8px;margin-top:20px;color:#a7b0c1;font-size:10px}.rpg-presence-copy{margin-top:14px;padding-top:14px;border-top:1px solid rgba(255,255,255,.06);color:#717c91;font-size:10px;line-height:1.6}
-.sideBottom{padding-top:10px}.rpg-theme-wrap{margin-bottom:7px}.rpg-theme-trigger{height:39px!important;border:1px solid transparent!important}.rpg-theme-trigger:hover{background:rgba(var(--rpg-accent-rgb),.08)!important;border-color:rgba(var(--rpg-accent-rgb),.16)!important}.rpg-theme-panel{border-color:rgba(var(--rpg-accent-rgb),.32)!important;background:linear-gradient(180deg,rgba(15,18,28,.99),rgba(9,12,19,.99))!important}
+/* =========================================================
+   MOBILE — conteúdo continua disponível, apenas reorganizado
+   ========================================================= */
+@media (max-width: 900px){
+  html,body{max-width:100%;overflow-x:hidden}
+  body{font-size:14px}
 
-body.landingBody .brandMark,body.authBody .brandMark{background:rgba(var(--rpg-accent-rgb),.16)!important;color:var(--rpg-accent)!important;box-shadow:0 0 25px rgba(var(--rpg-accent-rgb),.18)!important}
-body.landingBody .primaryButton,body.authBody .primaryButton.full{background:linear-gradient(135deg,var(--rpg-accent),var(--rpg-accent-strong))!important;border-color:var(--rpg-accent)!important;box-shadow:0 10px 28px rgba(var(--rpg-accent-rgb),.22)!important}
-body.landingBody .primaryButton:hover,body.authBody .primaryButton.full:hover{box-shadow:0 14px 36px rgba(var(--rpg-accent-rgb),.32)!important}
-body.landingBody .secondaryButton:hover,body.landingBody .navLinks a:hover,body.landingBody footer a:hover,body.authBody .authFoot a:hover,body.authBody .textButton:hover{color:var(--rpg-accent)!important}
-body.landingBody .hero h1 em,body.landingBody .manifesto em{color:var(--rpg-accent)!important}
-body.landingBody .eyebrow span,body.landingBody .pulse{background:var(--rpg-accent)!important;box-shadow:0 0 12px rgba(var(--rpg-accent-rgb),.65)!important}
-body.landingBody .featureIcon{color:var(--rpg-accent)!important;background:rgba(var(--rpg-accent-rgb),.12)!important;border-color:rgba(var(--rpg-accent-rgb),.22)!important}
-body.landingBody .hero .glow{background:radial-gradient(circle,rgba(var(--rpg-accent-rgb),.30),transparent 65%)!important}
-body.landingBody .floatingCard{border-color:rgba(var(--rpg-accent-rgb),.30)!important;box-shadow:0 18px 50px rgba(var(--rpg-accent-rgb),.10)!important}
-body.authBody .authHeader .eyebrow:before{background:var(--rpg-accent)!important;box-shadow:0 0 12px rgba(var(--rpg-accent-rgb),.75)!important}
-body.authBody .authCard input:focus,body.authBody .authCard select:focus{border-color:var(--rpg-accent)!important;box-shadow:0 0 0 3px rgba(var(--rpg-accent-rgb),.12),0 0 24px rgba(var(--rpg-accent-rgb),.05)!important}
-body.authBody .authTabs button.active{background:rgba(var(--rpg-accent-rgb),.12)!important;color:#eeeaff!important;box-shadow:inset 0 0 0 1px rgba(var(--rpg-accent-rgb),.20)!important}
-body.authBody .authFoot .textButton{color:var(--rpg-accent)!important}
+  .appShell,.appLayout,.mainLayout,.pageLayout{display:block!important;width:100%!important;min-width:0!important}
+  .sideNav,.sidebar{display:none!important}
+  .mainContent,.content,.pageContent,.view{width:100%!important;min-width:0!important;max-width:100%!important;padding-left:12px!important;padding-right:12px!important;padding-bottom:92px!important}
 
-/* Navegação mobile: acesso a todas as áreas sem precisar da sidebar desktop. */
-.mobileBottomNav{display:none}
-.mobileMoreBackdrop{display:none}
-@media(max-width:900px){
-  .appShell{display:block;min-height:100vh}
-  .sidebar{display:none!important}
-  .workspace{width:100%;min-height:100vh;padding-bottom:78px}
-  .mobileAppHeader{display:block!important;position:sticky;top:0;z-index:70}
-  .mobileBottomNav{position:fixed;left:10px;right:10px;bottom:10px;z-index:100;display:flex;align-items:stretch;gap:3px;padding:7px;border:1px solid rgba(255,255,255,.09);border-radius:16px;background:rgba(10,13,20,.94);backdrop-filter:blur(18px);box-shadow:0 16px 45px rgba(0,0,0,.42),0 0 24px rgba(var(--rpg-accent-rgb),.06);padding-bottom:max(7px,env(safe-area-inset-bottom))}
-  .mobileBottomNav button{min-width:0;flex:1;height:54px;border:1px solid transparent;border-radius:11px;background:transparent;color:#7f899d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font:inherit;cursor:pointer;transition:.18s ease}
-  .mobileBottomNav button span{font-size:17px;line-height:1}.mobileBottomNav button small{font-size:8px;font-weight:750;white-space:nowrap}.mobileBottomNav button.active{color:#fff;background:rgba(var(--rpg-accent-rgb),.13);border-color:rgba(var(--rpg-accent-rgb),.22);box-shadow:inset 0 0 18px rgba(var(--rpg-accent-rgb),.05)}.mobileBottomNav button:active{transform:scale(.96)}
-  .mobileMoreBackdrop{position:fixed;inset:0;z-index:110;display:flex;align-items:flex-end;padding:0 10px 86px;background:rgba(2,4,8,.62);backdrop-filter:blur(5px);opacity:0;pointer-events:none;transition:.2s ease}.mobileMoreBackdrop.open{opacity:1;pointer-events:auto}.mobileMoreSheet{width:100%;border:1px solid rgba(var(--rpg-accent-rgb),.24);border-radius:18px;background:linear-gradient(180deg,rgba(15,19,29,.99),rgba(8,11,17,.99));box-shadow:0 25px 70px rgba(0,0,0,.5);transform:translateY(18px);transition:.2s ease;overflow:hidden}.mobileMoreBackdrop.open .mobileMoreSheet{transform:none}.mobileMoreHeader{display:flex;align-items:center;justify-content:space-between;padding:18px 18px 14px;border-bottom:1px solid rgba(255,255,255,.06)}.mobileMoreHeader b{display:block;color:#f0f2f7;font-size:14px}.mobileMoreHeader small{display:block;margin-top:4px;color:#7f899d;font-size:10px}.mobileMoreHeader button{width:32px;height:32px;border:1px solid rgba(255,255,255,.08);border-radius:9px;background:rgba(255,255,255,.03);color:#aeb6c5;font-size:20px;cursor:pointer}.mobileMoreGrid{display:grid;grid-template-columns:1fr 1fr;gap:9px;padding:14px}.mobileMoreGrid button{min-height:76px;border:1px solid rgba(255,255,255,.07);border-radius:12px;background:rgba(255,255,255,.025);color:#cbd1dd;display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:7px;padding:13px;text-align:left;cursor:pointer}.mobileMoreGrid button span{color:var(--rpg-accent);font-size:18px}.mobileMoreGrid button b{font-size:10px}.mobileMoreGrid button:hover{border-color:rgba(var(--rpg-accent-rgb),.35);background:rgba(var(--rpg-accent-rgb),.07)}
+  /* Grids e cards: preserva todos os dados, reorganizando em uma coluna */
+  .grid,.cardsGrid,.dashboardGrid,.statsGrid,.characterGrid,.npcGrid,.sessionGrid,.roomGrid,.worldGrid,.formGrid,.twoColumn,.threeColumn{grid-template-columns:1fr!important}
+  .grid>*,.cardsGrid>*{min-width:0!important}
+  .card,.panel,.sectionCard,.characterCard,.npcCard,.sessionCard,.dashboardCard,.infoCard,.modalCard{max-width:100%!important;min-width:0!important}
+
+  /* Tabelas: não escondemos colunas; permitimos rolagem horizontal */
+  table{min-width:560px}
+  .tableWrap,.tableContainer,.dataTable,.historyTable{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .tableWrap table,.tableContainer table,.dataTable table,.historyTable table{margin-bottom:0}
+
+  /* Cabeçalhos e ações */
+  .pageHeader,.sectionHeader,.panelHeader,.cardHeader,.toolbar,.topBar,.headerActions{flex-wrap:wrap!important;gap:8px!important}
+  .pageHeader>* ,.sectionHeader>*{max-width:100%}
+  .pageTitle,.sectionTitle,h1{font-size:clamp(20px,6vw,30px)!important;line-height:1.15}
+  h2{font-size:clamp(18px,5vw,24px)!important}
+  h3{font-size:16px!important}
+
+  /* Formulários: campos continuam completos e confortáveis */
+  form{width:100%;max-width:100%}
+  input,select,textarea,button{max-width:100%;font-size:16px}
+  textarea{min-height:110px}
+  .formRow,.fieldRow,.inputRow{display:grid!important;grid-template-columns:1fr!important;gap:10px!important}
+  .formActions,.modalActions,.cardActions{display:flex!important;flex-wrap:wrap!important;gap:8px!important}
+  .formActions button,.modalActions button{flex:1 1 140px}
+
+  /* Modais ocupam o espaço útil, sem cortar informações */
+  .modalBackdrop{padding:10px!important;align-items:flex-start!important;overflow-y:auto}
+  .modalCard{width:min(100%,680px)!important;max-height:calc(100dvh - 20px)!important;overflow:auto!important;border-radius:16px!important}
+  .modalBody{overflow:visible!important}
+
+  /* Ficha de personagem: compacta, mas sem remover campos */
+  .characterSheet,.characterProfile,.characterDetails{width:100%!important}
+  .characterSheet .statGrid,.characterProfile .statGrid{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+  .characterSheet .fullWidth,.characterProfile .fullWidth{grid-column:1/-1!important}
+
+  /* Dashboard */
+  .dashboardHero,.heroCard{padding:20px!important;min-height:auto!important}
+  .dashboardHero h1,.heroCard h1{font-size:clamp(24px,8vw,38px)!important}
+  .dashboardHero .heroActions,.heroCard .heroActions{display:grid!important;grid-template-columns:1fr!important}
+  .dashboardCard{padding:15px!important}
+
+  /* Mapa: preserva ferramentas e evita que a página estoure lateralmente */
+  .mapArea,.mapCanvas,.boardWrap,.boardContainer{width:100%!important;max-width:100%!important;overflow:auto!important;-webkit-overflow-scrolling:touch}
+  .mapToolbar,.mapControls,.boardToolbar{flex-wrap:wrap!important;gap:6px!important}
+  .mapToolbar button,.mapControls button,.boardToolbar button{flex:0 0 auto}
+
+  /* Utilitários e dados */
+  .diceLayout,.utilitiesLayout{display:block!important}
+  .dicePanel,.diceHistory,.utilityPanel{width:100%!important;max-width:none!important}
+  .diceButtons,.rollQuickRow{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:7px!important}
+  .diceButtons button,.rollQuickRow button{min-height:42px}
+
+  /* Áudio */
+  .audioPlayer,.audioPanel,.playlistPanel{width:100%!important;min-width:0!important}
+  .audioControls{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:8px!important}
+
+  /* Presença, listas e informações longas */
+  .playerList,.presenceList,.activityList,.entityList{width:100%!important}
+  .playerRow,.presenceRow,.activityItem,.entityRow{min-width:0!important;flex-wrap:wrap!important}
+  .playerRow .name,.presenceRow .name,.activityItem .description{overflow-wrap:anywhere}
+
+  /* Painel do Mestre */
+  .masterPanel,.gmPanel{display:block!important;width:100%!important}
+  .masterPanel .panelGrid,.gmPanel .panelGrid{grid-template-columns:1fr!important}
+
+  /* Navegação mobile existente: não deixa conteúdo atrás dela */
+  .mobileBottomNav,.mobileNav,.mobileNavigation{position:fixed!important;left:0!important;right:0!important;bottom:0!important;z-index:1000!important}
+  .mobileBottomNav{padding-bottom:max(8px,env(safe-area-inset-bottom))!important}
+
+  /* Textos longos nunca são cortados */
+  .card p,.panel p,.description,.subtitle,.meta,.helpText{overflow-wrap:anywhere;word-break:normal}
 }
-@media(max-width:430px){.mobileBottomNav{left:7px;right:7px;bottom:7px}.mobileBottomNav button{height:52px}.mobileBottomNav button small{font-size:7px}.mobileMoreBackdrop{padding-left:7px;padding-right:7px;padding-bottom:78px}}
-@media(min-width:901px){.mobileAppHeader{display:none!important}}
+
+@media (max-width:520px){
+  body{font-size:13px}
+  .mainContent,.content,.pageContent,.view{padding-left:8px!important;padding-right:8px!important;padding-bottom:88px!important}
+  .characterSheet .statGrid,.characterProfile .statGrid{grid-template-columns:1fr 1fr!important}
+  .diceButtons,.rollQuickRow{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+  .audioControls{grid-template-columns:1fr!important}
+  .formActions button,.modalActions button{flex:1 1 100%}
+  .card,.panel,.sectionCard{border-radius:12px!important}
+  .dashboardHero,.heroCard{padding:16px!important}
+}
+
+/* =========================================================
+   TEMAS — variáveis podem ser alteradas pelo customizador
+   ========================================================= */
+[data-theme="blue"]{--rpg-accent:#3b82f6;--rpg-accent-strong:#2563eb;--rpg-accent-rgb:59,130,246}
+[data-theme="cyan"]{--rpg-accent:#06b6d4;--rpg-accent-strong:#0891b2;--rpg-accent-rgb:6,182,212}
+[data-theme="emerald"]{--rpg-accent:#10b981;--rpg-accent-strong:#059669;--rpg-accent-rgb:16,185,129}
+[data-theme="gold"]{--rpg-accent:#f59e0b;--rpg-accent-strong:#d97706;--rpg-accent-rgb:245,158,11}
+[data-theme="orange"]{--rpg-accent:#f97316;--rpg-accent-strong:#ea580c;--rpg-accent-rgb:249,115,22}
+[data-theme="pink"]{--rpg-accent:#ec4899;--rpg-accent-strong:#db2777;--rpg-accent-rgb:236,72,153}
+[data-theme="ruby"]{--rpg-accent:#ef4444;--rpg-accent-strong:#dc2626;--rpg-accent-rgb:239,68,68}
+[data-theme="violet"],:root{--rpg-accent:#8b5cf6;--rpg-accent-strong:#6d4ad8;--rpg-accent-rgb:139,92,246}
