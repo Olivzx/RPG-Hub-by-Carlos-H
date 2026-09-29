@@ -1095,3 +1095,72 @@ Antes de reutilizar, redistribuir ou incorporar partes do projeto em outro produ
   <strong>✦ RPG HUB</strong><br>
   Uma mesa. Um mundo. Uma campanha persistente.
 </p>
+
+
+---
+
+# Atualização — sincronização em tempo real da campanha
+
+A sincronização em tempo real foi reforçada para que as alterações confirmadas pelo banco sejam distribuídas automaticamente aos participantes conectados, sem necessidade de F5 ou atualização manual.
+
+## Como funciona
+
+O RPG HUB utiliza **Supabase Realtime Broadcast a partir do banco de dados** como camada central para espelhar alterações confirmadas da campanha. Cada mudança gera um evento no canal privado da campanha no padrão:
+
+`rpg-hub-campaign-<campaign_id>`
+
+O frontend mantém uma conexão WebSocket com esse canal e aplica a mudança diretamente no estado da aplicação.
+
+Esse fluxo foi escolhido para reduzir a dependência de múltiplas assinaturas `postgres_changes` espalhadas pela interface e tornar a atualização das informações mais consistente.
+
+## Eventos sincronizados
+
+As seguintes áreas entram no fluxo central de atualização:
+
+- Personagens.
+- NPCs e monstros.
+- Entidades colocadas na mesa.
+- Cômodos.
+- Locais e andares.
+- Sessões.
+- Membros da campanha.
+- Campos personalizados das fichas.
+- Dados e configurações do mapa.
+- Névoa, paredes, fontes de visão e áreas de efeito.
+- Combate e combatentes.
+- Dados e rolagens.
+- Áudio, playlists e estado de áudio da campanha.
+- Crônica e atividade da campanha.
+
+As alterações de movimentação, redimensionamento, rotação, troca de cena e áudio continuam utilizando também os broadcasts específicos já existentes quando aplicável.
+
+## Criação de personagem sem F5
+
+Quando um jogador cria uma ficha e o registro é salvo no Supabase, o evento `INSERT` é enviado para o canal da campanha. Os clientes conectados recebem a ficha e atualizam a interface imediatamente.
+
+Isso permite que o Mestre veja o personagem novo assim que ele for salvo, sem precisar recarregar a página.
+
+## Robustez
+
+O fluxo de broadcast é executado por triggers `AFTER INSERT OR UPDATE OR DELETE` nas tabelas relevantes.
+
+A função de broadcast fica no schema privado `private` e utiliza `realtime.broadcast_changes` para publicar o evento no canal privado da campanha.
+
+Além disso, a função possui tratamento de exceção para que uma falha eventual no serviço de realtime não interrompa a transação principal que está salvando os dados da campanha.
+
+## Reconexão e permissões
+
+A conexão utiliza o token da sessão Supabase para autenticação do Realtime.
+
+As permissões de leitura do canal permanecem vinculadas ao acesso à campanha, enquanto o próprio RLS das tabelas continua controlando quais registros cada participante pode consultar.
+
+A sincronização de realtime não substitui as políticas de segurança do banco.
+
+## Arquivo de infraestrutura
+
+A configuração SQL da camada central de realtime está registrada em:
+
+`supabase/migrations/20260929053000_realtime_campaign_broadcast.sql`
+
+---
+
