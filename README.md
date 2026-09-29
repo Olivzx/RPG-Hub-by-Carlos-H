@@ -41,6 +41,79 @@ Mesa
 
 ---
 
+## Atualizações recentes — 29/09/2026
+
+Esta versão registra a evolução da Mesa, do sistema de Mestre e das camadas de sincronização do RPG HUB.
+
+### Mesa / mapa
+
+- Grid configurável por andar, com espaçamento persistente e snap real aplicado ao movimento de entidades e ao redimensionamento de cômodos.
+- Ferramentas de medição de distância em unidades da campanha.
+- Áreas de efeito persistentes em círculo, quadrado, cone e linha.
+- Fog of War persistente com regiões desenhadas pelo Mestre.
+- Visão tática real por personagem/token, com alcance individual.
+- Linha de visão calculada a partir do token.
+- Paredes desenhadas no mapa que bloqueiam visão.
+- O painel lateral da Mesa respeita a visibilidade: jogadores não recebem a lista de entidades/cômodos fora da área visível.
+- Tokens fora de visão não permanecem interativos no DOM para jogadores.
+- Jogadores não iniciam mais o fluxo de arrastar tokens; a alteração de posição depende do controle do Mestre.
+- Grade desligada agora realmente remove o desenho da grade.
+- Zoom do mapa utiliza uma área com rolagem para evitar corte do cenário.
+- Toolbar do VTT foi reorganizada para evitar conflitos entre mover, estrutura, medição, áreas, névoa, paredes e visão.
+
+### Mestre da Mesa
+
+- Separação explícita entre **tipo de conta** e **proprietário da campanha**.
+- O proprietário da campanha é a autoridade de edição da Mesa e das configurações compartilhadas.
+- A interface diferencia a conta Mestre do papel exercido dentro da campanha, evitando apresentar um membro como administrador da Mesa.
+- O cadastro de perfil não usa mais `user_metadata` para decidir privilégios de conta; novos perfis entram como jogador e a promoção para Mestre deve ocorrer por operação administrativa segura.
+- Controles da Mesa, Painel do Mestre e Crônica continuam protegidos por `canEdit()` e pelas políticas RLS do banco.
+
+### Combate + mapa
+
+- Combate persistente por sessão.
+- Iniciativa, rodada, turno, HP e condições sincronizados por Realtime.
+- O token do combatente ativo recebe destaque no mapa.
+- Condições são representadas visualmente nos tokens.
+- O estado de combate é considerado pela camada de visão tática.
+- Alterações de combate, movimento de tokens e mudanças de visão provocam atualização imediata do mapa.
+
+### Segurança e banco
+
+Foram adicionadas as estruturas:
+
+```text
+map_settings
+map_walls
+vision_sources
+fog_regions
+aoe_effects
+combat_encounters
+combatants
+campaign_activity
+```
+
+As tabelas novas possuem RLS e regras de acesso compatíveis com o modelo da campanha, e as camadas principais estão habilitadas para Realtime quando necessário.
+
+### Validação desta versão
+
+- Arquivos JavaScript principais passaram por validação de sintaxe.
+- A página `mesa.html` em produção carrega a camada de visão real.
+- O último deploy de produção foi concluído com status `READY`.
+- A verificação de runtime do Vercel não encontrou erros nas últimas consultas realizadas.
+
+### Aviso de segurança pendente
+
+O Supabase Security Advisor ainda sinaliza:
+
+```text
+auth_leaked_password_protection
+Leaked Password Protection Disabled
+```
+
+Esse aviso depende de uma configuração administrativa do Supabase Auth e não foi considerado “corrigido” por código da aplicação. O recurso deve ser habilitado nas configurações de segurança do Auth para eliminar o warning.
+
+---
 # Preview
 
 O repositório possui previews visuais para apresentar as principais áreas da aplicação.
