@@ -131,13 +131,19 @@
 
   function setGrid(enabled) {
     try { localStorage.setItem(GRID_KEY, enabled ? '1' : '0'); } catch (_) {}
-    byId('board')?.classList.toggle('rpg-grid-enabled', enabled);
-    const button = byId('rpgGridToggle');
-    if (button) {
-      button.classList.toggle('active', enabled);
-      button.setAttribute('aria-pressed', String(enabled));
-      button.textContent = enabled ? '▦ Grade' : '▦ Grade';
-      button.title = enabled ? 'Ocultar grade' : 'Exibir grade';
+    const syncButton = () => {
+      byId('board')?.classList.toggle('rpg-grid-enabled', enabled);
+      const button = byId('rpgGridToggle');
+      if (button) {
+        button.classList.toggle('active', enabled);
+        button.setAttribute('aria-pressed', String(enabled));
+        button.textContent = '▦ Grade';
+        button.title = enabled ? 'Ocultar grade' : 'Exibir grade';
+      }
+    };
+    syncButton();
+    if (typeof window.rpgVttSetGrid === 'function') {
+      Promise.resolve(window.rpgVttSetGrid(!!enabled)).then(syncButton).catch(() => {});
     }
   }
 
