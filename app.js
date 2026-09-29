@@ -980,6 +980,10 @@ function movementCost(entity,from,to){
 }
 function canMoveEntity(entity,from,to){
   const p=movementProfile(entity),metric=movementCost(entity,from,to),cost=metric.units;
+  const combatActive=window.rpgCombatIsActive?.()===true;
+  // Fora de combate o mestre pode reposicionar livremente; dentro do combate
+  // o deslocamento respeita a velocidade e a escala configuradas no mapa.
+  if(!combatActive)return {ok:true,cost,remaining:p.speed};
   return {ok:cost<=p.speed+0.001,cost,remaining:Math.max(0,p.speed-cost)};
 }
 function startEntityDrag(e,el){
