@@ -382,6 +382,10 @@
     m.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;if(b.matches('[data-start-combat]'))startCombat();else if(b.matches('[data-add]'))addModal();else if(b.matches('[data-attack]'))attackModal();else if(b.matches('[data-reaction]'))reactionModal();else if(b.matches('[data-ability]'))abilityModal();else if(b.matches('[data-ruleset]'))window.rpgCampaignRulesOpen?.();else if(b.matches('[data-edit]'))editModal(b.dataset.edit);else if(b.matches('[data-rules]')){const r=cs.combatants.find(x=>x.id===b.dataset.rules);if(r&&window.rpgCombatRules)window.rpgCombatRules.configureModal(r,showModal,esc);}else if(b.matches('[data-remove]'))remove(b.dataset.remove);else if(b.matches('[data-hp]'))hp(b.dataset.hp,b.dataset.delta);else if(b.matches('[data-init]'))rollInit(b.dataset.init);else if(b.matches('[data-advance]'))advance();else if(b.matches('[data-end]'))end();else if(b.matches('[data-manage]'))manage();else if(b.matches('[data-heal]'))showHealModal();else if(b.matches('[data-conditions]'))showConditionsModal();else if(b.matches('[data-focus]'))focusToken(cs.combatants.find(x=>x.id===b.dataset.focus));else if(b.matches('[data-go-table]')){state.view='table';renderView();}else if(b.matches('[data-go-sessions]')){state.view='sessions';renderView();}});
   }
 
+  async function reconnectCombatState(){
+    if(!cid())return;
+    try{await loadCombat(true);await preloadEquipment();}catch(err){console.warn('RPG HUB combat reconciliation:',err);}
+  }
   function init(){
     if(typeof state==='undefined'||typeof sb==='undefined'){setTimeout(init,250);return;}
     if(cs.initialized)return;cs.initialized=true;styles();mountUI();bind();realtime();loadCombat(true);
@@ -389,3 +393,4 @@
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
 })();
+window.rpgCombatReconnect=()=>window.rpgCombat?.reconnectCombatState?.();
