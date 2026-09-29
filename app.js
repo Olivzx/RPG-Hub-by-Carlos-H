@@ -27,6 +27,24 @@ function currentFloor(){ return state.floors.find(f=>f.id===state.floor) || stat
 function currentSession(){ return state.sessions.find(s=>s.id===state.selectedSessionId) || state.sessions.find(s=>s.status==='live') || state.sessions.find(s=>s.status==='planned') || null; }
 function profileFor(id){ return state.profiles.get(id) || (id===state.user?.id?state.profile:null); }
 
+// A Mesa consulta a camada de visão antes de expor nomes/objetos no painel.
+// O mapa continua sendo a fonte visual, mas o painel não pode "furar" o Fog of War.
+function mapPointVisible(x,y){
+  try{
+    if(canEdit()) return true;
+    if(typeof window.rpgVttPointVisible === 'function') return !!window.rpgVttPointVisible(Number(x)||0,Number(y)||0);
+  }catch(err){ console.warn('RPG HUB map visibility:',err); }
+  return true;
+}
+function entityVisibleOnMap(entity){
+  if(!entity) return false;
+  return mapPointVisible(entity.x,entity.y);
+}
+function roomVisibleOnMap(room){
+  if(!room) return false;
+  return mapPointVisible(Number(room.x)+Number(room.width)/2, Number(room.y)+Number(room.height)/2);
+}
+
 async function boot(){
   try{
     const {data,error}=await sb.auth.getSession(); if(error) throw error;
@@ -400,16 +418,39 @@ async function moveEntityToFloor(id,floorId){
 }
 
 function renderTable(){
-  const f=currentFloor(); $('contextFloor').textContent=f?.name||'Sem andar'; $('boardFloorName').textContent=f?.name?.toUpperCase()||'—'; ensureFloor();
+  ensureFloor();
+  const f=currentFloor();
+  $('contextFloor').textContent=f?.name||'Sem andar';
+  $('boardFloorName').textContent=f?.name?.toUpperCase()||'—';
   $('floorSwitch').innerHTML=state.floors.map(x=>`<button class="${x.id===state.floor?'chosen':''}" data-floor="${x.id}">${escapeHtml(x.name)}</button>`).join('') || '<span class="muted">Nenhum andar</span>';
-  document.querySelectorAll('[data-floor]').forEach(b=>b.onclick=async()=>{const id=b.dataset.floor;if(canEdit())await setActiveScene(id,null);else{state.floor=id;state.selected=null;renderTable();}});
-  const rooms=state.rooms.filter(r=>r.floor_id===state.floor); const entities=state.entities.filter(e=>e.floor_id===state.floor && e.visible!==false);
-  $('roomLayer').innerHTML=rooms.map(r=>`<div class="room ${state.selected?.type==='room'&&state.selected.id===r.id?'roomSelected':''}" data-room-id="${r.id}" style="left:${r.x}%;top:${r.y}%;width:${r.width}%;height:${r.height}%;transform:rotate(${Number(r.rotation)||0}deg)"><span>${escapeHtml(r.name)}</span><div class="roomResize" title="Redimensionar"></div></div>`).join('');
-  $('roomList').innerHTML=rooms.map(r=>`<button class="roomItem ${state.selected?.type==='room'&&state.selected.id===r.id?'roomChosen':''}" data-room-list="${r.id}"><span class="roomIcon">▧</span><div><b>${escapeHtml(r.name)}</b><small>${escapeHtml(r.description||'Sem descrição')}</small></div><span>›</span></button>`).join('') || '<div class="emptySelect">Nenhum cômodo neste andar.</div>';
+  document.querySelectorAll('[data-floor]').forEach(b=>b.onclick=async()=>{
+    const id=b.dataset.floor;
+    if(canEdit()) await setActiveScene(id,null);
+    else { state.floor=id; state.selected=null; renderTable(); }
+  });
+
+  const allRooms=state.rooms.filter(r=>r.floor_id===state.floor);
+  const allEntities=state.entities.filter(e=>e.floor_id===state.floor && e.visible!==false);
+  const rooms=canEdit()?allRooms:allRooms.filter(roomVisibleOnMap);
+  const entities=canEdit()?allEntities:allEntities.filter(entityVisibleOnMap);
+
+  if(state.selected?.type==='entity' && !canEdit()){
+    const selectedEntity=allEntities.find(e=>e.id===state.selected.id);
+    if(selectedEntity && !entityVisibleOnMap(selectedEntity)) state.selected=null;
+  }
+  if(state.selected?.type==='room' && !canEdit()){
+    const selectedRoom=allRooms.find(r=>r.id===state.selected.id);
+    if(selectedRoom && !roomVisibleOnMap(selectedRoom)) state.selected=null;
+  }
+
+  $('roomLayer').innerHTML=allRooms.map(r=>`<div class="room ${state.selected?.type==='room'&&state.selected.id===r.id?'roomSelected':''}" data-room-id="${r.id}" style="left:${r.x}%;top:${r.y}%;width:${r.width}%;height:${r.height}%;transform:rotate(${Number(r.rotation)||0}deg)"><span>${escapeHtml(r.name)}</span><div class="roomResize" title="Redimensionar"></div></div>`).join('');
+  $('roomList').innerHTML=rooms.map(r=>`<button class="roomItem ${state.selected?.type==='room'&&state.selected.id===r.id?'roomChosen':''}" data-room-list="${r.id}"><span class="roomIcon">▧</span><div><b>${escapeHtml(r.name)}</b><small>${escapeHtml(r.description||'Sem descrição')}</small></div><span>›</span></button>`).join('') || '<div class="emptySelect">Nenhum cômodo visível neste momento.</div>';
   $('entityCount').textContent=entities.length;
-  $('tokenLayer').innerHTML=entities.map(e=>`<div class="tokenBig ${state.selected?.type==='entity'&&state.selected.id===e.id?'selected':''}" data-entity-id="${e.id}" style="left:${e.x}%;top:${e.y}%;--token-color:${escapeHtml(e.color||'#9487ff')}">${entityAvatarMarkup(e)}<span>${escapeHtml(e.display_name)}</span></div>`).join('');
-  $('entityList').innerHTML=entities.map(e=>`<button class="entityItem ${state.selected?.type==='entity'&&state.selected.id===e.id?'entityChosen':''}" data-entity-list="${e.id}">${entityAvatarMarkup(e,true)}<div><b>${escapeHtml(e.display_name)}</b><small>${escapeHtml(e.entity_kind)}</small></div><span>›</span></button>`).join('') || '<div class="emptySelect">Nenhuma entidade neste andar.</div>';
-  $('selectedCard').innerHTML=renderSelection(); bindTableInteractions(); applyZoom();
+  $('tokenLayer').innerHTML=allEntities.map(e=>`<div class="tokenBig ${state.selected?.type==='entity'&&state.selected.id===e.id?'selected':''}" data-entity-id="${e.id}" style="left:${e.x}%;top:${e.y}%;--token-color:${escapeHtml(e.color||'#9487ff')}">${entityAvatarMarkup(e)}<span>${escapeHtml(e.display_name)}</span></div>`).join('');
+  $('entityList').innerHTML=entities.map(e=>`<button class="entityItem ${state.selected?.type==='entity'&&state.selected.id===e.id?'entityChosen':''}" data-entity-list="${e.id}">${entityAvatarMarkup(e,true)}<div><b>${escapeHtml(e.display_name)}</b><small>${escapeHtml(e.entity_kind)}</small></div><span>›</span></button>`).join('') || '<div class="emptySelect">Nenhuma entidade visível neste momento.</div>';
+  $('selectedCard').innerHTML=renderSelection();
+  bindTableInteractions();
+  applyZoom();
 }
 function renderSelection(){
   if(!state.selected)return '<div class="emptySelect">Selecione uma entidade ou cômodo.</div>';
