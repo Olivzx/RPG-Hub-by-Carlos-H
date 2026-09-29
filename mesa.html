@@ -25,6 +25,7 @@
         <small id="campaignRole">Carregando…</small>
       </div>
       <nav class="sideNav" id="sideNav">
+        <button data-view="dashboard">⌂ <span>Visão geral</span></button>
         <button data-view="table" class="active">◫ <span>Mesa</span></button>
         <button data-view="characters">♙ <span>Personagens</span></button>
         <button data-view="world">◇ <span>Mundo</span></button>
@@ -94,6 +95,26 @@
     </section>
   </main>
 
+  <nav class="mobileBottomNav" id="mobileBottomNav" aria-label="Navegação da campanha">
+    <button type="button" data-mobile-view="dashboard"><span>⌂</span><small>Início</small></button>
+    <button type="button" data-mobile-view="table" class="active"><span>◫</span><small>Mesa</small></button>
+    <button type="button" data-mobile-view="characters"><span>♙</span><small>Fichas</small></button>
+    <button type="button" data-mobile-view="world"><span>◇</span><small>Mundo</small></button>
+    <button type="button" data-mobile-view="dice"><span>⚄</span><small>Dados</small></button>
+    <button type="button" data-mobile-nav-more><span>☰</span><small>Mais</small></button>
+  </nav>
+  <div class="mobileMoreBackdrop" id="mobileMoreBackdrop" aria-hidden="true">
+    <div class="mobileMoreSheet" role="dialog" aria-label="Mais funções">
+      <div class="mobileMoreHeader"><div><b>Funções da campanha</b><small>Acesse todas as áreas do RPG HUB.</small></div><button type="button" data-mobile-nav-close>×</button></div>
+      <div class="mobileMoreGrid">
+        <button type="button" data-mobile-view="sessions"><span>✦</span><b>Sessões</b></button>
+        <button type="button" data-mobile-view="npcs"><span>♜</span><b>NPCs & monstros</b></button>
+        <button type="button" data-mobile-view="masterdashboard" class="masterOnly hidden"><span>♛</span><b>Painel do Mestre</b></button>
+        <button type="button" data-mobile-view="chronicle" class="masterOnly hidden"><span>▤</span><b>Crônica da mesa</b></button>
+      </div>
+    </div>
+  </div>
+
   <div id="modalBackdrop" class="modalBackdrop" aria-hidden="true"><div id="modalCard" class="modalCard"></div></div>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
@@ -101,5 +122,29 @@
   <script src="rpg-realtime-enhancements.js"></script>
   <script src="rpg-character-dice-enhancements.js"></script>
   <script src="rpg-dashboard-ui.js"></script>
+  <script>
+    (()=>{
+      const mobileNav=document.getElementById('mobileBottomNav');
+      const more=document.getElementById('mobileMoreBackdrop');
+      const openMore=()=>{more?.classList.add('open');more?.setAttribute('aria-hidden','false')};
+      const closeMore=()=>{more?.classList.remove('open');more?.setAttribute('aria-hidden','true')};
+      function go(view){
+        const target=document.querySelector(`#sideNav [data-view="${view}"]`);
+        if(target) target.click();
+        else if(view==='dashboard'){
+          window.dispatchEvent(new CustomEvent('rpg:show-dashboard'));
+        }
+        document.querySelectorAll('[data-mobile-view]').forEach(b=>b.classList.toggle('active',b.dataset.mobileView===view));
+        closeMore();
+      }
+      mobileNav?.addEventListener('click',e=>{const b=e.target.closest('[data-mobile-view]');if(b)go(b.dataset.mobileView);const m=e.target.closest('[data-mobile-nav-more]');if(m)openMore();});
+      more?.addEventListener('click',e=>{if(e.target===more||e.target.closest('[data-mobile-nav-close]'))closeMore();const b=e.target.closest('[data-mobile-view]');if(b)go(b.dataset.mobileView)});
+      document.addEventListener('keydown',e=>{if(e.key==='Escape')closeMore()});
+      document.addEventListener('click',e=>{
+        const side=e.target.closest('#sideNav [data-view]');
+        if(side){const v=side.dataset.view;document.querySelectorAll('[data-mobile-view]').forEach(b=>b.classList.toggle('active',b.dataset.mobileView===v));}
+      });
+    })();
+  </script>
 </body>
 </html>
