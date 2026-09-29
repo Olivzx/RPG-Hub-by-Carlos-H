@@ -462,6 +462,7 @@ async function subscribeRealtime(){
     campaign.on('broadcast',{event:'room_rotate'},({payload})=>{if(payload?.user_id!==state.user.id)receiveRoomRotate(payload);});
     campaign.on('broadcast',{event:'scene_change'},({payload})=>{if(payload?.user_id!==state.user.id)receiveSceneChange(payload);});
     campaign.on('broadcast',{event:'audio'},({payload})=>{if(payload?.user_id!==state.user.id)receiveAudio(payload);});
+    campaign.on('broadcast',{event:'dice_roll'},({payload})=>{if(payload?.user_id!==state.user.id)receiveRoll(payload);});
     campaign.on('postgres_changes',{event:'INSERT',schema:'public',table:'campaign_chat_messages',filter:`campaign_id=eq.${campaignId}`},payload=>{const row=payload?.new;if(!row?.id||state.chatMessages.some(m=>m.id===row.id))return;state.chatMessages.push(row);renderChat();});
     campaign.on('broadcast',{event:'activity'},({payload})=>{if(payload?.user_id!==state.user.id)receiveCampaignActivity(payload);});
     campaign.on('postgres_changes',{event:'*',schema:'public',table:'campaign_audio_state',filter:`campaign_id=eq.${campaignId}`},async payload=>{
@@ -670,7 +671,14 @@ async function broadcastRoomResize(payload){if(!state.campaignChannel||!canEdit(
 function receiveRoomRotate(payload){if(!payload?.room_id)return;state.rooms=state.rooms.map(r=>r.id===payload.room_id?{...r,rotation:Number(payload.rotation)||0}:r);renderTable();}
 async function broadcastRoomRotate(payload){if(!state.campaignChannel||!canEdit())return;await state.campaignChannel.send({type:"broadcast",event:"room_rotate",payload:{...payload,user_id:state.user.id}});}
 
-function receiveRoll(payload){ state.rolls=[payload,...state.rolls].slice(0,30); renderDiceResult(payload); if(state.view!=='dice') $('rollResult').classList.add('rollPulse'); setTimeout(()=>$('rollResult')?.classList.remove('rollPulse'),280); }
+function receiveRoll(payload){
+  if(!payload?.id&&!payload?.final_result)return;
+  if(payload.id&&!state.rolls.some(r=>r.id===payload.id))state.rolls=[payload,...state.rolls].slice(0,30);
+  renderDiceResult(payload); renderDice();
+  if(state.view!=='dice') $('rollResult')?.classList.add('rollPulse');
+  setTimeout(()=>$('rollResult')?.classList.remove('rollPulse'),280);
+  if(payload.roller_user_id!==state.user?.id)toast('Rolagem de '+(payload.roller_display_name||'Jogador')+': '+payload.final_result);
+}
 
 function renderMasterDashboard(){
   if(!canEdit()){
@@ -2458,13 +2466,21 @@ async function performRoll(notation,rule='normal'){
   if((rule==='advantage'||rule==='disadvantage')&&count===1&&sides===20){const a=rollOnce(1)[0],b=rollOnce(1)[0];base=[a,b];finalBase=[rule==='advantage'?Math.max(a,b):Math.min(a,b)];appliedRule=rule==='advantage'?'Vantagem (maior)':'Desvantagem (menor)';}else{base=rollOnce(count);finalBase=base;appliedRule='Normal';}
   const final=finalBase.reduce((a,b)=>a+b,0)+modifier;
   const payload={campaign_id:state.campaign.id,session_id:currentSession()?.id||null,roller_user_id:state.user.id,roller_display_name:state.profile?.display_name||state.user?.email?.split('@')[0]||'Jogador',character_id:state.characters.find(c=>c.player_id===state.user.id)?.id||null,notation:notation.trim(),base_results:base,rule_results:{label:appliedRule,selected:finalBase,modifier},final_result:final,created_at:new Date().toISOString()};
-  const {data,error}=await sb.from('dice_rolls').insert(payload).select().single();
+  const {data,error}=await sb.from('dice_rolls').insert(payload).select('*').maybeSingle();
   if(error)throw error;
-  if(canEdit()) state.rolls=[data,...state.rolls];
-  renderDiceResult(data);
+  let saved=data;
+  if(!saved){
+    const verify=await sb.from('dice_rolls').select('*').eq('campaign_id',payload.campaign_id).eq('roller_user_id',payload.roller_user_id).eq('created_at',payload.created_at).maybeSingle();
+    if(verify.error)throw verify.error;
+    saved=verify.data;
+  }
+  if(!saved)throw new Error('A rolagem foi executada, mas não foi possível confirmá-la no servidor.');
+  if(canEdit()&&!state.rolls.some(r=>r.id===saved.id)) state.rolls=[saved,...state.rolls];
+  renderDiceResult(saved);
   renderDice();
-  await logCampaignActivity('dice_roll','dice',`${payload.roller_display_name} rolou ${payload.notation}: ${payload.final_result}`,data?.id||null,{notation:payload.notation,final_result:payload.final_result,rule:appliedRule});
-  return data;
+  if(state.campaignChannel)await state.campaignChannel.send({type:'broadcast',event:'dice_roll',payload:{...saved,user_id:state.user.id}});
+  await logCampaignActivity('dice_roll','dice',payload.roller_display_name+' rolou '+payload.notation+': '+payload.final_result,saved?.id||null,{notation:payload.notation,final_result:payload.final_result,rule:appliedRule});
+  return saved;
 }
 
 async function profileModal(){
