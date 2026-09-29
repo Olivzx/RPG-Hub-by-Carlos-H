@@ -248,8 +248,8 @@
 
   async function saveRoomRotation(id,rotation){
     if(!master())return;
-    const q=await sbc().from('rooms').update({rotation}).eq('id',id).select().single();
-    if(q.error){window.toast?.(q.error.message||'Não foi possível salvar a rotação.','error');return;}
+    const q=await sbc().from('rooms').update({rotation}).eq('id',id).select('*').maybeSingle();
+    if(q.error||!q.data){window.toast?.(q.error?.message||'Não foi possível salvar a rotação.','error');return;}
     window.state.rooms=window.state.rooms.map(r=>r.id===id?q.data:r);
     if(window.state.selected?.type==='room'&&window.state.selected.id===id){
       window.renderTable?.();
