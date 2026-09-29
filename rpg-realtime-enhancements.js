@@ -213,10 +213,14 @@
       .update({ rotation: next })
       .eq('id', id)
       .select()
-      .single();
+      .maybeSingle();
 
     if (result.error) {
       toast(result.error.message || 'Não foi possível rotacionar o cômodo.', 'error');
+      return;
+    }
+    if (!result.data) {
+      toast('O cômodo foi alterado ou removido em outra sessão.', 'error');
       return;
     }
 
