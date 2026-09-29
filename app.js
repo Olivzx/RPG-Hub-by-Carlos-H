@@ -937,7 +937,7 @@ function startEntityDrag(e,el){
   };
   const up=async()=>{
     cleanup();const room=roomAtPosition(latestX,latestY,current.floor_id||state.floor);
-    const result=await sb.from('world_entities').update({x:latestX,y:latestY,room_id:room?.id||null}).eq('id',id).select().maybeSingle();
+    const result=await sb.from('world_entities').update({x:latestX,y:latestY,room_id:room?.id||null,updated_at:new Date().toISOString()}).eq('id',id).eq('updated_at',current.updated_at).select().maybeSingle();
     if(result.error){state.entities=state.entities.map(item=>item.id===id?{...item,...previous}:item);renderTable();toast(result.error.message||'Não foi possível salvar a posição.','error');return;}
     if(!result.data){state.entities=state.entities.map(item=>item.id===id?{...item,...previous}:item);renderTable();toast('A entidade não pôde ser localizada após o movimento.','error');return;}
     const data=result.data;
@@ -972,7 +972,7 @@ function startRoomDrag(e,el){
     if(now-lastMoveBroadcast>30){lastMoveBroadcast=now;broadcastRoomMove({room_id:r.id,x:latestX,y:latestY}).catch(()=>{});}
     state.rooms=state.rooms.map(item=>item.id===r.id?{...item,x:latestX,y:latestY}:item);el.style.left=latestX+'%';el.style.top=latestY+'%';
   };
-  const up=async()=>{cleanup();const {data,error}=await sb.from('rooms').update({x:latestX,y:latestY}).eq('id',r.id).select('*').maybeSingle();if(error||!data){state.rooms=state.rooms.map(item=>item.id===r.id?{...item,...previous}:item);renderTable();toast(error?.message||'O cômodo não pôde ser localizado após o movimento.','error');return;}state.rooms=state.rooms.map(item=>item.id===r.id?data:item);await broadcastRoomMove({room_id:r.id,x:latestX,y:latestY});setSave('Cômodo reposicionado');};
+  const up=async()=>{cleanup();const {data,error}=await sb.from('rooms').update({x:latestX,y:latestY,updated_at:new Date().toISOString()}).eq('id',r.id).eq('updated_at',r.updated_at).select('*').maybeSingle();if(error||!data){state.rooms=state.rooms.map(item=>item.id===r.id?{...item,...previous}:item);renderTable();toast(error?.message||'O cômodo não pôde ser localizado após o movimento.','error');return;}state.rooms=state.rooms.map(item=>item.id===r.id?data:item);await broadcastRoomMove({room_id:r.id,x:latestX,y:latestY});setSave('Cômodo reposicionado');};
   const cancel=()=>{cleanup();state.rooms=state.rooms.map(item=>item.id===r.id?{...item,...previous}:item);renderTable();};
   el.addEventListener('pointermove',move);el.addEventListener('pointerup',up,{once:true});el.addEventListener('pointercancel',cancel,{once:true});
 }
@@ -991,7 +991,7 @@ function startRoomResize(e,el){
     if(now-lastResizeBroadcast>30){lastResizeBroadcast=now;broadcastRoomResize({room_id:r.id,width:latestW,height:latestH,x:latestX,y:latestY}).catch(()=>{});}
     state.rooms=state.rooms.map(item=>item.id===r.id?{...item,width:latestW,height:latestH,x:latestX,y:latestY}:item);el.style.width=latestW+'%';el.style.height=latestH+'%';el.style.left=latestX+'%';el.style.top=latestY+'%';
   };
-  const up=async()=>{cleanup();const {data,error}=await sb.from('rooms').update({width:latestW,height:latestH,x:latestX,y:latestY}).eq('id',r.id).select('*').maybeSingle();if(error||!data){state.rooms=state.rooms.map(item=>item.id===r.id?{...item,...previous}:item);renderTable();toast(error?.message||'O cômodo não pôde ser localizado após redimensionar.','error');return;}state.rooms=state.rooms.map(item=>item.id===r.id?data:item);await broadcastRoomResize({room_id:r.id,width:latestW,height:latestH,x:latestX,y:latestY});setSave('Área do cômodo salva');};
+  const up=async()=>{cleanup();const {data,error}=await sb.from('rooms').update({width:latestW,height:latestH,x:latestX,y:latestY,updated_at:new Date().toISOString()}).eq('id',r.id).eq('updated_at',r.updated_at).select('*').maybeSingle();if(error||!data){state.rooms=state.rooms.map(item=>item.id===r.id?{...item,...previous}:item);renderTable();toast(error?.message||'O cômodo não pôde ser localizado após redimensionar.','error');return;}state.rooms=state.rooms.map(item=>item.id===r.id?data:item);await broadcastRoomResize({room_id:r.id,width:latestW,height:latestH,x:latestX,y:latestY});setSave('Área do cômodo salva');};
   const cancel=()=>{cleanup();state.rooms=state.rooms.map(item=>item.id===r.id?{...item,...previous}:item);renderTable();};
   el.addEventListener('pointermove',move);el.addEventListener('pointerup',up,{once:true});el.addEventListener('pointercancel',cancel,{once:true});
 }
