@@ -232,3 +232,84 @@ input:focus,select:focus,textarea:focus,.authCard input:focus,.authCard select:f
 .rpgVttOverlay{touch-action:none}
 .rpgRoomDrawPreview{pointer-events:none}
 .boardGrid{touch-action:pan-x pan-y}
+
+/* ===== RPG HUB — mapa estável e controles de cenário ===== */
+.boardFrame{
+  height:min(650px,calc(100vh - 340px));
+  min-height:420px;
+  max-height:650px;
+  overflow:auto;
+}
+.boardGrid{
+  min-width:560px;
+  min-height:420px;
+}
+#roomLayer .room{
+  box-sizing:border-box;
+  overflow:visible;
+}
+#roomLayer .roomResize{
+  position:absolute;
+  z-index:75;
+  width:18px;
+  height:18px;
+  padding:0;
+  border:1px solid rgba(180,170,255,.48);
+  border-radius:5px;
+  background:rgba(13,15,23,.92);
+  box-shadow:0 3px 12px rgba(0,0,0,.34);
+  touch-action:none;
+}
+#roomLayer .roomResizeNW{left:-9px;top:-9px;cursor:nwse-resize}
+#roomLayer .roomResizeN{left:50%;top:-9px;transform:translateX(-50%);cursor:ns-resize}
+#roomLayer .roomResizeNE{right:-9px;top:-9px;cursor:nesw-resize}
+#roomLayer .roomResizeE{right:-9px;top:50%;transform:translateY(-50%);cursor:ew-resize}
+#roomLayer .roomResizeSE{right:-9px;bottom:-9px;cursor:nwse-resize}
+#roomLayer .roomResizeS{left:50%;bottom:-9px;transform:translateX(-50%);cursor:ns-resize}
+#roomLayer .roomResizeSW{left:-9px;bottom:-9px;cursor:nesw-resize}
+#roomLayer .roomResizeW{left:-9px;top:50%;transform:translateY(-50%);cursor:ew-resize}
+.dataFilterBar{
+  display:flex;
+  gap:6px;
+  flex-wrap:wrap;
+  margin-bottom:10px;
+  padding:6px;
+  border:1px solid #252b36;
+  border-radius:11px;
+  background:rgba(10,13,18,.72);
+}
+.dataFilterBar button{
+  border:1px solid #29303b;
+  background:#0e131a;
+  color:#929aa8;
+  border-radius:8px;
+  padding:7px 10px;
+  font-size:9px;
+  cursor:pointer;
+}
+.dataFilterBar button.active{
+  border-color:#4e467d;
+  color:#e9e6ff;
+  background:rgba(148,135,255,.1);
+}
+.dataFilterBar button b{margin-left:4px;font-weight:700;opacity:.7}
+@media(max-width:760px){
+  .boardFrame{
+    height:min(460px,calc(100vh - 300px));
+    min-height:360px;
+    max-height:460px;
+  }
+  .boardGrid{
+    min-width:560px;
+    min-height:420px;
+  }
+  #roomLayer .roomResize{width:20px;height:20px}
+  #roomLayer .roomResizeNW{left:-10px;top:-10px}
+  #roomLayer .roomResizeN{top:-10px}
+  #roomLayer .roomResizeNE{right:-10px;top:-10px}
+  #roomLayer .roomResizeE{right:-10px}
+  #roomLayer .roomResizeSE{right:-10px;bottom:-10px}
+  #roomLayer .roomResizeS{bottom:-10px}
+  #roomLayer .roomResizeSW{left:-10px;bottom:-10px}
+  #roomLayer .roomResizeW{left:-10px}
+}
