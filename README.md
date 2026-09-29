@@ -41,6 +41,60 @@ Mesa
 
 ---
 
+## Repaginação do mapa — 29/09/2026
+
+A camada da Mesa foi revisada para eliminar inconsistências entre visualização, interação e escala do mapa.
+
+### Criação e edição de cenário
+- Criação visual de cômodos com arraste e prévia da área antes de abrir o formulário.
+- Captura de ponteiro durante o desenho para evitar perda de eventos em mouse e toque.
+- Geometria criada respeitando a escala atual do mapa.
+- Cômodos rotacionados passam a considerar a caixa ocupada pela rotação ao permanecer dentro dos limites do mapa.
+- Rotação direta na Mesa por alça `⟳` arrastável.
+- Controles rápidos de rotação em `15°`, `−15°` e `0°` para o cômodo selecionado.
+- Persistência e transmissão da rotação para os participantes.
+
+### Zoom e viewport
+- O mapa deixou de usar `transform: scale()` como mecanismo principal de zoom.
+- O zoom agora altera as dimensões reais do canvas do mapa, mantendo as coordenadas do ponteiro coerentes.
+- A viewport usa rolagem horizontal e vertical para mapas ampliados, sem simplesmente cortar o cenário.
+- Faixa de zoom revisada para `75%` a `200%`, com retorno rápido para `100%`.
+- Comportamento responsivo preservado em desktop e mobile.
+
+### Grid, Snap e escala
+- A grade passou a usar tamanho físico em pixels, formando células quadradas reais.
+- Snap de posição usa o mesmo tamanho físico de célula em X e Y.
+- Redimensionamento de cômodos usa a mesma referência de célula.
+- Medição, criação de áreas e snap usam a mesma escala para evitar divergências.
+
+### Medição
+- Ferramenta de medir refeita para trabalhar em pixels e converter o resultado pela quantidade de unidades por célula.
+- Distâncias diagonais usam a distância euclidiana real na viewport.
+- O resultado apresenta células e unidades da campanha.
+- Medição agora permanece correta durante zoom e rolagem.
+- Foi adicionado comando `Limpar medição`.
+
+### Áreas de efeito
+- Criação por arraste foi reconstruída com captura de ponteiro.
+- Círculo e quadrado usam o ponto inicial como centro.
+- Cone usa o ponto inicial como vértice e a direção do arraste como orientação.
+- Linha usa o ponto inicial como origem e a distância arrastada como comprimento.
+- Tamanho e comprimento são armazenados em células, mantendo a área consistente com a grade.
+- Áreas continuam persistentes e sincronizadas por Realtime.
+- O Mestre recebe controle explícito para remover áreas.
+
+### Interface do mapa
+- Toolbar do mapa reorganizada para separar movimento, estrutura, medição, áreas, névoa, grade e visão.
+- Painel lateral recebeu tratamento mais estável em telas estreitas.
+- O container do mapa passou a tratar scroll e conteúdo ampliado como uma viewport real.
+- Controles e overlays passaram a ser reposicionados após mudanças de tamanho do mapa.
+
+### Validação
+- `app.js`, `rpg-vtt-advanced.js`, `rpg-vtt-vision.js`, `rpg-combat-system.js` e `rpg-system-upgrades.js` passaram por validação de sintaxe.
+- A página `mesa.html` continua carregando a camada de VTT.
+- A validação visual completa com navegador autenticado não ficou disponível nesta rodada; por isso não foi registrada como teste concluído.
+
+---
 ## Atualizações recentes — 29/09/2026
 
 Esta versão registra a evolução da Mesa, do sistema de Mestre e das camadas de sincronização do RPG HUB.
