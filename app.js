@@ -93,6 +93,41 @@ async function ensureCampaignWorld(campaignId){
   return data;
 }
 
+const ACTIVITY_LIMIT=120;
+async function loadCampaignActivity(){
+  if(!state.campaign)return;
+  const {data,error}=await sb.from('campaign_activity').select('*').eq('campaign_id',state.campaign.id).order('created_at',{ascending:false}).limit(ACTIVITY_LIMIT);
+  if(error){console.warn('RPG HUB activity:',error);state.activity=[];return;}
+  state.activity=(data||[]).reverse();
+  renderActivity();
+}
+function activityActorName(actorId){
+  return profileFor(actorId)?.display_name || (actorId===state.user?.id?state.profile?.display_name:null) || 'Sistema';
+}
+function renderActivity(){
+  const box=$('campaignActivityList'); if(!box)return;
+  box.innerHTML=(state.activity||[]).map(a=>'<article class="activityItem"><div class="activityIcon">•</div><div class="activityBody"><b>'+escapeHtml(activityActorName(a.actor_id))+'</b><span>'+escapeHtml(a.summary)+'</span><time>'+escapeHtml(fmtDate(a.created_at))+'</time></div></article>').join('')||'<div class="activityEmpty">Nenhum evento da mesa ainda.</div>';
+  box.scrollTop=box.scrollHeight;
+}
+async function logCampaignActivity(action,entityType,summary,entityId=null,metadata={}){
+  if(!state.campaign||!state.user)return null;
+  const payload={campaign_id:state.campaign.id,actor_id:state.user.id,action,entity_type:entityType,entity_id:entityId,summary:String(summary||'').slice(0,500),metadata};
+  try{
+    const {data,error}=await sb.from('campaign_activity').insert(payload).select('*').maybeSingle();
+    if(error)throw error;
+    const row=data||{...payload,id:uid(),created_at:new Date().toISOString()};
+    if(!state.activity.some(x=>x.id===row.id)){state.activity=[...state.activity,row].slice(-ACTIVITY_LIMIT);renderActivity();}
+    if(state.campaignChannel)await state.campaignChannel.send({type:'broadcast',event:'activity',payload:{...row,user_id:state.user.id}});
+    return row;
+  }catch(error){console.warn('RPG HUB activity log:',error);return null;}
+}
+function receiveCampaignActivity(row){
+  if(!row?.id||row.campaign_id!==state.campaign?.id)return;
+  if(!state.activity.some(x=>x.id===row.id)){
+    state.activity=[...state.activity,row].slice(-ACTIVITY_LIMIT);
+    renderActivity();
+  }
+}
 async function loadCampaignChat(){
   if(!state.campaign)return; const {data,error}=await sb.from('campaign_chat_messages').select('*').eq('campaign_id',state.campaign.id).order('created_at',{ascending:true}).limit(200); if(error){console.warn('RPG HUB chat:',error);state.chatMessages=[];return;} state.chatMessages=data||[];
 }
@@ -150,6 +185,7 @@ async function loadCampaignData(){
 
   await loadFloors();
   await loadCampaignChat();
+  await loadCampaignActivity();
   if(state.locations.length&&!state.floors.length&&canEdit()){
     await ensureCampaignWorld(campaignId);
     await loadFloors();
@@ -427,6 +463,7 @@ async function subscribeRealtime(){
     campaign.on('broadcast',{event:'scene_change'},({payload})=>{if(payload?.user_id!==state.user.id)receiveSceneChange(payload);});
     campaign.on('broadcast',{event:'audio'},({payload})=>{if(payload?.user_id!==state.user.id)receiveAudio(payload);});
     campaign.on('postgres_changes',{event:'INSERT',schema:'public',table:'campaign_chat_messages',filter:`campaign_id=eq.${campaignId}`},payload=>{const row=payload?.new;if(!row?.id||state.chatMessages.some(m=>m.id===row.id))return;state.chatMessages.push(row);renderChat();});
+    campaign.on('broadcast',{event:'activity'},({payload})=>{if(payload?.user_id!==state.user.id)receiveCampaignActivity(payload);});
     campaign.on('postgres_changes',{event:'*',schema:'public',table:'campaign_audio_state',filter:`campaign_id=eq.${campaignId}`},async payload=>{
       if(canEdit()||!state.audioEnabled)return;
       const row=payload?.new;
@@ -620,6 +657,7 @@ async function setActiveScene(floorId,roomId=null){
       session_id:session.id,
       scene_revision:Date.now()
     });
+    await logCampaignActivity('scene_change','session',roomId?`Cena alterada para ${state.rooms.find(r=>r.id===roomId)?.name||'cômodo'}`:`Andar alterado para ${floor.name}`,roomId||floor.id,{floor_id:floor.id,room_id:roomId||null,session_id:session.id});
     setSave(roomId?'Cena transmitida aos jogadores':'Andar transmitido aos jogadores');
   }else{
     setSave('Andar selecionado · sem sessão ativa');
@@ -751,6 +789,7 @@ async function moveEntityToFloor(id,floorId){
   state.selected={type:'entity',id};
   await broadcastEntityMove({entity_id:id,x,y,room_id:room?.id||null,floor_id:floor.id});
   renderAll();
+  await logCampaignActivity('entity_move','character',`${entity.display_name} foi movido para ${floor.name}${room?` · ${room.name}`:''}`,id,{floor_id:floor.id,room_id:room?.id||null});
   setSave('Personagem movido para '+floor.name);
   toast(room?entity.display_name+' movido para '+floor.name+' · '+room.name:entity.display_name+' movido para '+floor.name);
 }
@@ -2424,6 +2463,7 @@ async function performRoll(notation,rule='normal'){
   if(canEdit()) state.rolls=[data,...state.rolls];
   renderDiceResult(data);
   renderDice();
+  await logCampaignActivity('dice_roll','dice',`${payload.roller_display_name} rolou ${payload.notation}: ${payload.final_result}`,data?.id||null,{notation:payload.notation,final_result:payload.final_result,rule:appliedRule});
   return data;
 }
 
@@ -2529,7 +2569,7 @@ Object.assign(window,{
   currentFloor,currentSession,profileFor,toast,setSave,showModal,closeModal,renderAll,renderShell,renderTable,
   renderCharacters,renderWorld,renderSessions,renderNpcs,renderDice,renderMasterDashboard,renderChronicle,renderView,
   applyZoom,subscribeRealtime,broadcastRoomMove,broadcastRoomResize,broadcastEntityMove,broadcastScene,rpgSnapPoint,rpgSnapSize,
-  loadCampaigns,loadCampaignData,loadFloors,createCampaign
+  loadCampaigns,loadCampaignData,loadFloors,createCampaign,logCampaignActivity,loadCampaignActivity,renderActivity
 });
 
 boot();
