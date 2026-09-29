@@ -170,6 +170,183 @@ async function loadFloors(){
 }
 function ensureFloor(){ if(!state.floor || !state.floors.some(f=>f.id===state.floor)) state.floor=state.floors[0]?.id||null; }
 
+function realtimeRecordPayload(message){
+  const data=message?.payload||{};
+  return {
+    table:data.table||null,
+    operation:data.operation||message?.event||null,
+    record:data.record||null,
+    old_record:data.old_record||null
+  };
+}
+
+let realtimeRefreshTimer=null;
+const realtimeRefreshQueue=new Set();
+
+function queueRealtimeCollection(name){
+  realtimeRefreshQueue.add(name);
+  clearTimeout(realtimeRefreshTimer);
+  realtimeRefreshTimer=setTimeout(async()=>{
+    const jobs=[...realtimeRefreshQueue];
+    realtimeRefreshQueue.clear();
+    realtimeRefreshTimer=null;
+    for(const job of jobs){
+      try{
+        if(job==='locations'||job==='floors'){
+          const ids=state.locations.map(l=>l.id);
+          const {data:locations,error:le}=job==='locations'
+            ?await sb.from('locations').select('*').eq('campaign_id',state.campaign.id).order('sort_order')
+            :{data:state.locations,error:null};
+          if(le)throw le;
+          if(job==='locations')state.locations=locations||[];
+          const locIds=state.locations.map(l=>l.id);
+          if(!locIds.length){state.floors=[];state.rooms=[];}
+          else{
+            const {data:floors,error:fe}=await sb.from('floors').select('*').in('location_id',locIds).order('sort_order');
+            if(fe)throw fe;
+            state.floors=floors||[];
+            const floorIds=state.floors.map(f=>f.id);
+            if(floorIds.length){
+              const {data:rooms,error:re}=await sb.from('rooms').select('*').in('floor_id',floorIds).order('sort_order');
+              if(re)throw re;
+              state.rooms=rooms||[];
+            }else state.rooms=[];
+          }
+          ensureFloor();
+          state.location=state.locations.find(l=>l.id===state.floors.find(f=>f.id===state.floor)?.location_id)||state.locations[0]||null;
+          renderAll();
+          window.rpgVttContextChanged?.();
+          continue;
+        }
+        if(job==='sessions'){
+          const {data,error}=await sb.from('sessions').select('*').eq('campaign_id',state.campaign.id).order('session_number',{ascending:false});
+          if(error)throw error;
+          state.sessions=data||[];
+          state.selectedSessionId=state.selectedSessionId&&state.sessions.some(s=>s.id===state.selectedSessionId)?state.selectedSessionId:(currentSession()?.id||null);
+          renderAll();
+          continue;
+        }
+        if(job==='members'){
+          const {data,error}=await sb.from('campaign_members').select('*').eq('campaign_id',state.campaign.id);
+          if(error)throw error;
+          state.members=data||[];
+          const ids=[...new Set(state.members.map(m=>m.user_id).filter(Boolean))];
+          if(ids.length){
+            const {data:profiles}=await sb.from('profiles').select('id,display_name,avatar_url').in('id',ids);
+            (profiles||[]).forEach(p=>state.profiles.set(p.id,p));
+          }
+          renderAll();
+          continue;
+        }
+        if(job==='character_fields'){
+          const {data,error}=await sb.from('character_field_definitions').select('*').eq('campaign_id',state.campaign.id).order('sort_order');
+          if(error)throw error;
+          state.characterFields=data||[];
+          renderAll();
+          continue;
+        }
+        if(job==='audio'){
+          const [{data:assets,error:ae},{data:playlists,error:pe}]=await Promise.all([
+            sb.from('audio_assets').select('*').eq('campaign_id',state.campaign.id).order('created_at',{ascending:true}),
+            sb.from('audio_playlists').select('*').eq('campaign_id',state.campaign.id).order('created_at',{ascending:true})
+          ]);
+          if(ae||pe)throw (ae||pe);
+          state.audioAssets=assets||[];
+          state.audioPlaylists=playlists||[];
+          if(state.audioPlaylists.length){
+            const {data:items,error:ie}=await sb.from('audio_playlist_items').select('*').in('playlist_id',state.audioPlaylists.map(p=>p.id));
+            if(ie)throw ie;
+            state.audioPlaylistItems=items||[];
+          }else state.audioPlaylistItems=[];
+          renderDice();
+          continue;
+        }
+        if(job==='audio_state'){
+          const {data,error}=await sb.from('campaign_audio_state').select('*').eq('campaign_id',state.campaign.id).maybeSingle();
+          if(error)throw error;
+          state.campaignAudioState=data||null;
+          renderDice();
+          renderMasterDashboard();
+          continue;
+        }
+        if(job==='chronicle'){
+          if(!canEdit())continue;
+          const {data,error}=await sb.from('campaign_chronicles').select('*').eq('campaign_id',state.campaign.id).maybeSingle();
+          if(error)throw error;
+          state.campaignChronicle=data||null;
+          renderChronicle();
+          continue;
+        }
+      }catch(err){
+        console.warn('RPG HUB realtime refresh:',job,err);
+      }
+    }
+  },40);
+}
+
+function receiveRealtimeBroadcast(message){
+  const change=realtimeRecordPayload(message);
+  if(!change.table||!change.operation)return;
+  const row=change.record||change.old_record;
+  if(row?.campaign_id&&row.campaign_id!==state.campaign?.id)return;
+
+  switch(change.table){
+    case 'characters':
+      receiveCharacterChange({eventType:change.operation,new:change.record,old:change.old_record});
+      return;
+    case 'npcs':{
+      const id=(row||{}).id;
+      if(change.operation==='INSERT'&&change.record)state.npcs=state.npcs.some(x=>x.id===id)?state.npcs:[...state.npcs,change.record];
+      else if(change.operation==='UPDATE'&&change.record)state.npcs=state.npcs.map(x=>x.id===id?change.record:x);
+      else if(change.operation==='DELETE')state.npcs=state.npcs.filter(x=>x.id!==id);
+      renderNpcs();renderTable();return;
+    }
+    case 'world_entities':
+      receiveEntityChange({eventType:change.operation,new:change.record,old:change.old_record});
+      return;
+    case 'rooms':
+      receiveRoomChange({eventType:change.operation,new:change.record,old:change.old_record});
+      return;
+    case 'locations':
+      queueRealtimeCollection('locations'); return;
+    case 'floors':
+      queueRealtimeCollection('floors'); return;
+    case 'sessions':
+      queueRealtimeCollection('sessions'); return;
+    case 'campaign_members':
+      queueRealtimeCollection('members'); return;
+    case 'character_field_definitions':
+      queueRealtimeCollection('character_fields'); return;
+    case 'audio_assets':
+    case 'audio_playlists':
+    case 'audio_playlist_items':
+      queueRealtimeCollection('audio'); return;
+    case 'campaign_audio_state':
+      queueRealtimeCollection('audio_state'); return;
+    case 'campaign_chronicles':
+      queueRealtimeCollection('chronicle'); return;
+    case 'dice_rolls':{
+      if(change.record?.id&&!state.rolls.some(r=>r.id===change.record.id))state.rolls=[change.record,...state.rolls];
+      if(change.operation==='UPDATE'&&change.record)state.rolls=state.rolls.map(r=>r.id===change.record.id?change.record:r);
+      if(change.operation==='DELETE'&&change.old_record)state.rolls=state.rolls.filter(r=>r.id!==change.old_record.id);
+      renderDice();renderMasterDashboard();return;
+    }
+    case 'map_settings':
+    case 'map_walls':
+    case 'fog_regions':
+    case 'aoe_effects':
+    case 'vision_sources':
+    case 'combat_encounters':
+    case 'combatants':
+      window.dispatchEvent(new CustomEvent('rpg:database-change',{detail:change}));
+      window.rpgVttVisionRefresh?.();
+      window.rpgVttRefreshMapLayout?.();
+      return;
+    default:
+      window.dispatchEvent(new CustomEvent('rpg:database-change',{detail:change}));
+  }
+}
+
 async function subscribeRealtime(){
   if(state.campaignChannel)await sb.removeChannel(state.campaignChannel).catch(()=>{});
   if(state.sessionChannel)await sb.removeChannel(state.sessionChannel).catch(()=>{});
@@ -184,6 +361,9 @@ async function subscribeRealtime(){
     campaign.on('broadcast',{event:'room_rotate'},({payload})=>{if(payload?.user_id!==state.user.id)receiveRoomRotate(payload);});
     campaign.on('broadcast',{event:'scene_change'},({payload})=>{if(payload?.user_id!==state.user.id)receiveSceneChange(payload);});
     campaign.on('broadcast',{event:'audio'},({payload})=>{if(payload?.user_id!==state.user.id)receiveAudio(payload);});
+    campaign.on('broadcast',{event:'INSERT'},payload=>receiveRealtimeBroadcast(payload));
+    campaign.on('broadcast',{event:'UPDATE'},payload=>receiveRealtimeBroadcast(payload));
+    campaign.on('broadcast',{event:'DELETE'},payload=>receiveRealtimeBroadcast(payload));
     if(canEdit()){
       campaign.on('postgres_changes',{event:'INSERT',schema:'public',table:'dice_rolls',filter:`campaign_id=eq.${campaignId}`},payload=>{
         const row=payload?.new;
