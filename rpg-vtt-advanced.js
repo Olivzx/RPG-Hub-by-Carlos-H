@@ -78,6 +78,11 @@
 
   window.rpgSnapPoint=snapPoint;
   window.rpgSnapSize=snapSize;
+  window.rpgVttGetMovementConfig=()=>({
+    grid_size:Math.max(.1,n(vtt.settings?.grid_size,5)),
+    unit_per_cell:Math.max(.1,n(vtt.settings?.unit_per_cell,5)),
+    snap_enabled:vtt.settings?.snap_enabled!==false
+  });
 
   function injectStyles(){
     if($('rpgVttEngineStyles'))return;
@@ -602,7 +607,7 @@
   function openMapSettings(){
     if(!master())return;
     const s={...settingsDefault(),...(vtt.settings||{})};
-    window.showModal?.('<div class="modalHeader"><div><div class="eyebrow">MESA · MAPA</div><h3>Configuração do cenário</h3><p class="modalHint">A grade agora usa células físicas quadradas; o snap, a medição e as áreas compartilham exatamente a mesma escala.</p></div><button class="closeButton" data-close>×</button></div><div class="rpgMapSettingsModal"><div class="rpgMapSettingsGrid"><div class="rpgMapSettingsItem"><label><input id="vttGrid" type="checkbox" '+(s.grid_enabled?'checked':'')+'> Exibir grade</label></div><div class="rpgMapSettingsItem"><label><input id="vttSnap" type="checkbox" '+(s.snap_enabled?'checked':'')+'> Ativar snap</label></div><div class="rpgMapSettingsItem"><label>Espaçamento da célula (%)<input id="vttGridSize" type="number" min=".5" max="25" step=".5" value="'+n(s.grid_size,5)+'"></label></div><div class="rpgMapSettingsItem"><label>Unidades por célula<input id="vttUnit" type="number" min=".1" max="1000" step=".1" value="'+n(s.unit_per_cell,5)+'"></label></div><div class="rpgMapSettingsItem"><label><input id="vttFog" type="checkbox" '+(s.fog_enabled?'checked':'')+'> Ativar Fog of War</label></div></div><div class="rpgVttHint">Medição, snap e áreas usam a célula física do mapa. Amplie o zoom para trabalhar com precisão e navegue pela viewport com as barras de rolagem.</div></div><div class="modalActions"><button class="softButton" data-close>Cancelar</button><button id="vttSaveSettings" class="primarySmall">Salvar configuração</button></div>');
+    window.showModal?.('<div class="modalHeader"><div><div class="eyebrow">MESA · MAPA</div><h3>Configuração do cenário</h3><p class="modalHint">A grade agora usa células físicas quadradas; o snap, a medição e as áreas compartilham exatamente a mesma escala.</p></div><button class="closeButton" data-close>×</button></div><div class="rpgMapSettingsModal"><div class="rpgMapSettingsGrid"><div class="rpgMapSettingsItem"><label><input id="vttGrid" type="checkbox" '+(s.grid_enabled?'checked':'')+'> Exibir grade</label></div><div class="rpgMapSettingsItem"><label><input id="vttSnap" type="checkbox" '+(s.snap_enabled?'checked':'')+'> Ativar snap</label></div><div class="rpgMapSettingsItem"><label>Tamanho da célula no mapa (%)<input id="vttGridSize" type="number" min=".5" max="25" step=".5" value="'+n(s.grid_size,5)+'"></label></div><div class="rpgMapSettingsItem"><label>Unidades de movimento por célula<input id="vttUnit" type="number" min=".1" max="1000" step=".1" value="'+n(s.unit_per_cell,5)+'"></label></div><div class="rpgMapSettingsItem"><label><input id="vttFog" type="checkbox" '+(s.fog_enabled?'checked':'')+'> Ativar Fog of War</label></div></div><div class="rpgVttHint">A célula define o passo visual da grade. Com o snap ativo, cômodos e personagens se alinham a esse passo; o movimento usa a mesma escala. Amplie o zoom para trabalhar com precisão e navegue pela viewport com as barras de rolagem.</div></div><div class="modalActions"><button class="softButton" data-close>Cancelar</button><button id="vttSaveSettings" class="primarySmall">Salvar configuração</button></div>');
     $('vttSaveSettings').onclick=async()=>{const grid=Math.max(.5,Math.min(25,Number($('vttGridSize').value)||5)),unit=Math.max(.1,Math.min(1000,Number($('vttUnit').value)||5));await saveSettings({grid_enabled:$('vttGrid').checked,snap_enabled:$('vttSnap').checked,grid_size:grid,unit_per_cell:unit,fog_enabled:$('vttFog').checked});window.closeModal?.()};
   }
 
