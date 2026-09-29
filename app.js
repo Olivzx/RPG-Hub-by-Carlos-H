@@ -602,7 +602,22 @@ function startRoomResize(e,el){
   document.addEventListener('pointermove',move);
   document.addEventListener('pointerup',up,{once:true});
 }
-function applyZoom(){ $('board').style.setProperty('--board-zoom',String(state.zoom/100));$('zoomValue').textContent=state.zoom+'%'; }
+function applyZoom(){
+  const board=$('board');
+  if(!board)return;
+  const zoom=Math.max(75,Math.min(200,Number(state.zoom)||100));
+  state.zoom=zoom;
+  board.style.removeProperty('--board-zoom');
+  board.style.transform='none';
+  board.style.width=zoom===100?'100%':zoom+'%';
+  board.style.height=Math.round(650*zoom/100)+'px';
+  board.style.minWidth='0';
+  board.style.minHeight='0';
+  board.closest('.boardFrame')?.style.setProperty('--map-zoom',String(zoom/100));
+  $('zoomValue').textContent=zoom+'%';
+  window.rpgVttRefreshGrid?.();
+  window.rpgVttRefreshMapLayout?.();
+}
 
 function renderCharacters(){
   const grid=$('charactersGrid');
@@ -1989,7 +2004,8 @@ $('newCampaignBtn').onclick=()=>{if(!canCreateCampaign()){toast('Somente contas 
 $('newRoomBtn').onclick=()=>{if(requireMaster())openRoomModal();};
 $('structureBtn').onclick=()=>{state.tool=state.tool==='draw'?'move':'draw';$('structureBtn').classList.toggle('chosen',state.tool==='draw');$('moveBtn').classList.toggle('chosen',state.tool==='move');$('board').classList.toggle('drawing',state.tool==='draw');$('boardHint').textContent=state.tool==='draw'?'Clique e arraste para desenhar um novo cômodo':'Arraste entidades e cômodos para reposicionar';};
 $('moveBtn').onclick=()=>{state.tool='move';$('moveBtn').classList.add('chosen');$('structureBtn').classList.remove('chosen');$('board').classList.remove('drawing');};
-$('zoomIn').onclick=()=>{state.zoom=Math.min(140,state.zoom+10);applyZoom();}; $('zoomOut').onclick=()=>{state.zoom=Math.max(70,state.zoom-10);applyZoom();};
+$('zoomIn').onclick=()=>{state.zoom=Math.min(200,state.zoom+10);applyZoom();};
+$('zoomOut').onclick=()=>{state.zoom=Math.max(75,state.zoom-10);applyZoom();};
 $('characterFieldsBtn')?.addEventListener('click',openCharacterFieldConfig);
 $('newCharacterBtn').onclick=()=>openCharacterModal(); $('newNpcBtn').onclick=()=>openNpcModal(); $('newSessionBtn').onclick=()=>openSessionModal();
 function getDiceBuilderNotation(){
@@ -2020,9 +2036,53 @@ function wireAudioControls(){
 }
 $('modalBackdrop').addEventListener('click',e=>{if(e.target===$('modalBackdrop'))closeModal();});document.addEventListener('click',e=>{if(e.target.closest('[data-close]'))closeModal();});
 
-// Drawing tool: create room based on the dragged area.
-let drawStart=null;$('board').addEventListener('pointerdown',e=>{if(state.tool!=='draw'||e.target.closest('.tokenBig')||e.target.closest('.room'))return;const r=$('board').getBoundingClientRect();drawStart={x:e.clientX-r.left,y:e.clientY-r.top};});$('board').addEventListener('pointerup',e=>{if(state.tool!=='draw'||!drawStart)return;const r=$('board').getBoundingClientRect();const x=Math.min(drawStart.x,e.clientX-r.left)/r.width*100,y=Math.min(drawStart.y,e.clientY-r.top)/r.height*100,w=Math.max(10,Math.abs(e.clientX-r.left-drawStart.x)/r.width*100),h=Math.max(8,Math.abs(e.clientY-r.top-drawStart.y)/r.height*100);drawStart=null;openRoomModalWithGeometry({x,y,width:w,height:h});});
-function openRoomModalWithGeometry(g){const oldOpen=window.__roomGeom;window.__roomGeom=g;openRoomModal();setTimeout(()=>{if(window.__roomGeom){$('roomX').value=g.x.toFixed(1);$('roomY').value=g.y.toFixed(1);$('roomW').value=g.width.toFixed(1);$('roomH').value=g.height.toFixed(1);window.__roomGeom=null;}},0);}
+// Drawing tool: create a room with a real pointer capture and grid-aware geometry.
+let drawStart=null,drawPointerId=null,drawPreview=null;
+function drawPoint(e){
+  const board=$('board');const r=board.getBoundingClientRect();
+  return {x:Math.max(0,Math.min(100,(e.clientX-r.left)/r.width*100)),y:Math.max(0,Math.min(100,(e.clientY-r.top)/r.height*100))};
+}
+function updateDrawPreview(p){
+  const board=$('board');if(!drawPreview)return;
+  const x=Math.min(drawStart.x,p.x),y=Math.min(drawStart.y,p.y),w=Math.abs(p.x-drawStart.x),h=Math.abs(p.y-drawStart.y);
+  drawPreview.style.left=x+'%';drawPreview.style.top=y+'%';drawPreview.style.width=w+'%';drawPreview.style.height=h+'%';
+}
+$('board').addEventListener('pointerdown',e=>{
+  if(state.tool!=='draw'||!canEdit()||e.button!==0||e.target.closest('.tokenBig')||e.target.closest('.room')||e.target.closest('.rpgVttOverlay'))return;
+  e.preventDefault();
+  drawPointerId=e.pointerId;drawStart=drawPoint(e);
+  drawPreview=document.createElement('div');
+  drawPreview.className='rpgRoomDrawPreview';
+  drawPreview.style.left=drawStart.x+'%';drawPreview.style.top=drawStart.y+'%';
+  $('board').appendChild(drawPreview);
+  $('board').setPointerCapture?.(e.pointerId);
+},true);
+$('board').addEventListener('pointermove',e=>{
+  if(state.tool!=='draw'||drawPointerId!==e.pointerId||!drawStart)return;
+  updateDrawPreview(drawPoint(e));
+},true);
+async function finishDraw(e){
+  if(!drawStart||drawPointerId!==e.pointerId)return;
+  const p=drawPoint(e),s=drawStart;
+  drawStart=null;drawPointerId=null;drawPreview?.remove();drawPreview=null;
+  const x=Math.min(s.x,p.x),y=Math.min(s.y,p.y),width=Math.max(5,Math.abs(p.x-s.x)),height=Math.max(5,Math.abs(p.y-s.y));
+  if(width<5||height<5)return;
+  window.__roomGeom={x,y,width,height};
+  openRoomModal();
+  setTimeout(()=>{
+    const g=window.__roomGeom;
+    if(!g)return;
+    $('roomX').value=g.x.toFixed(2);$('roomY').value=g.y.toFixed(2);
+    $('roomW').value=g.width.toFixed(2);$('roomH').value=g.height.toFixed(2);
+    window.__roomGeom=null;
+    if(typeof window.rpgSnapRoomGeometry==='function')window.rpgSnapRoomGeometry();
+  },0);
+}
+$('board').addEventListener('pointerup',e=>{finishDraw(e)},true);
+$('board').addEventListener('pointercancel',e=>{
+  if(drawPointerId===e.pointerId){drawStart=null;drawPointerId=null;drawPreview?.remove();drawPreview=null;}
+},true);
+function openRoomModalWithGeometry(g){window.__roomGeom=g;openRoomModal();setTimeout(()=>{if(window.__roomGeom){$('roomX').value=g.x.toFixed(2);$('roomY').value=g.y.toFixed(2);$('roomW').value=g.width.toFixed(2);$('roomH').value=g.height.toFixed(2);window.__roomGeom=null;}},0);}
 const originalOpenRoom=openRoomModal;
 
 boot();
