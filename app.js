@@ -262,11 +262,18 @@ function queueRealtimeCollection(name){
           continue;
         }
         if(job==='sessions'){
+          const previous=currentSession();
+          const previousFloor=previous?.active_floor_id||null;
+          const previousRoom=previous?.active_room_id||null;
           const {data,error}=await sb.from('sessions').select('*').eq('campaign_id',state.campaign.id).order('session_number',{ascending:false});
           if(error)throw error;
           state.sessions=data||[];
           state.selectedSessionId=state.selectedSessionId&&state.sessions.some(s=>s.id===state.selectedSessionId)?state.selectedSessionId:(currentSession()?.id||null);
+          const active=currentSession();
           renderAll();
+          if(!canEdit()&&active&&active.id===previous?.id&&(active.active_floor_id!==previousFloor||active.active_room_id!==previousRoom)){
+            applySessionScene(active,{silent:true});
+          }
           continue;
         }
         if(job==='members'){
@@ -355,6 +362,13 @@ function receiveRealtimeBroadcast(message){
     case 'floors':
       queueRealtimeCollection('floors'); return;
     case 'sessions':
+      if(!canEdit()&&change.record?.id===currentSession()?.id){
+        const row=change.record;
+        const current=currentSession();
+        if(row.active_floor_id!==current?.active_floor_id||row.active_room_id!==current?.active_room_id){
+          applySessionScene(row,{silent:true});
+        }
+      }
       queueRealtimeCollection('sessions'); return;
     case 'campaign_members':
       queueRealtimeCollection('members'); return;
@@ -428,9 +442,16 @@ async function subscribeRealtime(){
     const session=sb.channel(`rpg-hub-session-${sid}`,{config:{private:true}});
     session.on('postgres_changes',{event:'UPDATE',schema:'public',table:'sessions',filter:`id=eq.${sid}`},payload=>{
       const row=payload.new;if(!row)return;
+      const before=currentSession();
+      const changed=row.id===before?.id&&(row.active_floor_id!==before?.active_floor_id||row.active_room_id!==before?.active_room_id);
       state.sessions=state.sessions.map(x=>x.id===row.id?row:x);
-      if(row.id===currentSession()?.id && row.active_floor_id!==state.floor && !canEdit()){
-        receiveSceneChange({floor_id:row.active_floor_id,room_id:row.active_room_id,room_name:state.rooms.find(r=>r.id===row.active_room_id)?.name});
+      if(changed&&!canEdit()){
+        receiveSceneChange({
+          floor_id:row.active_floor_id,
+          room_id:row.active_room_id,
+          room_name:state.rooms.find(r=>r.id===row.active_room_id)?.name,
+          silent:true
+        });
       }
     });
     session.on('postgres_changes',{event:'UPDATE',schema:'public',table:'world_entities',filter:`campaign_id=eq.${state.campaign.id}`},payload=>{
@@ -482,12 +503,34 @@ function receiveCharacterChange(payload){
   }
 }
 
+function applySessionScene(session,payload={}){
+  if(!session&&!payload.floor_id)return false;
+  const floorId=payload.floor_id??session?.active_floor_id??null;
+  const roomId=payload.room_id??session?.active_room_id??null;
+  const floor=floorId?state.floors.find(f=>f.id===floorId):null;
+  if(floor){
+    state.floor=floor.id;
+    state.location=state.locations.find(l=>l.id===floor.location_id)||state.location;
+  }else if(floorId){
+    window.rpgVttContextChanged?.();
+    return false;
+  }else{
+    state.floor=state.floors[0]?.id||null;
+  }
+  state.selected=roomId?{type:'room',id:roomId}:null;
+  state.tool='move';
+  state.view='table';
+  window.rpgVttSetTool?.('move');
+  renderAll();
+  window.rpgVttContextChanged?.();
+  window.rpgVttVisionRefresh?.();
+  return true;
+}
+
 function receiveSceneChange(payload){
   if(!payload)return;
-  const floor=state.floors.find(f=>f.id===payload.floor_id);
-  if(floor){state.floor=floor.id;state.location=state.locations.find(l=>l.id===floor.location_id)||state.location;}
-  state.selected=payload.room_id?{type:"room",id:payload.room_id}:null;
-  state.view='table';renderAll();toast(payload.room_name?`Cena: ${payload.room_name}`:'Cena atualizada');
+  const changed=applySessionScene(null,payload);
+  if(changed&&!payload.silent)toast(payload.room_name?('Cena: '+payload.room_name):'Cena atualizada');
 }
 function receiveEntityChange(payload){
   if(!payload)return;
@@ -543,10 +586,23 @@ async function setActiveScene(floorId,roomId=null){
 
   const session=currentSession();
   if(session){
-    const {data,error}=await sb.from("sessions").update({active_floor_id:floor.id,active_room_id:roomId||null}).eq("id",session.id).select().single();
-    if(error){toast(error.message||"Não foi possível salvar a cena.","error");return;}
-    state.sessions=state.sessions.map(x=>x.id===session.id?data:x);
-    await broadcastScene({floor_id:floor.id,room_id:roomId,room_name:roomId?state.rooms.find(r=>r.id===roomId)?.name:null});
+    const result=await sb.from("sessions").update({active_floor_id:floor.id,active_room_id:roomId||null}).eq("id",session.id).select("*").maybeSingle();
+    if(result.error){toast(result.error.message||"Não foi possível salvar a cena.","error");return;}
+    let data=result.data;
+    if(!data){
+      const verify=await sb.from("sessions").select("*").eq("id",session.id).maybeSingle();
+      if(verify.error){toast(verify.error.message||"Não foi possível confirmar a cena.","error");return;}
+      data=verify.data;
+    }
+    if(data)state.sessions=state.sessions.map(x=>x.id===session.id?data:x);
+    else state.sessions=state.sessions.map(x=>x.id===session.id?{...x,active_floor_id:floor.id,active_room_id:roomId||null}:x);
+    await broadcastScene({
+      floor_id:floor.id,
+      room_id:roomId,
+      room_name:roomId?state.rooms.find(r=>r.id===roomId)?.name:null,
+      session_id:session.id,
+      scene_revision:Date.now()
+    });
     setSave(roomId?'Cena transmitida aos jogadores':'Andar transmitido aos jogadores');
   }else{
     setSave('Andar selecionado · sem sessão ativa');
