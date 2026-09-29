@@ -81,8 +81,9 @@ async function loadCampaigns(){
   state.campaigns=data||[];
   $('campaignSelect').innerHTML=state.campaigns.map(c=>`<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
   if(state.campaign && !state.campaigns.some(c=>c.id===state.campaign.id)) state.campaign=null;
-  if(!state.campaign && state.campaigns[0]) state.campaign=state.campaigns[0];
-  if(state.campaign) $('campaignSelect').value=state.campaign.id;
+  let remembered=null;try{remembered=localStorage.getItem('rpg-hub-active-campaign')}catch(_){}
+  if(!state.campaign&&state.campaigns.length)state.campaign=state.campaigns.find(c=>c.id===remembered)||state.campaigns[0];
+  if(state.campaign)$('campaignSelect').value=state.campaign.id;
 }
 
 async function ensureCampaignWorld(campaignId){
@@ -95,7 +96,10 @@ async function ensureCampaignWorld(campaignId){
 async function loadCampaignData(){
   if(!state.campaign)return;
   const campaignId=state.campaign.id;
-  const [{data:members,error:me},{data:locations,error:le},{data:characters,error:ce},{data:characterFields,error:cfe},{data:npcs,error:ne},{data:entities,error:ee},{data:sessions,error:se},{data:rolls,error:re},{data:audioAssets,error:aae},{data:audioPlaylists,error:ape}]=await Promise.all([
+  const [
+    {data:members,error:me},{data:locations,error:le},{data:characters,error:ce},{data:characterFields,error:cfe},
+    {data:npcs,error:ne},{data:entities,error:ee},{data:sessions,error:se},{data:rolls,error:re}
+  ]=await Promise.all([
     sb.from('campaign_members').select('*').eq('campaign_id',campaignId),
     sb.from('locations').select('*').eq('campaign_id',campaignId).order('sort_order'),
     sb.from('characters').select('*').eq('campaign_id',campaignId).order('name'),
@@ -103,53 +107,84 @@ async function loadCampaignData(){
     sb.from('npcs').select('*').eq('campaign_id',campaignId).order('name'),
     sb.from('world_entities').select('*').eq('campaign_id',campaignId).order('created_at'),
     sb.from('sessions').select('*').eq('campaign_id',campaignId).order('session_number',{ascending:false}),
-    canEdit()?sb.from('dice_rolls').select('*').eq('campaign_id',campaignId).order('created_at',{ascending:false}):Promise.resolve({data:[],error:null}),
-    sb.from('audio_assets').select('*').eq('campaign_id',campaignId).order('created_at',{ascending:true}),
-    sb.from('audio_playlists').select('*').eq('campaign_id',campaignId).order('created_at',{ascending:true})
+    canEdit()?sb.from('dice_rolls').select('*').eq('campaign_id',campaignId).order('created_at',{ascending:false}):Promise.resolve({data:[],error:null})
   ]);
-  if(me||le||ce||ne||ee||se||re||aae||ape) throw (me||le||ce||ne||ee||se||re||aae||ape);
-  state.members=members||[]; state.locations=locations||[]; state.characters=characters||[]; state.characterFields=characterFields||[]; state.npcs=npcs||[]; state.entities=entities||[]; state.sessions=sessions||[]; state.rolls=rolls||[]; state.audioAssets=audioAssets||[]; state.audioPlaylists=audioPlaylists||[]; state.audioPlaylistItems=[];
-  const {data:audioPlaylistItems,error:aie}=audioPlaylists?.length?await sb.from('audio_playlist_items').select('*').in('playlist_id',audioPlaylists.map(p=>p.id)):{data:[],error:null};
-  if(aie)throw aie;
-  state.audioPlaylistItems=audioPlaylistItems||[];
-  const {data:campaignAudioState,error:campaignAudioStateError}=await sb.from('campaign_audio_state').select('*').eq('campaign_id',campaignId).maybeSingle();
-  if(campaignAudioStateError)throw campaignAudioStateError;
-  state.campaignAudioState=campaignAudioState;
-  if(!state.campaignAudioState && canEdit()){
-    const {data:createdAudioState,error:createAudioStateError}=await sb.from('campaign_audio_state').insert({campaign_id:campaignId,layers:[],updated_by:state.user.id}).select('*').single();
-    if(createAudioStateError)throw createAudioStateError;
-    state.campaignAudioState=createdAudioState;
+
+  const coreErrors=[['membros',me],['locais',le],['personagens',ce],['campos da ficha',cfe],['NPCs',ne],['entidades',ee],['sessões',se],['rolagens',re]].filter(([,error])=>error);
+  if(coreErrors.length){
+    const [label,error]=coreErrors[0];
+    console.error('[RPG HUB] Falha ao carregar campanha',label,error);
+    throw new Error('Falha ao carregar '+label+': '+(error?.message||'erro desconhecido'));
   }
-  state.campaignChronicle=null;
-  if(canEdit()){
-    const {data:chronicle,error:chronicleError}=await sb.from('campaign_chronicles').select('*').eq('campaign_id',campaignId).maybeSingle();
-    if(chronicleError)throw chronicleError;
-    if(chronicle){state.campaignChronicle=chronicle;}
-    else{
-      const {data:createdChronicle,error:createChronicleError}=await sb.from('campaign_chronicles').insert({campaign_id:campaignId,content:'',updated_by:state.user.id}).select('*').single();
-      if(createChronicleError)throw createChronicleError;
-      state.campaignChronicle=createdChronicle;
-    }
-  }
-  const mine=state.members.find(m=>m.user_id===state.user.id); state.role=state.campaign.owner_id===state.user.id?'owner':(mine?.role||'player');
+
+  state.members=members||[];state.locations=locations||[];state.characters=characters||[];
+  state.characterFields=characterFields||[];state.npcs=npcs||[];state.entities=entities||[];
+  state.sessions=sessions||[];state.rolls=rolls||[];
+
+  const mine=state.members.find(m=>m.user_id===state.user.id);
+  state.role=state.campaign.owner_id===state.user.id?'owner':(mine?.role||'player');
+
   state.profiles=new Map();
   const ids=[...new Set(state.members.map(m=>m.user_id).filter(Boolean))];
-  if(ids.length){ const {data:profiles}=await sb.from('profiles').select('id,display_name,avatar_url').in('id',ids); (profiles||[]).forEach(p=>state.profiles.set(p.id,p)); }
+  if(ids.length){
+    const {data:profiles,error:profilesError}=await sb.from('profiles').select('id,display_name,avatar_url').in('id',ids);
+    if(profilesError)console.warn('[RPG HUB] Perfis indisponíveis:',profilesError);
+    (profiles||[]).forEach(p=>state.profiles.set(p.id,p));
+  }
+
   await ensureCharacterFields();
-  if(!state.locations.length && canEdit()){
+
+  if(!state.locations.length&&canEdit()){
     await ensureCampaignWorld(campaignId);
     const {data:fixedLocations,error:fixedLocationsError}=await sb.from('locations').select('*').eq('campaign_id',campaignId).order('sort_order');
     if(fixedLocationsError)throw fixedLocationsError;
     state.locations=fixedLocations||[];
   }
+
   await loadFloors();
+  if(state.locations.length&&!state.floors.length&&canEdit()){
+    await ensureCampaignWorld(campaignId);
+    await loadFloors();
+  }
+
   ensureFloor();
   state.selectedSessionId=currentSession()?.id||null;
   const active=currentSession();
-  if(active?.active_floor_id && state.floors.some(f=>f.id===active.active_floor_id))state.floor=active.active_floor_id;
-  if(active?.active_room_id && state.rooms.some(r=>r.id===active.active_room_id))state.selected={type:'room',id:active.active_room_id};else state.selected=null;
-  const activeFloor=state.floors.find(f=>f.id===state.floor);if(activeFloor)state.location=state.locations.find(l=>l.id===activeFloor.location_id)||state.location;
-  renderAll(); await subscribeRealtime();
+  if(active?.active_floor_id&&state.floors.some(f=>f.id===active.active_floor_id))state.floor=active.active_floor_id;
+  state.selected=active?.active_room_id&&state.rooms.some(r=>r.id===active.active_room_id)?{type:'room',id:active.active_room_id}:null;
+  const activeFloor=state.floors.find(f=>f.id===state.floor);
+  if(activeFloor)state.location=state.locations.find(l=>l.id===activeFloor.location_id)||state.location;
+
+  renderAll();
+  await subscribeRealtime();
+
+  // Os módulos auxiliares ficam fora do caminho crítico da campanha.
+  state.audioAssets=[];state.audioPlaylists=[];state.audioPlaylistItems=[];state.campaignAudioState=null;state.campaignChronicle=null;
+  try{
+    const {data,error}=await sb.from('audio_assets').select('*').eq('campaign_id',campaignId).order('created_at',{ascending:true});
+    if(!error)state.audioAssets=data||[];else console.warn('[RPG HUB] Áudios:',error);
+  }catch(error){console.warn('[RPG HUB] Áudios:',error);}
+  try{
+    const {data,error}=await sb.from('audio_playlists').select('*').eq('campaign_id',campaignId).order('created_at',{ascending:true});
+    if(!error){
+      state.audioPlaylists=data||[];
+      if(state.audioPlaylists.length){
+        const {data:items,error:itemError}=await sb.from('audio_playlist_items').select('*').in('playlist_id',state.audioPlaylists.map(p=>p.id));
+        if(!itemError)state.audioPlaylistItems=items||[];
+      }
+    }else console.warn('[RPG HUB] Playlists:',error);
+  }catch(error){console.warn('[RPG HUB] Playlists:',error);}
+  try{
+    const {data,error}=await sb.from('campaign_audio_state').select('*').eq('campaign_id',campaignId).limit(1).maybeSingle();
+    if(!error)state.campaignAudioState=data||null;else console.warn('[RPG HUB] Estado de áudio:',error);
+  }catch(error){console.warn('[RPG HUB] Estado de áudio:',error);}
+  if(canEdit()){
+    try{
+      const {data,error}=await sb.from('campaign_chronicles').select('*').eq('campaign_id',campaignId).limit(1).maybeSingle();
+      if(!error)state.campaignChronicle=data||null;else console.warn('[RPG HUB] Crônica:',error);
+    }catch(error){console.warn('[RPG HUB] Crônica:',error);}
+  }
+  renderAll();
 }
 
 async function initializeWorld(){
@@ -163,9 +198,17 @@ async function initializeWorld(){
 }
 
 async function loadFloors(){
-  const ids=state.locations.map(l=>l.id); if(!ids.length)return;
-  const {data,error}=await sb.from('floors').select('*').in('location_id',ids).order('sort_order'); if(error) throw error; state.floors=data||[];
-  if(state.floors.length){const floorIds=state.floors.map(f=>f.id); const {data:rooms,error:re}=await sb.from('rooms').select('*').in('floor_id',floorIds).order('sort_order'); if(re) throw re; state.rooms=rooms||[];}
+  const ids=state.locations.map(l=>l.id);
+  if(!ids.length){state.floors=[];state.rooms=[];state.floor=null;state.location=null;return;}
+  const {data,error}=await sb.from('floors').select('*').in('location_id',ids).order('sort_order');
+  if(error)throw error;
+  state.floors=data||[];
+  if(state.floors.length){
+    const floorIds=state.floors.map(f=>f.id);
+    const {data:rooms,error:re}=await sb.from('rooms').select('*').in('floor_id',floorIds).order('sort_order');
+    if(re)throw re;
+    state.rooms=rooms||[];
+  }else state.rooms=[];
   state.location=state.locations[0]||null;
 }
 function ensureFloor(){ if(!state.floor || !state.floors.some(f=>f.id===state.floor)) state.floor=state.floors[0]?.id||null; }
@@ -625,8 +668,10 @@ async function moveEntityToFloor(id,floorId){
   const x=Math.max(3,Math.min(97,Number(entity.x)||50));
   const y=Math.max(7,Math.min(93,Number(entity.y)||50));
   const room=roomAtPosition(x,y,floor.id);
-  const {data,error}=await sb.from('world_entities').update({floor_id:floor.id,room_id:room?.id||null,x,y}).eq('id',id).select().single();
-  if(error){toast(error.message||'Não foi possível mudar o personagem de andar.','error');return;}
+  const result=await sb.from('world_entities').update({floor_id:floor.id,room_id:room?.id||null,x,y}).eq('id',id).select().maybeSingle();
+  if(result.error){toast(result.error.message||'Não foi possível mudar o personagem de andar.','error');return;}
+  if(!result.data){toast('A alteração não retornou a entidade atualizada.','error');return;}
+  const data=result.data;
   state.entities=state.entities.map(e=>e.id===id?data:e);
   state.floor=floor.id;
   state.location=state.locations.find(l=>l.id===floor.location_id)||state.location;
@@ -712,8 +757,10 @@ function startEntityDrag(e,el){
   };
   const up=async()=>{
     cleanup();const room=roomAtPosition(latestX,latestY,current.floor_id||state.floor);
-    const {data,error}=await sb.from('world_entities').update({x:latestX,y:latestY,room_id:room?.id||null}).eq('id',id).select().single();
-    if(error){state.entities=state.entities.map(item=>item.id===id?{...item,...previous}:item);renderTable();toast(error.message||'Não foi possível salvar a posição.','error');return;}
+    const result=await sb.from('world_entities').update({x:latestX,y:latestY,room_id:room?.id||null}).eq('id',id).select().maybeSingle();
+    if(result.error){state.entities=state.entities.map(item=>item.id===id?{...item,...previous}:item);renderTable();toast(result.error.message||'Não foi possível salvar a posição.','error');return;}
+    if(!result.data){state.entities=state.entities.map(item=>item.id===id?{...item,...previous}:item);renderTable();toast('A entidade não pôde ser localizada após o movimento.','error');return;}
+    const data=result.data;
     state.entities=state.entities.map(item=>item.id===id?data:item);
     await broadcastEntityMove({entity_id:id,x:latestX,y:latestY,room_id:room?.id||null,floor_id:current.floor_id});
     setSave(room?'Entidade posicionada em '+room.name:'Posição da entidade salva');
@@ -1480,19 +1527,30 @@ async function ensureCharacterFields(){
 }
 
 async function createCampaign(name,description){
-  if(!canCreateCampaign()) throw new Error('Somente contas Mestre podem criar campanhas.');
+  if(!canCreateCampaign())throw new Error('Somente contas Mestre podem criar campanhas.');
   const inviteCode=Math.random().toString(36).slice(2,12).toUpperCase();
-  const {data,error}=await sb.from('campaigns').insert({owner_id:state.user.id,name,description,system_name:'Sistema próprio',invite_code:inviteCode}).select('id,owner_id,name,description,system_name,cover_url,discord_url,discord_guild_id,timezone,created_at,updated_at').single();
-  if(error) throw error;
-  const {error:me}=await sb.from('campaign_members').insert({campaign_id:data.id,campaign_owner_id:state.user.id,user_id:state.user.id,role:'owner'}); if(me) throw me;
+  const fields='id,owner_id,name,description,system_name,cover_url,discord_url,discord_guild_id,timezone,created_at,updated_at';
+  let {data,error}=await sb.from('campaigns').insert({owner_id:state.user.id,name,description,system_name:'Sistema próprio',invite_code:inviteCode}).select(fields).maybeSingle();
+  if(error)throw error;
+  if(!data){
+    const fallback=await sb.from('campaigns').select(fields).eq('owner_id',state.user.id).eq('name',name).order('created_at',{ascending:false}).limit(1).maybeSingle();
+    if(fallback.error)throw fallback.error;
+    data=fallback.data;
+  }
+  if(!data)throw new Error('A campanha foi criada, mas não conseguimos recuperar os dados dela.');
+  const membership=await sb.from('campaign_members').upsert({campaign_id:data.id,campaign_owner_id:state.user.id,user_id:state.user.id,role:'owner'},{onConflict:'campaign_id,user_id'});
+  if(membership.error)throw membership.error;
   await seedCharacterFieldsForCampaign(data.id);
   state.campaign=data;
+  try{localStorage.setItem('rpg-hub-active-campaign',data.id)}catch(_){}
   await loadCampaigns();
+  state.campaign=state.campaigns.find(c=>c.id===data.id)||data;
   await ensureCampaignWorld(data.id);
   await loadCampaignData();
   closeModal();
   toast('Campanha criada');
 }
+
 async function openCampaignInvite(){
   if(!canEdit()||!state.campaign)return;
   try{
@@ -2232,5 +2290,13 @@ async function finishDraw(e){if(!drawStart||drawPointerId!==e.pointerId)return;c
 $('board').addEventListener('pointerup',finishDraw,true);
 $('board').addEventListener('pointercancel',e=>{if(drawPointerId===e.pointerId){drawStart=null;drawPointerId=null;drawPreview?.remove();drawPreview=null;}},true);
 const originalOpenRoom=openRoomModal;
+
+Object.assign(window,{
+  state,sb,rpgSupabase:sb,escapeHtml,canEdit,canCreateCampaign,isMaster,isCampaignMaster,currentLocation,
+  currentFloor,currentSession,profileFor,toast,setSave,showModal,closeModal,renderAll,renderShell,renderTable,
+  renderCharacters,renderWorld,renderSessions,renderNpcs,renderDice,renderMasterDashboard,renderChronicle,renderView,
+  applyZoom,subscribeRealtime,broadcastRoomMove,broadcastRoomResize,broadcastEntityMove,broadcastScene,rpgSnapPoint,rpgSnapSize,
+  loadCampaigns,loadCampaignData,loadFloors,createCampaign
+});
 
 boot();
