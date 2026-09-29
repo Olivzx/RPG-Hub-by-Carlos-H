@@ -181,17 +181,42 @@ input:focus,select:focus,textarea:focus,.authCard input:focus,.authCard select:f
   .mobileBottomNav small{font-size:6.5px}
 }
 
-/* ===== Mesa VTT hardening ===== */
-.boardPanel{overflow:hidden}
-.boardFrame{overflow:auto;max-width:100%;scrollbar-gutter:stable}
-.boardToolbar{flex-wrap:wrap}
-.boardToolbar .toolbarActions{min-width:0;flex:1 1 auto;flex-wrap:wrap}
-#rpgVttTools,#rpgVisionTools{flex:1 1 100%;width:100%;justify-content:flex-end}
-.boardGrid.rpg-grid-enabled{background-size:var(--rpg-grid-size,5%) var(--rpg-grid-size,5%)!important}
+/* ===== Mesa VTT interaction rebuild ===== */
+.tableLayout{grid-template-columns:minmax(0,1fr) 300px;align-items:start}
+.boardPanel{overflow:visible;min-width:0}
+.boardToolbar{position:relative;z-index:140;align-items:center;flex-wrap:wrap}
+.boardToolbar .toolbarBlock{min-width:0;flex:1 1 auto}
+.boardToolbar .toolbarActions{min-width:0;display:flex;align-items:center;gap:5px;flex-wrap:wrap;justify-content:flex-end}
+.boardToolbar .toolbarActions .toolGroup{flex:0 0 auto}
+.boardFrame{position:relative;min-height:0;max-width:100%;overflow:auto;padding:12px;background:linear-gradient(180deg,#0c1016,#090c12);border-radius:0 0 17px 17px;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;scrollbar-gutter:stable both-edges}
+.boardGrid{position:relative;width:100%;height:650px;min-width:0;min-height:0;transform:none!important;transform-origin:top left!important;transition:none!important;overflow:visible;border:1px solid #2b303c;border-radius:12px;background-repeat:repeat;background-position:0 0;will-change:width,height}
+.boardGrid.rpg-grid-enabled{background-repeat:repeat!important}
 .boardGrid:not(.rpg-grid-enabled){background-image:none!important}
-.tokenBig[aria-hidden="true"],.room[aria-hidden="true"]{display:none!important}
-@media(max-width:700px){
-  .boardFrame{overflow:auto}
-  .boardToolbar .toolbarActions{width:100%;justify-content:flex-end}
+.boardTopline{z-index:120}
+.room{overflow:visible}
+.roomResize{z-index:60}
+#rpgVttTools,#rpgVisionTools{flex:1 1 100%;width:100%;justify-content:flex-end}
+#rpgVttPanel{position:relative;z-index:135}
+#zoomReset{min-width:48px}
+.contextPanel{position:sticky;top:18px;max-height:calc(100vh - 36px);overflow:auto;scrollbar-gutter:stable;padding-bottom:4px}
+.rpgMapPanelReady .boardFooter{background:linear-gradient(180deg,rgba(13,16,22,.96),rgba(10,13,18,.98))}
+.rpgRoomDrawPreview{border-radius:6px}
+@media(max-width:1100px){
+  .tableLayout{grid-template-columns:minmax(0,1fr) 270px}
+  .contextPanel{position:static;max-height:none}
+}
+@media(max-width:760px){
+  .tableLayout{display:flex;flex-direction:column;gap:10px}
+  .boardPanel{width:100%}
+  .boardFrame{overflow:auto;padding:9px;border-radius:0 0 13px 13px;min-height:0}
+  .boardGrid{height:460px;min-width:0}
+  .contextPanel{width:100%;position:static;max-height:none}
+  .boardToolbar .toolbarActions{width:100%;justify-content:flex-start}
   #rpgVttTools,#rpgVisionTools{justify-content:stretch}
+  #rpgVttTools .rpgVttTool,#rpgVisionTools .rpgVisionTool{flex:1 1 0}
+}
+@media(max-width:420px){
+  .boardFrame{padding:7px}
+  .boardToolbar .toolbarActions{gap:4px}
+  #zoomReset{min-width:44px}
 }
