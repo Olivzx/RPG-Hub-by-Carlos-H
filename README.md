@@ -94,6 +94,16 @@ A camada da Mesa foi revisada para eliminar inconsistências entre visualizaçã
 - A página `mesa.html` continua carregando a camada de VTT.
 - A validação visual completa com navegador autenticado não ficou disponível nesta rodada; por isso não foi registrada como teste concluído.
 
+### Ajustes adicionais do motor de interação
+
+- O mapa não depende mais de `transform: scale()` para representar zoom.
+- A escala do mapa, a grade, o snap, a medição e as áreas compartilham uma mesma referência física de célula.
+- O deslocamento de cenários respeita a área ocupada por elementos rotacionados, reduzindo o risco de deixar cômodos parcialmente fora do mapa.
+- A rotação pode ser feita diretamente com uma alça visual no cenário e também pelos controles rápidos do cômodo selecionado.
+- A viewport foi preparada para receber mapas maiores sem deslocar a interface lateral de forma inesperada.
+- O fluxo de criação por desenho usa captura de ponteiro e prévia visual durante o arraste.
+- O motor de VTT reduz o volume de renderizações e consultas periódicas, mantendo Realtime como mecanismo principal de atualização.
+
 ---
 ## Atualizações recentes — 29/09/2026
 
