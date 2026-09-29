@@ -36,11 +36,11 @@
   function removeMasterRegistrationOption() {
     const select = $('accountType');
     if (!select) return;
-    Array.from(select.options).forEach(option => {
-      if (option.value === 'master') option.remove();
-    });
-    select.value = 'player';
-    select.disabled = true;
+    select.disabled = false;
+    if (![...select.options].some(option => option.value === 'master')) {
+      select.insertAdjacentHTML('beforeend','<option value="master">Mestre</option>');
+    }
+    if (select.value !== 'master' && select.value !== 'player') select.value='player';
   }
 
   async function setupRecovery() {
