@@ -1,4 +1,5 @@
 /* RPG HUB — synchronized combat tracker */
+/* production sync marker 2026-09-29 */
 (() => {
   'use strict';
 
