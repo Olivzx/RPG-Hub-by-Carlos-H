@@ -1259,7 +1259,7 @@ function audioLayerMarkup(){
     <div class="audioLayerInfo"><b>${escapeHtml(layer.name||'Áudio')}</b><small>${escapeHtml(audioKindLabel(layer.kind))}${layer.loop?' · loop':''}</small></div>
     <input class="audioLayerVolume" type="range" min="0" max="1" step="0.05" value="${Number(layer.volume??0.75)}">
     ${layer.asset_id?'<button class="audioLayerEdit" type="button" title="Editar áudio">✎</button>':''}
-    <button class="audioLayerStop" type="button" title="Parar camada">■</button>
+    ${layer.status==='paused'?'<button class="audioLayerResume" type="button" title="Retomar camada">▶</button>':'<button class="audioLayerPause" type="button" title="Pausar camada">Ⅱ</button>'}<button class="audioLayerStop" type="button" title="Parar camada">■</button>
   </div>`).join('');
 }
 
@@ -2459,7 +2459,9 @@ function wireAudioControls(){
   $('stopAllAudioBtn')?.addEventListener('click',async()=>{await stopAllAudioLayers();toast('Todas as camadas foram interrompidas');});
   $('openAudioLibraryBtn')?.addEventListener('click',openAudioLibraryModal);
   document.querySelectorAll('.audioLayerEdit').forEach(b=>b.onclick=()=>{const row=b.closest('.audioLayerRow');const layer=state.audioLayers.get(row.dataset.layerId);if(layer?.asset_id)openEditAudioAssetModal(layer.asset_id);});
-  document.querySelectorAll('.audioLayerStop').forEach(b=>b.onclick=()=>stopAudioLayer(b.closest('.audioLayerRow').dataset.layerId));
+  document.querySelectorAll('.audioLayerPause').forEach(b=>b.onclick=()=>pauseAudioLayer(b.closest('.audioLayerRow').dataset.layerId));
+document.querySelectorAll('.audioLayerResume').forEach(b=>b.onclick=()=>resumeAudioLayer(b.closest('.audioLayerRow').dataset.layerId));
+document.querySelectorAll('.audioLayerStop').forEach(b=>b.onclick=()=>stopAudioLayer(b.closest('.audioLayerRow').dataset.layerId));
   document.querySelectorAll('.audioLayerVolume').forEach(b=>b.oninput=()=>setAudioLayerVolume(b.closest('.audioLayerRow').dataset.layerId,b.value,{broadcast:true}));
 }
 $('modalBackdrop').addEventListener('click',e=>{if(e.target===$('modalBackdrop'))closeModal();});document.addEventListener('click',e=>{if(e.target.closest('[data-close]'))closeModal();});
