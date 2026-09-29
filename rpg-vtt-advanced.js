@@ -303,13 +303,13 @@
   }
 
   function boardPointerDown(ev){
-    if(vtt.activeTool==='move'||ev.button!==0)return;
+    if(vtt.activeTool==='move'||ev.button!==0||window.state?.tool==='draw')return;
     if(vtt.activeTool==='fog'&&!master())return;
     if(vtt.activeTool==='aoe'&&!master()){showHint('Somente o Mestre pode criar áreas de efeito.');return}
     ev.preventDefault();ev.stopImmediatePropagation();
     const b=$('board');const p=point(ev);
     if(vtt.activeTool==='measure'){
-      clearMeasure();vtt.measure={start:p};
+      clearMeasure();vtt.measure={start:p,active:true,pointerId:ev.pointerId};
       b.setPointerCapture?.(ev.pointerId);renderMeasure(p);return;
     }
     if(vtt.activeTool==='fog'||vtt.activeTool==='aoe'){
@@ -325,7 +325,7 @@
   }
 
   function boardPointerMove(ev){
-    if(vtt.measure){renderMeasure(point(ev));return}
+    if(vtt.measure?.active){renderMeasure(point(ev));return}
     if(vtt.drag?.pointerId===ev.pointerId){
       const p=point(ev),d=vtt.drag;
       if(vtt.activeTool==='fog'){
@@ -338,7 +338,14 @@
   }
 
   async function boardPointerUp(ev){
-    if(vtt.measure){vtt.measure=null;return}
+    if(vtt.measure){
+      const p=point(ev);
+      vtt.measure.end=p;
+      vtt.measure.active=false;
+      try{$('board').releasePointerCapture?.(ev.pointerId)}catch(_){}
+      renderMeasure(p);
+      return;
+    }
     if(!vtt.drag||vtt.drag.pointerId!==ev.pointerId)return;
     const d=vtt.drag,p=vtt.settings?.snap_enabled?snapPoint(point(ev).x,point(ev).y):point(ev);
     d.preview.remove();vtt.drag=null;
@@ -349,12 +356,22 @@
       if(q.error)window.toast?.(q.error.message||'Não foi possível criar a névoa.','error');else{vtt.fog.push(q.data);renderFog();broadcast('fog_updated',{floor_id:fid()})}
       return;
     }
-    const r=boardRect(),cell=cellPx(),sx=d.start.x/100*r.width,sy=d.start.y/100*r.height,px=p.x/100*r.width,py=p.y/100*r.height;
-    const dist=Math.max(cell,Math.hypot(px-sx,py-sy)),cells=Math.max(1,Math.round(dist/cell*10)/10),angle=Math.atan2(py-sy,px-sx)*180/Math.PI;
-    const shape=vtt.aoeShape;
+    const r=boardRect(),cell=cellPx(),shape=vtt.aoeShape;
+    let sx=d.start.x/100*r.width,sy=d.start.y/100*r.height,px=p.x/100*r.width,py=p.y/100*r.height;
+    let dx=px-sx,dy=py-sy,dist=Math.hypot(dx,dy),angle=Math.atan2(dy,dx)*180/Math.PI;
+    if(shape==='circle'||shape==='square'){
+      const maxRadius=Math.max(cell,Math.min(r.width,r.height)/2);
+      dist=Math.max(cell,Math.min(maxRadius,dist||cell));
+      sx=Math.max(dist,Math.min(r.width-dist,sx));sy=Math.max(dist,Math.min(r.height-dist,sy));
+    }else{
+      px=Math.max(0,Math.min(r.width,px));py=Math.max(0,Math.min(r.height,py));
+      dx=px-sx;dy=py-sy;dist=Math.max(cell,Math.hypot(dx,dy));angle=Math.atan2(dy,dx)*180/Math.PI;
+    }
+    const cells=Math.max(1,Math.min(100,Math.round(dist/cell*10)/10));
+    const startX=clamp(sx/r.width*100),startY=clamp(sy/r.height*100);
     const payload={
       campaign_id:cid(),floor_id:fid(),session_id:typeof window.currentSession==='function'?window.currentSession()?.id||null:null,
-      shape,x:d.start.x,y:d.start.y,size:cells,length:cells,rotation:shape==='circle'||shape==='square'?0:angle,
+      shape,x:startX,y:startY,size:cells,length:cells,rotation:shape==='circle'||shape==='square'?0:normalizeAngle(angle),
       color:'#9487ff',opacity:.22,label:''
     };
     const q=await sbc().from('aoe_effects').insert(payload).select().single();
@@ -444,6 +461,9 @@
   }
   window.rpgVttRefreshGrid=renderGrid;
   window.rpgVttRefreshMapLayout=refreshMapLayout;
+  window.rpgVttSetTool=setTool;
+  window.rpgVttSetGrid=enabled=>saveSettings({grid_enabled:!!enabled});
+  window.rpgVttContextChanged=()=>loadFloorDataWhenChanged();
   window.rpgVttSnapRoomGeometry=()=>{
     const s=['roomX','roomY','roomW','roomH'];if(s.some(id=>!$(id)))return;
     const g=snapSize(Number($('roomW').value)||5,Number($('roomH').value)||5);
@@ -551,7 +571,7 @@
     ch.on('postgres_changes',{event:'*',schema:'public',table:'map_settings',filter:'campaign_id=eq.'+c},p=>{if(!floorMatch(p))return;vtt.settings=p.new||settingsDefault();renderGrid();updatePanel()});
     ch.on('postgres_changes',{event:'*',schema:'public',table:'fog_regions',filter:'campaign_id=eq.'+c},p=>{if(!floorMatch(p))return;const r=p.new||p.old;if(p.eventType==='INSERT'&&!vtt.fog.some(x=>x.id===r.id))vtt.fog.push(r);else if(p.eventType==='UPDATE')vtt.fog=vtt.fog.map(x=>x.id===r.id?r:x);else if(p.eventType==='DELETE')vtt.fog=vtt.fog.filter(x=>x.id!==r.id);renderFog()});
     ch.on('postgres_changes',{event:'*',schema:'public',table:'aoe_effects',filter:'campaign_id=eq.'+c},p=>{if(!floorMatch(p))return;const r=p.new||p.old;if(p.eventType==='INSERT'&&!vtt.aoe.some(x=>x.id===r.id))vtt.aoe.push(r);else if(p.eventType==='UPDATE')vtt.aoe=vtt.aoe.map(x=>x.id===r.id?r:x);else if(p.eventType==='DELETE')vtt.aoe=vtt.aoe.filter(x=>x.id!==r.id);renderAoe()});
-    ch.on('postgres_changes',{event:'*',schema:'public',table:'rooms',filter:'floor_id=eq.'+fid()},()=>{if(window.state?.view==='table')setTimeout(decorateRoomRotation,30)});
+    ch.on('postgres_changes',{event:'*',schema:'public',table:'rooms'},p=>{const r=p.new||p.old;if(r?.floor_id===fid()&&window.state?.view==='table'){setTimeout(decorateRoomRotation,30);window.renderTable?.();}});
     ch.on('postgres_changes',{event:'*',schema:'public',table:'world_entities',filter:'campaign_id=eq.'+c},()=>{if(window.state?.view==='table'){window.renderTable?.();}});
     ch.on('postgres_changes',{event:'*',schema:'public',table:'combat_encounters',filter:'campaign_id=eq.'+c},()=>{vtt.conditionCache={key:null,rows:[],promise:null};decorateTokens()});
     ch.on('postgres_changes',{event:'*',schema:'public',table:'combatants'},()=>{vtt.conditionCache={key:null,rows:[],promise:null};decorateTokens()});
@@ -577,7 +597,10 @@
     board.addEventListener('pointerdown',boardPointerDown,true);
     board.addEventListener('pointermove',boardPointerMove,true);
     board.addEventListener('pointerup',boardPointerUp,true);
-    board.addEventListener('pointercancel',ev=>{if(vtt.measure)clearMeasure();if(vtt.drag?.pointerId===ev.pointerId){vtt.drag.preview.remove();vtt.drag=null}},true);
+    board.addEventListener('pointercancel',ev=>{
+      if(vtt.measure?.pointerId===ev.pointerId){try{board.releasePointerCapture?.(ev.pointerId)}catch(_){}clearMeasure();}
+      if(vtt.drag?.pointerId===ev.pointerId){vtt.drag.preview.remove();vtt.drag=null;try{board.releasePointerCapture?.(ev.pointerId)}catch(_){}}
+    },true);
   }
 
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
