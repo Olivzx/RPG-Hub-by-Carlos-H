@@ -22,6 +22,72 @@
     });
   }
 
+  let reconnectTimer = null;
+
+  async function syncWorldSnapshot() {
+    const campaignId = currentCampaignId();
+    if (!campaignId || !window.sb && !window.rpgSupabase) return;
+    const api = window.rpgSupabase || window.sb;
+    try {
+      const locationsResult = await api.from('locations')
+        .select('*')
+        .eq('campaign_id', campaignId)
+        .order('sort_order');
+      if (locationsResult.error) throw locationsResult.error;
+      const locations = locationsResult.data || [];
+      state.locations = locations;
+
+      const locationIds = locations.map(function (location) { return location.id; });
+      if (!locationIds.length) {
+        state.floors = [];
+        state.rooms = [];
+        state.entities = [];
+        state.floor = null;
+        state.location = null;
+        renderAll();
+        return;
+      }
+
+      const floorsResult = await api.from('floors')
+        .select('*')
+        .in('location_id', locationIds)
+        .order('sort_order');
+      if (floorsResult.error) throw floorsResult.error;
+      state.floors = floorsResult.data || [];
+
+      const floorIds = state.floors.map(function (floor) { return floor.id; });
+      if (floorIds.length) {
+        const roomsResult = await api.from('rooms')
+          .select('*')
+          .in('floor_id', floorIds)
+          .order('sort_order');
+        if (roomsResult.error) throw roomsResult.error;
+        state.rooms = roomsResult.data || [];
+      } else {
+        state.rooms = [];
+      }
+
+      const entitiesResult = await api.from('world_entities')
+        .select('*')
+        .eq('campaign_id', campaignId)
+        .order('created_at');
+      if (entitiesResult.error) throw entitiesResult.error;
+      state.entities = entitiesResult.data || [];
+
+      if (!state.floor || !state.floors.some(function (floor) { return floor.id === state.floor; })) {
+        state.floor = state.floors[0]?.id || null;
+      }
+      state.location = state.locations.find(function (location) {
+        return location.id === state.floors.find(function (floor) { return floor.id === state.floor; })?.location_id;
+      }) || state.locations[0] || null;
+
+      renderAll();
+      window.rpgVttContextChanged?.();
+    } catch (error) {
+      console.warn('RPG HUB world realtime snapshot:', error);
+    }
+  }
+
   async function subscribeTableRealtime() {
     const campaignId = currentCampaignId();
     if (!campaignId) {
@@ -115,8 +181,19 @@
     });
 
     channel.subscribe(function (status, error) {
-      if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+      if (status === 'SUBSCRIBED') {
+        syncWorldSnapshot();
+        return;
+      }
+      if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
         console.warn('RPG HUB world realtime:', status, error);
+        if (roomChannelState.channel === channel) {
+          roomChannelState.channel = null;
+          clearTimeout(reconnectTimer);
+          reconnectTimer = setTimeout(function () {
+            subscribeTableRealtime();
+          }, 1000);
+        }
       }
     });
 
