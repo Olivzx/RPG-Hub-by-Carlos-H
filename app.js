@@ -76,6 +76,7 @@ async function ensureProfile(){
     state.profile=data;
     return;
   }
+  const metadataType=state.user.user_metadata?.account_type==='master'?'master':'player';
   const display=state.user.user_metadata?.display_name || state.user.email?.split('@')[0] || 'Aventureiro';
   const {data:created,error:insertError}=await sb.from('profiles').insert({id:state.user.id,display_name:display,account_type:metadataType }).select('*').maybeSingle();
   if(insertError) throw insertError; if(!created) throw new Error('O perfil não foi confirmado pelo servidor.'); state.profile=created;
