@@ -1,0 +1,276 @@
+/* RPG HUB — correções específicas para navegação mobile */
+
+@media (max-width: 760px){
+  /* Impede qualquer componente da área autenticada de criar vazamento lateral. */
+  .appBody,
+  .appShell,
+  .workspace,
+  .view{
+    max-width:100%;
+    min-width:0;
+    overflow-x:clip;
+  }
+
+  /* Barra inferior */
+  .mobileBottomNav{
+    position:fixed;
+    left:0;
+    right:0;
+    bottom:0;
+    z-index:300;
+    display:grid;
+    grid-template-columns:repeat(6,minmax(0,1fr));
+    gap:4px;
+    padding:7px 7px calc(7px + env(safe-area-inset-bottom));
+    background:rgba(8,10,15,.97);
+    border-top:1px solid #252b37;
+    box-shadow:0 -12px 35px rgba(0,0,0,.35);
+    backdrop-filter:blur(18px);
+  }
+
+  .mobileBottomNav button{
+    min-width:0;
+    min-height:52px;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    gap:4px;
+    border:1px solid transparent;
+    border-radius:10px;
+    background:transparent;
+    color:#7f899b;
+    cursor:pointer;
+    padding:5px 3px;
+    -webkit-tap-highlight-color:transparent;
+  }
+
+  .mobileBottomNav button span{
+    display:grid;
+    place-items:center;
+    width:26px;
+    height:26px;
+    border-radius:8px;
+    font-size:14px;
+    line-height:1;
+  }
+
+  .mobileBottomNav button small{
+    display:block;
+    max-width:100%;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+    font-size:8px;
+    line-height:1;
+    font-weight:600;
+  }
+
+  .mobileBottomNav button.active{
+    color:var(--rpg-accent,#8b5cf6);
+    background:rgba(var(--rpg-accent-rgb,139,92,246),.10);
+    border-color:rgba(var(--rpg-accent-rgb,139,92,246),.22);
+  }
+
+  .mobileBottomNav button.active span{
+    background:rgba(var(--rpg-accent-rgb,139,92,246),.14);
+  }
+
+  /* Painel "Mais": no screenshot esse painel estava caindo no HTML padrão,
+     deixando título, descrição e botões grudados na mesma linha. */
+  .mobileMoreBackdrop{
+    position:fixed;
+    inset:0;
+    z-index:400;
+    display:flex;
+    align-items:flex-end;
+    justify-content:center;
+    padding:0;
+    background:rgba(2,4,8,.62);
+    opacity:0;
+    visibility:hidden;
+    pointer-events:none;
+    transition:opacity .18s ease,visibility .18s ease;
+  }
+
+  .mobileMoreBackdrop.open{
+    opacity:1;
+    visibility:visible;
+    pointer-events:auto;
+  }
+
+  .mobileMoreSheet{
+    width:min(100%,520px);
+    max-height:min(72vh,620px);
+    overflow:auto;
+    padding:16px 14px calc(18px + env(safe-area-inset-bottom));
+    background:linear-gradient(180deg,#11151d,#0b0e14);
+    border:1px solid #2a3040;
+    border-bottom:0;
+    border-radius:18px 18px 0 0;
+    box-shadow:0 -20px 70px rgba(0,0,0,.55);
+    transform:translateY(18px);
+    transition:transform .2s ease;
+  }
+
+  .mobileMoreBackdrop.open .mobileMoreSheet{
+    transform:translateY(0);
+  }
+
+  .mobileMoreHeader{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    padding:2px 2px 14px;
+    border-bottom:1px solid #202632;
+  }
+
+  .mobileMoreHeader > div{
+    min-width:0;
+  }
+
+  .mobileMoreHeader b{
+    display:block;
+    color:#edf0f6;
+    font-size:14px;
+    line-height:1.3;
+    margin:0;
+  }
+
+  .mobileMoreHeader small{
+    display:block;
+    margin-top:4px;
+    color:#7f899a;
+    font-size:9px;
+    line-height:1.5;
+  }
+
+  .mobileMoreHeader button{
+    flex:0 0 auto;
+    width:34px;
+    height:34px;
+    display:grid;
+    place-items:center;
+    border:1px solid #303747;
+    border-radius:9px;
+    background:#0a0d12;
+    color:#aeb6c5;
+    font-size:18px;
+    cursor:pointer;
+  }
+
+  .mobileMoreGrid{
+    display:grid;
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    gap:9px;
+    padding-top:13px;
+  }
+
+  .mobileMoreGrid button{
+    min-width:0;
+    min-height:66px;
+    display:flex;
+    align-items:center;
+    gap:10px;
+    padding:11px 12px;
+    text-align:left;
+    border:1px solid #272d39;
+    border-radius:12px;
+    background:#0c1016;
+    color:#d7dbe4;
+    cursor:pointer;
+    transition:border-color .16s ease,background .16s ease,transform .16s ease;
+  }
+
+  .mobileMoreGrid button:active{
+    transform:scale(.98);
+  }
+
+  .mobileMoreGrid button:hover,
+  .mobileMoreGrid button:focus-visible{
+    border-color:var(--rpg-accent,#8b5cf6);
+    background:rgba(var(--rpg-accent-rgb,139,92,246),.08);
+    outline:none;
+  }
+
+  .mobileMoreGrid button > span{
+    flex:0 0 34px;
+    width:34px;
+    height:34px;
+    display:grid;
+    place-items:center;
+    border-radius:9px;
+    color:var(--rpg-accent,#8b5cf6);
+    background:rgba(var(--rpg-accent-rgb,139,92,246),.12);
+    font-size:15px;
+  }
+
+  .mobileMoreGrid button b{
+    min-width:0;
+    overflow-wrap:anywhere;
+    color:#dfe3eb;
+    font-size:10px;
+    line-height:1.35;
+  }
+
+  /* Caso um item seja liberado/ocultado pelo sistema de permissões,
+     a grade continua limpa sem deixar espaços estranhos. */
+  .mobileMoreGrid .hidden{
+    display:none!important;
+  }
+
+  /* Conteúdo da página: nada pode atravessar a viewport. */
+  .sectionTop,
+  .sectionActions,
+  .sessionMetaBar,
+  .topActions,
+  .cardGrid,
+  .stack,
+  .worldLayout,
+  .tableLayout,
+  .diceMainColumn,
+  .masterDashboardGrid{
+    max-width:100%;
+    min-width:0;
+  }
+
+  .sectionActions button,
+  .topActions button,
+  .sessionMetaBar button{
+    max-width:100%;
+  }
+
+  /* Textos longos nunca ficam colados em outro elemento. */
+  .sectionTop h2,
+  .sectionTop p,
+  .sessionMetaBar b,
+  .sessionMetaBar span,
+  .rpg-dashboard-hero h2,
+  .rpg-dashboard-hero p{
+    overflow-wrap:anywhere;
+    word-break:normal;
+  }
+}
+
+@media (max-width:390px){
+  .mobileBottomNav{
+    gap:2px;
+    padding-left:4px;
+    padding-right:4px;
+  }
+
+  .mobileBottomNav button{
+    min-height:50px;
+    padding-left:1px;
+    padding-right:1px;
+  }
+
+  .mobileBottomNav button small{
+    font-size:7px;
+  }
+
+  .mobileMoreGrid{
+    grid-template-columns:1fr;
+  }
+}
