@@ -2724,7 +2724,8 @@ Object.assign(window,{
   state,sb,rpgSupabase:sb,escapeHtml,canEdit,canCreateCampaign,isMaster,isCampaignMaster,currentLocation,
   currentFloor,currentSession,profileFor,toast,setSave,showModal,closeModal,renderAll,renderShell,renderTable,
   renderCharacters,renderWorld,renderSessions,renderNpcs,renderDice,renderMasterDashboard,renderChronicle,renderView,
-  applyZoom,subscribeRealtime,broadcastRoomMove,broadcastRoomResize,broadcastEntityMove,broadcastScene,rpgSnapPoint,rpgSnapSize,
+  applyZoom,subscribeRealtime,broadcastRoomMove,broadcastRoomResize,broadcastEntityMove,broadcastScene,
+  rpgSnapPoint:window.rpgSnapPoint,rpgSnapSize:window.rpgSnapSize,
   loadCampaigns,loadCampaignData,createCampaign,logCampaignActivity,loadCampaignActivity,renderActivity,reconcileRealtimeState,scheduleRealtimeRecovery
 });
 
