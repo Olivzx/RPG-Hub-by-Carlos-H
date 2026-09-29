@@ -52,7 +52,7 @@
     return '<div class="rpgLoadoutForm"><div class="formGrid">'+
       '<label>Item<input id="loadItemName" value="'+esc(x.name||'')+'" placeholder="Espada longa"></label>'+
       '<label>Quantidade<input id="loadItemQty" type="number" min="0" value="'+Number(x.quantity||1)+'"></label>'+
-      '<label>Peso<input id="loadItemWeight" type="number" min="0" step=".1" value="'+Number(x.weight||0)+'"></label>'+
+      '<label>Peso<input id="loadItemWeight" type="number" min="0" step=".1" value="'+Number(x.weight||0)+'"></label><label>Bônus de ataque<input id="loadItemAttack" type="number" value="'+Number(x.metadata?.attack_bonus||0)+'"></label><label>Bônus de dano<input id="loadItemDamageBonus" type="number" value="'+Number(x.metadata?.damage_bonus||0)+'"></label><label>Bônus de CA<input id="loadItemAc" type="number" value="'+Number(x.metadata?.ac_bonus||0)+'"></label>'+
       '<label>Espaço/equipamento<input id="loadItemSlot" value="'+esc(x.slot||'')+'" placeholder="Mão principal"></label>'+
       '</div><label><input id="loadItemEquipped" type="checkbox" '+(x.equipped?'checked':'')+'> Equipado</label><label>Descrição<textarea id="loadItemDescription" rows="3">'+esc(x.description||'')+'</textarea></label><div class="modalActions"><button class="softButton" data-loadout-cancel>Cancelar</button><button class="primarySmall" data-loadout-save-item>Salvar</button></div></div>';
   }
@@ -85,7 +85,7 @@
         const wasEdit=!!editing.id;data.abilities=wasEdit?data.abilities.map(x=>x.id===editing.id?saved:x):[...data.abilities,saved];editing=null;editingType=null;render();await log((wasEdit?'Editou ':'Criou ')+saved.name,characterId);toast('Habilidade salva');
       });
       $('loadoutBody').querySelectorAll('[data-loadout-save-item]').forEach(b=>b.onclick=async()=>{
-        const payload={campaign_id:st().campaign.id,character_id:characterId,name:$('loadItemName').value.trim(),quantity:Math.max(0,Number($('loadItemQty').value||1)),weight:Math.max(0,Number($('loadItemWeight').value||0)),slot:$('loadItemSlot').value.trim(),equipped:$('loadItemEquipped').checked,description:$('loadItemDescription').value.trim(),updated_at:new Date().toISOString(),created_by:st().user.id};
+        const payload={campaign_id:st().campaign.id,character_id:characterId,name:$('loadItemName').value.trim(),quantity:Math.max(0,Number($('loadItemQty').value||1)),weight:Math.max(0,Number($('loadItemWeight').value||0)),slot:$('loadItemSlot').value.trim(),equipped:$('loadItemEquipped').checked,metadata:{attack_bonus:Number($('loadItemAttack').value||0),damage_bonus:Number($('loadItemDamageBonus').value||0),ac_bonus:Number($('loadItemAc').value||0)},description:$('loadItemDescription').value.trim(),updated_at:new Date().toISOString(),created_by:st().user.id};
         if(!payload.name)return toast('Informe o nome do item.','error');
         const q=editing.id?await api().from('character_inventory').update(payload).eq('id',editing.id).select('*').maybeSingle():await api().from('character_inventory').insert({...payload,id:crypto.randomUUID()}).select('*').maybeSingle();
         if(q.error)return toast(q.error.message,'error');const saved=q.data;if(!saved)return toast('O servidor não confirmou o item.','error');
