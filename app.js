@@ -932,7 +932,7 @@ function renderTable(){
     if(selectedRoom && !roomVisibleOnMap(selectedRoom)) state.selected=null;
   }
 
-  $('roomLayer').innerHTML=rooms.map(r=>`<div class="room ${state.selected?.type==='room'&&state.selected.id===r.id?'roomSelected':''}" data-room-id="${r.id}" style="left:${r.x}%;top:${r.y}%;width:${r.width}%;height:${r.height}%;transform:rotate(${Number(r.rotation)||0}deg)"><span>${escapeHtml(r.name)}</span><div class="roomResize" title="Redimensionar"></div></div>`).join('');
+  $('roomLayer').innerHTML=rooms.map(r=>`<div class="room ${state.selected?.type==='room'&&state.selected.id===r.id?'roomSelected':''}" data-room-id="${r.id}" style="left:${r.x}%;top:${r.y}%;width:${r.width}%;height:${r.height}%;transform:rotate(${Number(r.rotation)||0}deg)"><span>${escapeHtml(r.name)}</span><div class="roomResize roomResizeNW" data-handle="NW" title="Redimensionar canto superior esquerdo"></div><div class="roomResize roomResizeN" data-handle="N" title="Redimensionar topo"></div><div class="roomResize roomResizeNE" data-handle="NE" title="Redimensionar canto superior direito"></div><div class="roomResize roomResizeE" data-handle="E" title="Redimensionar direita"></div><div class="roomResize roomResizeSE" data-handle="SE" title="Redimensionar canto inferior direito"></div><div class="roomResize roomResizeS" data-handle="S" title="Redimensionar base"></div><div class="roomResize roomResizeSW" data-handle="SW" title="Redimensionar canto inferior esquerdo"></div><div class="roomResize roomResizeW" data-handle="W" title="Redimensionar esquerda"></div></div>`).join('');
   $('roomList').innerHTML=rooms.map(r=>`<button class="roomItem ${state.selected?.type==='room'&&state.selected.id===r.id?'roomChosen':''}" data-room-list="${r.id}"><span class="roomIcon">▧</span><div><b>${escapeHtml(r.name)}</b><small>${escapeHtml(r.description||'Sem descrição')}</small></div><span>›</span></button>`).join('') || '<div class="emptySelect">Nenhum cômodo visível neste momento.</div>';
   $('entityCount').textContent=entities.length;
   $('tokenLayer').innerHTML=entities.map(e=>`<div class="tokenBig ${state.selected?.type==='entity'&&state.selected.id===e.id?'selected':''}" data-entity-id="${e.id}" style="left:${e.x}%;top:${e.y}%;--token-color:${escapeHtml(e.color||'#9487ff')}">${entityAvatarMarkup(e)}<span>${escapeHtml(e.display_name)}</span></div>`).join('');
@@ -956,7 +956,7 @@ function bindTableInteractions(){
   document.querySelectorAll('[data-move-entity]').forEach(b=>b.onclick=()=>{const select=b.closest('.selectionMoveFloor')?.querySelector('[data-selected-entity-floor]');moveEntityToFloor(b.dataset.moveEntity,select?.value);});
   document.querySelectorAll('.tokenBig').forEach(el=>{el.onpointerdown=e=>startEntityDrag(e,el);el.onclick=e=>{e.stopPropagation();state.selected={type:'entity',id:el.dataset.entityId};renderTable();};});
   document.querySelectorAll('.room').forEach(el=>{el.onclick=e=>{if(e.target.closest('.roomResize')||e.target.closest('.rpgRoomRotateHandle'))return;state.selected={type:'room',id:el.dataset.roomId};renderTable();};el.onpointerdown=e=>startRoomDrag(e,el);});
-  document.querySelectorAll('.roomResize').forEach(el=>el.onpointerdown=e=>startRoomResize(e,el.parentElement));
+  document.querySelectorAll('.roomResize').forEach(el=>el.onpointerdown=e=>startRoomResize(e,el.parentElement,el.dataset.handle||'SE'));
 }
 function clientToBoardPercent(clientX,clientY,rect){
   return {x:Math.max(0,Math.min(100,(clientX-rect.left)/Math.max(1,rect.width)*100)),y:Math.max(0,Math.min(100,(clientY-rect.top)/Math.max(1,rect.height)*100))};
@@ -1056,22 +1056,46 @@ function startRoomDrag(e,el){
   const cancel=()=>{cleanup();state.rooms=state.rooms.map(item=>item.id===r.id?{...item,...previous}:item);renderTable();};
   el.addEventListener('pointermove',move);el.addEventListener('pointerup',up,{once:true});el.addEventListener('pointercancel',cancel,{once:true});
 }
-function startRoomResize(e,el){
+function startRoomResize(e,el,handle='SE'){
   if(!canEdit()||state.tool!=='move')return;
   e.preventDefault();e.stopPropagation();
   const r=state.rooms.find(x=>x.id===el.dataset.roomId);if(!r)return;
-  const board=$('board'),rect=board.getBoundingClientRect(),sx=e.clientX,sy=e.clientY,ow=Number(r.width),oh=Number(r.height),previous={x:Number(r.x),y:Number(r.y),width:ow,height:oh};
-  let latestW=ow,latestH=oh,latestX=previous.x,latestY=previous.y,finished=false,lastResizeBroadcast=0;el.setPointerCapture?.(e.pointerId);el.classList.add('resizing');
+  const board=$('board'),rect=board.getBoundingClientRect(),sx=e.clientX,sy=e.clientY;
+  const ox=Number(r.x),oy=Number(r.y),ow=Number(r.width),oh=Number(r.height);
+  const rightEdge=ox+ow,bottomEdge=oy+oh,previous={x:ox,y:oy,width:ow,height:oh};
+  let latestW=ow,latestH=oh,latestX=ox,latestY=oy,finished=false,lastResizeBroadcast=0;
+  el.setPointerCapture?.(e.pointerId);el.classList.add('resizing');
   const cleanup=()=>{if(finished)return;finished=true;try{el.releasePointerCapture?.(e.pointerId)}catch(_){}el.classList.remove('resizing');el.removeEventListener('pointermove',move);el.removeEventListener('pointerup',up);el.removeEventListener('pointercancel',cancel);};
   const move=ev=>{
-    const rawW=Math.max(5,Math.min(90,ow+(ev.clientX-sx)/Math.max(1,rect.width)*100)),rawH=Math.max(5,Math.min(90,oh+(ev.clientY-sy)/Math.max(1,rect.height)*100)),snapped=window.rpgSnapSize?window.rpgSnapSize(rawW,rawH):{width:rawW,height:rawH};
-    latestW=Math.max(5,Math.min(90,snapped.width));latestH=Math.max(5,Math.min(90,snapped.height));
-    const constrained=constrainRoomPosition({...r,width:latestW,height:latestH},latestX,latestY);latestX=constrained.x;latestY=constrained.y;
+    const dx=(ev.clientX-sx)/Math.max(1,rect.width)*100,dy=(ev.clientY-sy)/Math.max(1,rect.height)*100;
+    let w=ow,h=oh,x=ox,y=oy;
+    if(handle.includes('E'))w=ow+dx;
+    if(handle.includes('W')){w=ow-dx;x=ox+dx;}
+    if(handle.includes('S'))h=oh+dy;
+    if(handle.includes('N')){h=oh-dy;y=oy+dy;}
+    w=Math.max(5,Math.min(90,w));h=Math.max(5,Math.min(90,h));
+    if(handle.includes('W'))x=rightEdge-w;
+    if(handle.includes('N'))y=bottomEdge-h;
+    const snapped=window.rpgSnapSize?.(w,h)||{width:w,height:h};
+    latestW=Math.max(5,Math.min(90,Number(snapped.width)||w));
+    latestH=Math.max(5,Math.min(90,Number(snapped.height)||h));
+    latestX=handle.includes('W')?rightEdge-latestW:x;
+    latestY=handle.includes('N')?bottomEdge-latestH:y;
+    const constrained=constrainRoomPosition({...r,width:latestW,height:latestH},latestX,latestY);
+    latestX=constrained.x;latestY=constrained.y;
     const now=performance.now();
     if(now-lastResizeBroadcast>30){lastResizeBroadcast=now;broadcastRoomResize({room_id:r.id,width:latestW,height:latestH,x:latestX,y:latestY}).catch(()=>{});}
-    state.rooms=state.rooms.map(item=>item.id===r.id?{...item,width:latestW,height:latestH,x:latestX,y:latestY}:item);el.style.width=latestW+'%';el.style.height=latestH+'%';el.style.left=latestX+'%';el.style.top=latestY+'%';
+    state.rooms=state.rooms.map(item=>item.id===r.id?{...item,width:latestW,height:latestH,x:latestX,y:latestY}:item);
+    el.style.width=latestW+'%';el.style.height=latestH+'%';el.style.left=latestX+'%';el.style.top=latestY+'%';
   };
-  const up=async()=>{cleanup();const {data,error}=await sb.from('rooms').update({width:latestW,height:latestH,x:latestX,y:latestY,updated_at:new Date().toISOString()}).eq('id',r.id).eq('updated_at',r.updated_at).select('*').maybeSingle();if(error||!data){state.rooms=state.rooms.map(item=>item.id===r.id?{...item,...previous}:item);renderTable();toast(error?.message||'O cômodo não pôde ser localizado após redimensionar.','error');return;}state.rooms=state.rooms.map(item=>item.id===r.id?data:item);await broadcastRoomResize({room_id:r.id,width:latestW,height:latestH,x:latestX,y:latestY});setSave('Área do cômodo salva');};
+  const up=async()=>{
+    cleanup();
+    const {data,error}=await sb.from('rooms').update({width:latestW,height:latestH,x:latestX,y:latestY,updated_at:new Date().toISOString()}).eq('id',r.id).eq('updated_at',r.updated_at).select('*').maybeSingle();
+    if(error||!data){state.rooms=state.rooms.map(item=>item.id===r.id?{...item,...previous}:item);renderTable();toast(error?.message||'O cômodo não pôde ser localizado após redimensionar.','error');return;}
+    state.rooms=state.rooms.map(item=>item.id===r.id?data:item);
+    await broadcastRoomResize({room_id:r.id,width:latestW,height:latestH,x:latestX,y:latestY});
+    setSave('Área do cômodo salva');
+  };
   const cancel=()=>{cleanup();state.rooms=state.rooms.map(item=>item.id===r.id?{...item,...previous}:item);renderTable();};
   el.addEventListener('pointermove',move);el.addEventListener('pointerup',up,{once:true});el.addEventListener('pointercancel',cancel,{once:true});
 }
