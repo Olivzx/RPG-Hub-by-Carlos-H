@@ -67,8 +67,9 @@
   }
 
   function distancePercent(ax,ay,bx,by){
-    const dx=(bx-ax)/100,dy=(by-ay)/100;
-    return Math.hypot(dx,dy);
+    const rect=document.getElementById('board')?.getBoundingClientRect();
+    if(!rect)return Math.hypot((bx-ax)/100,(by-ay)/100);
+    return Math.hypot((bx-ax)/100*rect.width,(by-ay)/100*rect.height);
   }
 
   function segmentBlocked(ax,ay,bx,by){
@@ -102,8 +103,11 @@
     const unit=Math.max(.1,n(V.settings?.unit_per_cell,5)),grid=Math.max(.1,n(V.settings?.grid_size,5));
     return sources.some(src=>{
       if(insideFog(n(src.x,50),n(src.y,50))) return false;
-      const dx=(x-n(src.x,50))/100,dy=(y-n(src.y,50))/100;
-      const distanceUnits=Math.hypot(dx,dy)*100/grid*unit;
+      const rect=document.getElementById('board')?.getBoundingClientRect();
+      const dx=rect?(x-n(src.x,50))/100*rect.width:(x-n(src.x,50))/100;
+      const dy=rect?(y-n(src.y,50))/100*rect.height:(y-n(src.y,50))/100;
+      const cellPx=Math.max(8,rect?rect.width*grid/100:grid);
+      const distanceUnits=Math.hypot(dx,dy)/cellPx*unit;
       const cfg=V.sources.find(s=>s.entity_id===src.id);
       const range=cfg?n(cfg.range_units,60):60;
       if(distanceUnits>range) return false;
