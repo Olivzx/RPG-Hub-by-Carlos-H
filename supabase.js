@@ -9,4 +9,20 @@
   window.rpgSupabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
     auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
   });
+
+  // Carrega a camada multiplayer adicional depois dos módulos principais.
+  // Ela espera o estado da mesa existir antes de inicializar presença/combate.
+  const loadMultiplayerLayer = () => {
+    if (window.__rpgMultiplayerLayerLoaded) return;
+    window.__rpgMultiplayerLayerLoaded = true;
+    const script = document.createElement('script');
+    script.src = 'rpg-multiplayer-combat.js?v=20260929';
+    script.async = true;
+    document.head.appendChild(script);
+  };
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => setTimeout(loadMultiplayerLayer, 700), { once: true });
+  } else {
+    setTimeout(loadMultiplayerLayer, 700);
+  }
 })();
