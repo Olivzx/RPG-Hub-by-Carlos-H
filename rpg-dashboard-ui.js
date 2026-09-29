@@ -5,6 +5,28 @@
 (() => {
   'use strict';
 
+  // Proteção visual para a área autenticada: nenhum rodapé/markup residual
+  // deve escapar para dentro da Mesa ou da Visão Geral.
+  function installAppLayoutGuard(){
+    if(document.getElementById('rpgAppLayoutGuard')) return;
+    const style = document.createElement('style');
+    style.id = 'rpgAppLayoutGuard';
+    style.textContent = `
+      body.appBody{overflow-x:hidden!important}
+      body.appBody footer{display:none!important}
+      body.appBody .workspace > footer,
+      body.appBody .rpg-dashboard-footer,
+      body.appBody .dashboardFooter,
+      body.appBody .campaignFooter{display:none!important}
+      body.appBody .workspace{min-width:0!important;overflow-x:hidden}
+      @media(max-width:760px){
+        body.appBody .workspace{width:100%!important;max-width:100vw!important}
+        body.appBody .view{max-width:100%!important;min-width:0!important}
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
   function activateView(view){
     if(typeof state !== 'undefined') state.view = view;
     if(typeof renderView === 'function') renderView();
@@ -25,6 +47,7 @@
   }
 
   function build(){
+    installAppLayoutGuard();
     const nav = document.getElementById('sideNav');
     const tableView = document.getElementById('viewTable');
     if(!nav || !tableView || document.getElementById('viewDashboard')) return;
