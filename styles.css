@@ -220,3 +220,15 @@ input:focus,select:focus,textarea:focus,.authCard input:focus,.authCard select:f
   .boardToolbar .toolbarActions{gap:4px}
   #zoomReset{min-width:44px}
 }
+
+/* ===== Mesa VTT — interação pointer/touch ===== */
+#board{isolation:isolate}
+#roomLayer,#tokenLayer{position:absolute;inset:0;z-index:30;pointer-events:none}
+#roomLayer .room,#tokenLayer .tokenBig{pointer-events:auto;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;touch-action:none}
+#roomLayer .room{transform-origin:center center}
+#tokenLayer .tokenBig{cursor:grab}
+#tokenLayer .tokenBig.dragging,#roomLayer .room.dragging{cursor:grabbing!important;z-index:90}
+#roomLayer .room.resizing{cursor:nwse-resize!important}
+.rpgVttOverlay{touch-action:none}
+.rpgRoomDrawPreview{pointer-events:none}
+.boardGrid{touch-action:pan-x pan-y}
