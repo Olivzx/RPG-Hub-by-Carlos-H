@@ -101,7 +101,7 @@
     if(master()) return true;
     x=clamp(Number(x)||0);y=clamp(Number(y)||0);
     if(insideFog(x,y)) return false;
-    if(V.settings?.vision_enabled===false) return true;
+    if(V.settings?.vision_enabled!==true) return true;
     const st=window.state;
     const chars=new Map((st?.characters||[]).map(c=>[c.id,c]));
     const sources=(st?.entities||[]).filter(e=>e.floor_id===fid()&&e.character_id&&chars.get(e.character_id)?.player_id===st?.user?.id);
@@ -157,7 +157,7 @@
     if(l.mask.width!==w||l.mask.height!==h){l.mask.width=w;l.mask.height=h}
     const ctx=l.mask.getContext('2d');ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,rect.width,rect.height);
     if(master())return;
-    const enabled=V.settings?.vision_enabled!==false;
+    const enabled=V.settings?.vision_enabled===true;
     if(enabled){
       ctx.fillStyle='rgba(2,4,7,.96)';ctx.globalCompositeOperation='source-over';ctx.fillRect(0,0,rect.width,rect.height);ctx.globalCompositeOperation='destination-out';
       playerSources().forEach(src=>{
@@ -182,7 +182,7 @@
       api.from('fog_regions').select('*').eq('campaign_id',c).eq('floor_id',f).order('created_at'),
       session()?api.from('combat_encounters').select('id,current_index,round,status').eq('campaign_id',c).eq('session_id',session().id).order('created_at',{ascending:false}).limit(1):Promise.resolve({data:[]})
     ]);
-    V.settings=a.data||{grid_enabled:true,snap_enabled:true,grid_size:5,unit_per_cell:5,fog_enabled:false,vision_enabled:true};
+    V.settings=a.data||{grid_enabled:true,snap_enabled:true,grid_size:5,unit_per_cell:5,fog_enabled:false,vision_enabled:false};
     V.walls=b.data||[];V.sources=d.data||[];V.fog=g.data||[];V.combat.encounter=e.data?.[0]||null;V.combat.combatants=[];
     if(V.combat.encounter){const q=await api.from('combatants').select('id,character_id,npc_id,name,conditions,turn_order').eq('encounter_id',V.combat.encounter.id).order('turn_order');if(!q.error)V.combat.combatants=q.data||[]}
     V.campaignId=c;V.floorId=f;V.lastKey=c+':'+f+':'+(session()?.id||'');
