@@ -1478,10 +1478,12 @@ async function playAudioLayer(payload,opts={}){
 
   audio.onended=async()=>{
     if(!audio.loop){
+      const finishedLayer=state.audioLayers.get(layerId);
       state.audioPlayers.delete(layerId);
       state.audioLayers.delete(layerId);
       renderDice();
       if(canEdit()&&broadcast){
+        if(finishedLayer?.playlist_id&&finishedLayer?.queue_id){await playNextPlaylistTrack(finishedLayer).catch(e=>console.warn('Falha ao avançar playlist',e));return;}
         await persistAudioStateNow().catch(e=>console.warn('Falha ao persistir fim do áudio',e));
         await broadcastAudio({action:'stop-layer',layer_id:layerId});
       }
@@ -1540,8 +1542,20 @@ async function playPlaylist(id){
   const items=state.audioPlaylistItems.filter(i=>i.playlist_id===id&&i.enabled).sort((a,b)=>Number(a.sort_order)-Number(b.sort_order));
   const bundle=items.map(item=>({item,asset:state.audioAssets.find(a=>a.id===item.audio_asset_id)})).filter(x=>x.asset);
   if(!bundle.length){toast('Essa playlist não possui áudios ativos.','error');return;}
-  await Promise.all(bundle.map(x=>playAudioLayer({action:'play-layer',layer_id:'pl_'+id+'_'+x.asset.id,url:x.asset.url,name:x.asset.name,kind:x.asset.kind,loop:x.asset.loop,volume:x.item.volume??x.asset.default_volume,asset_id:x.asset.id,playlist_id:id})));
+  state.audioPlaylistQueue={id,items:bundle.map(x=>({asset:x.asset,volume:x.item.volume??x.asset.default_volume})),index:0};
+  const first=state.audioPlaylistQueue.items[0];
+  await stopAllAudioLayers({broadcast:false});
+  await playAudioLayer({action:'play-layer',layer_id:'pl_'+id,url:first.asset.url,name:first.asset.name,kind:first.asset.kind,loop:false,volume:first.volume,asset_id:first.asset.id,playlist_id:id,queue_id:id,queue_index:0});
   toast('Playlist transmitida para todos os jogadores');
+}
+async function playNextPlaylistTrack(layer){
+  if(!canEdit()||!layer?.playlist_id)return;
+  const q=state.audioPlaylistQueue;
+  if(!q||q.id!==layer.playlist_id)return;
+  const next=q.index+1;
+  if(next>=q.items.length){state.audioPlaylistQueue=null;return;}
+  q.index=next;const item=q.items[next];
+  await playAudioLayer({action:'play-layer',layer_id:'pl_'+q.id,url:item.asset.url,name:item.asset.name,kind:item.asset.kind,loop:false,volume:item.volume,asset_id:item.asset.id,playlist_id:q.id,queue_id:q.id,queue_index:next});
 }
 
 async function broadcastAudio(payload){
