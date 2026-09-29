@@ -506,7 +506,7 @@
   }
 
   function addPanel(){
-    const panel=$('.boardPanel'),toolbarEl=document.querySelector('.boardToolbar');if(!panel||!toolbarEl)return;
+    const panel=document.querySelector('.boardPanel'),toolbarEl=document.querySelector('.boardToolbar');if(!panel||!toolbarEl)return;
     if(!$('rpgVttPanel')){
       const p=document.createElement('div');p.id='rpgVttPanel';p.className='rpgVttPanel';
       p.innerHTML='<label>Forma <select id="rpgAoeShape"><option value="circle">Círculo</option><option value="square">Quadrado</option><option value="cone">Cone</option><option value="line">Linha</option></select></label><span>Grade <b id="rpgGridStatus">—</b></span><span>Snap <b id="rpgSnapStatus">—</b></span><span>Zoom <b data-vtt-zoom class="rpgVttZoomBadge">100%</b></span><button type="button" class="rpgVttMini" id="rpgMeasureClear">Limpar medição</button>';
