@@ -518,6 +518,19 @@ function startEntityDrag(e,el){
   document.addEventListener('pointermove',move);
   document.addEventListener('pointerup',up,{once:true});
 }
+function rotatedRoomInsets(room){
+  const w=Number(room?.width)||0,h=Number(room?.height)||0,deg=Number(room?.rotation)||0,rad=Math.abs(deg)*Math.PI/180;
+  const bboxW=Math.abs(w*Math.cos(rad))+Math.abs(h*Math.sin(rad));
+  const bboxH=Math.abs(w*Math.sin(rad))+Math.abs(h*Math.cos(rad));
+  return {x:Math.max(0,(bboxW-w)/2),y:Math.max(0,(bboxH-h)/2)};
+}
+function constrainRoomPosition(room,x,y){
+  const i=rotatedRoomInsets(room);
+  return {
+    x:Math.max(i.x,Math.min(100-Number(room.width)-i.x,x)),
+    y:Math.max(i.y,Math.min(100-Number(room.height)-i.y,y))
+  };
+}
 function startRoomDrag(e,el){
   if(!canEdit()||state.tool!=='move'||e.target.closest('.roomResize'))return;
   e.preventDefault();
@@ -531,11 +544,12 @@ function startRoomDrag(e,el){
   let latestX=ox,latestY=oy;
 
   const move=ev=>{
-    const rawX=Math.max(2,Math.min(98-Number(r.width),ox+((ev.clientX-sx)/rect.width)*100));
-    const rawY=Math.max(5,Math.min(95-Number(r.height),oy+((ev.clientY-sy)/rect.height)*100));
+    const rawX=ox+((ev.clientX-sx)/rect.width)*100;
+    const rawY=oy+((ev.clientY-sy)/rect.height)*100;
     const snapped=typeof window.rpgSnapPoint==='function'?window.rpgSnapPoint(rawX,rawY):{x:rawX,y:rawY};
-    latestX=Math.max(2,Math.min(98-Number(r.width),snapped.x));
-    latestY=Math.max(5,Math.min(95-Number(r.height),snapped.y));
+    const constrained=constrainRoomPosition(r,snapped.x,snapped.y);
+    latestX=constrained.x;
+    latestY=constrained.y;
     state.rooms=state.rooms.map(item=>item.id===r.id?{...item,x:latestX,y:latestY}:item);
     el.style.left=latestX+'%';
     el.style.top=latestY+'%';
