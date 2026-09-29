@@ -1826,12 +1826,28 @@ async function openCharacterModal(id){
       if(!payload.sheet_data)payload.sheet_data={};
       if(existing){
         const updatePayload={...payload};delete updatePayload.id;
-        const {data,error}=await sb.from('characters').update(updatePayload).eq('id',existing.id).select().single();
-        if(error)throw error;
+        const result=await sb.from('characters').update(updatePayload).eq('id',existing.id).select('*').maybeSingle();
+        if(result.error)throw result.error;
+        let data=result.data;
+        if(!data){
+          const verify=await sb.from('characters').select('*').eq('id',existing.id).maybeSingle();
+          if(verify.error)throw verify.error;
+          data=verify.data;
+        }
+        if(!data)throw new Error('A ficha foi alterada, mas não pôde ser lida de volta.');
         state.characters=state.characters.map(x=>x.id===existing.id?data:x);
       }else{
-        const {data,error}=await sb.from('characters').insert(payload).select().single();
-        if(error)throw error;
+        const characterId=uid();
+        payload.id=characterId;
+        const result=await sb.from('characters').insert(payload).select('*').maybeSingle();
+        if(result.error)throw result.error;
+        let data=result.data;
+        if(!data){
+          const verify=await sb.from('characters').select('*').eq('id',characterId).maybeSingle();
+          if(verify.error)throw verify.error;
+          data=verify.data;
+        }
+        if(!data)throw new Error('A ficha foi criada, mas não pôde ser carregada de volta.');
         state.characters.push(data);
       }
       const fileIds=visibleFields.filter(f=>f.data_key==='avatar_url').map(f=>f.id);
@@ -1840,8 +1856,15 @@ async function openCharacterModal(id){
         if(file){
           const avatar=await uploadMedia(file,'characters/'+(existing?.id||uid()));
           const targetId=existing?.id||state.characters.at(-1).id;
-          const {data,error}=await sb.from('characters').update({avatar_url:avatar}).eq('id',targetId).select().single();
-          if(error)throw error;
+          const result=await sb.from('characters').update({avatar_url:avatar}).eq('id',targetId).select('*').maybeSingle();
+          if(result.error)throw result.error;
+          let data=result.data;
+          if(!data){
+            const verify=await sb.from('characters').select('*').eq('id',targetId).maybeSingle();
+            if(verify.error)throw verify.error;
+            data=verify.data;
+          }
+          if(!data)throw new Error('A ficha recebeu a imagem, mas não pôde ser recarregada.');
           state.characters=state.characters.map(x=>x.id===targetId?data:x);
         }
       }
@@ -2046,12 +2069,28 @@ async function openCharacterModal(id){
       if(!payload.sheet_data)payload.sheet_data={};
       if(existing){
         const updatePayload={...payload};delete updatePayload.id;
-        const {data,error}=await sb.from('characters').update(updatePayload).eq('id',existing.id).select().single();
-        if(error)throw error;
+        const result=await sb.from('characters').update(updatePayload).eq('id',existing.id).select('*').maybeSingle();
+        if(result.error)throw result.error;
+        let data=result.data;
+        if(!data){
+          const verify=await sb.from('characters').select('*').eq('id',existing.id).maybeSingle();
+          if(verify.error)throw verify.error;
+          data=verify.data;
+        }
+        if(!data)throw new Error('A ficha foi alterada, mas não pôde ser lida de volta.');
         state.characters=state.characters.map(x=>x.id===existing.id?data:x);
       }else{
-        const {data,error}=await sb.from('characters').insert(payload).select().single();
-        if(error)throw error;
+        const characterId=uid();
+        payload.id=characterId;
+        const result=await sb.from('characters').insert(payload).select('*').maybeSingle();
+        if(result.error)throw result.error;
+        let data=result.data;
+        if(!data){
+          const verify=await sb.from('characters').select('*').eq('id',characterId).maybeSingle();
+          if(verify.error)throw verify.error;
+          data=verify.data;
+        }
+        if(!data)throw new Error('A ficha foi criada, mas não pôde ser carregada de volta.');
         state.characters.push(data);
       }
       const fileIds=visibleFields.filter(f=>f.data_key==='avatar_url').map(f=>f.id);
@@ -2060,8 +2099,15 @@ async function openCharacterModal(id){
         if(file){
           const avatar=await uploadMedia(file,'characters/'+(existing?.id||uid()));
           const targetId=existing?.id||state.characters.at(-1).id;
-          const {data,error}=await sb.from('characters').update({avatar_url:avatar}).eq('id',targetId).select().single();
-          if(error)throw error;
+          const result=await sb.from('characters').update({avatar_url:avatar}).eq('id',targetId).select('*').maybeSingle();
+          if(result.error)throw result.error;
+          let data=result.data;
+          if(!data){
+            const verify=await sb.from('characters').select('*').eq('id',targetId).maybeSingle();
+            if(verify.error)throw verify.error;
+            data=verify.data;
+          }
+          if(!data)throw new Error('A ficha recebeu a imagem, mas não pôde ser recarregada.');
           state.characters=state.characters.map(x=>x.id===targetId?data:x);
         }
       }
@@ -2103,8 +2149,40 @@ async function activateSession(id){if(!id)return;const session=state.sessions.fi
 
 function openNpcModal(id){if(!requireMaster())return;const n=id?state.npcs.find(x=>x.id===id):null;const v=n||{name:'',description:'',notes_private:'',avatar_url:'',data:{}};showModal(`<div class="modalHeader"><div><div class="eyebrow">BESTIÁRIO</div><h3>${n?'Editar entidade':'Novo NPC / monstro'}</h3></div><button class="closeButton" data-close>×</button></div><label>Nome<input id="npcName" value="${escapeHtml(v.name)}"></label><label>Descrição<textarea id="npcDesc" rows="4">${escapeHtml(v.description||'')}</textarea></label><label>Notas privadas do mestre<textarea id="npcNotes" rows="5">${escapeHtml(v.notes_private||'')}</textarea></label><label>Avatar URL<input id="npcAvatar" value="${escapeHtml(v.avatar_url||'')}" placeholder="https://..."></label><label>Avatar do NPC<input id="npcFile" type="file" accept="image/*"></label><label>Dados / ficha (JSON)<textarea id="npcData" rows="6">${escapeHtml(JSON.stringify(v.data||{},null,2))}</textarea></label><div class="modalActions"><button class="softButton" data-close>Cancelar</button><button id="saveNpc" class="primarySmall">Salvar</button></div>`);$('saveNpc').onclick=async()=>{try{const payload={campaign_id:state.campaign.id,name:$('npcName').value.trim(),description:$('npcDesc').value.trim(),notes_private:$('npcNotes').value.trim(),avatar_url:$('npcAvatar').value.trim()||null,data:JSON.parse($('npcData').value||'{}')};if(!payload.name)throw new Error('Informe o nome.');const file=$('npcFile').files[0];if(file)payload.avatar_url=await uploadMedia(file,`npcs/${uid()}`);const result=n?await sb.from('npcs').update(payload).eq('id',n.id).select().single():await sb.from('npcs').insert(payload).select().single();if(result.error)throw result.error;if(n)state.npcs=state.npcs.map(x=>x.id===n.id?result.data:x);else state.npcs.push(result.data);closeModal();renderAll();toast('NPC salvo');}catch(e){toast(e.message,'error');}};}
 
-async function addCharacterToBoard(id){if(!requireMaster())return;const c=state.characters.find(x=>x.id===id);if(!c)return;if(state.entities.some(e=>e.character_id===id)){toast('Esse personagem já está na mesa.');return;}const payload={campaign_id:state.campaign.id,character_id:id,entity_kind:'character',display_name:c.name,icon:'♙',color:colors[state.entities.length%colors.length],floor_id:state.floor,x:50,y:50,room_id:null,visible:true,metadata:{}};const {data,error}=await sb.from('world_entities').insert(payload).select().single();if(error){toast(error.message,'error');return;}state.entities.push(data);renderAll();toast(`${c.name} entrou na mesa`);}
-async function addNpcToBoard(id){if(!requireMaster())return;const n=state.npcs.find(x=>x.id===id);if(!n)return;if(state.entities.some(e=>e.npc_id===id)){toast('Essa entidade já está na mesa.');return;}const payload={campaign_id:state.campaign.id,npc_id:id,entity_kind:'npc',display_name:n.name,icon:'♜',color:colors[state.entities.length%colors.length],floor_id:state.floor,x:50,y:50,room_id:null,visible:true,metadata:{}};const {data,error}=await sb.from('world_entities').insert(payload).select().single();if(error){toast(error.message,'error');return;}state.entities.push(data);renderAll();toast(`${n.name} entrou na mesa`);}
+async function addCharacterToBoard(id){
+  if(!requireMaster())return;
+  const c=state.characters.find(x=>x.id===id);if(!c)return;
+  if(state.entities.some(e=>e.character_id===id)){toast('Esse personagem já está na mesa.');return;}
+  const entityId=uid();
+  const payload={id:entityId,campaign_id:state.campaign.id,character_id:id,entity_kind:'character',display_name:c.name,icon:'♙',color:colors[state.entities.length%colors.length],floor_id:state.floor,x:50,y:50,room_id:null,visible:true,metadata:{}};
+  const result=await sb.from('world_entities').insert(payload).select('*').maybeSingle();
+  if(result.error){toast(result.error.message,'error');return;}
+  let data=result.data;
+  if(!data){
+    const verify=await sb.from('world_entities').select('*').eq('id',entityId).maybeSingle();
+    if(verify.error){toast(verify.error.message,'error');return;}
+    data=verify.data;
+  }
+  if(!data){toast('O personagem foi adicionado, mas o token não pôde ser carregado.','error');return;}
+  state.entities.push(data);renderAll();toast(`${c.name} entrou na mesa`);
+}
+async function addNpcToBoard(id){
+  if(!requireMaster())return;
+  const n=state.npcs.find(x=>x.id===id);if(!n)return;
+  if(state.entities.some(e=>e.npc_id===id)){toast('Essa entidade já está na mesa.');return;}
+  const entityId=uid();
+  const payload={id:entityId,campaign_id:state.campaign.id,npc_id:id,entity_kind:'npc',display_name:n.name,icon:'♜',color:colors[state.entities.length%colors.length],floor_id:state.floor,x:50,y:50,room_id:null,visible:true,metadata:{}};
+  const result=await sb.from('world_entities').insert(payload).select('*').maybeSingle();
+  if(result.error){toast(result.error.message,'error');return;}
+  let data=result.data;
+  if(!data){
+    const verify=await sb.from('world_entities').select('*').eq('id',entityId).maybeSingle();
+    if(verify.error){toast(verify.error.message,'error');return;}
+    data=verify.data;
+  }
+  if(!data){toast('A entidade foi adicionada, mas o token não pôde ser carregado.','error');return;}
+  state.entities.push(data);renderAll();toast(`${n.name} entrou na mesa`);
+}
 function roomAtPosition(x,y,floorId){
   return state.rooms.find(r=>r.floor_id===floorId&&pointInsideRoom(x,y,r))||null;
 }
