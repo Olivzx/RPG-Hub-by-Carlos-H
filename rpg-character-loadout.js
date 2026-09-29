@@ -26,7 +26,8 @@
   window.rpgEquipmentCache=window.rpgEquipmentCache||{};window.rpgEquipmentCache[characterId]=q.data||[];return q.data||[];
 }
 async function rows(characterId){
-    await cacheEquipment(characterId);\n    const [a,i]=await Promise.all([
+    await cacheEquipment(characterId);
+    const [a,i]=await Promise.all([
       api().from('character_abilities').select('*').eq('character_id',characterId).order('created_at'),
       api().from('character_inventory').select('*').eq('character_id',characterId).order('created_at')
     ]);
