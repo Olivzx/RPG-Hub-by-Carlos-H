@@ -9,7 +9,7 @@ const colors = ['#9487ff','#6ee7b7','#e8c986','#7dd3fc','#f3a8ca','#fb7185','#f5
 const state = {
   user:null, profile:null, campaigns:[], campaign:null, role:'player', members:[], profiles:new Map(),
   locations:[], floors:[], rooms:[], characters:[], characterFields:[], npcs:[], entities:[], sessions:[], rolls:[], audioAssets:[], audioPlaylists:[], audioPlaylistItems:[],
-  location:null, floor:null, selected:null, view:'table', tool:'move', zoom:100, campaignChannel:null, sessionChannel:null, audioPlayers:new Map(), audioLayers:new Map(),
+  location:null, floor:null, selected:null, view:'table', tool:'move', zoom:100, npcFilter:'all', campaignChannel:null, sessionChannel:null, audioPlayers:new Map(), audioLayers:new Map(),
   audioEnabled:false, presenceChannel:null, online:1, isLoading:true, campaignChronicle:null, campaignAudioState:null
 };
 
@@ -931,24 +931,18 @@ async function saveCampaignChronicle(){
 }
 
 function renderNpcs(){
-  $('npcsGrid').innerHTML=state.npcs.map(n=>{
+  const filter=state.npcFilter||'all';
+  const rows=(state.npcs||[]).filter(n=>filter==='all'||n.npc_type===filter);
+  const toolbar='<div class="dataFilterBar" id="npcFilterBar"><button class="'+(filter==='all'?'active':'')+'" data-npc-filter="all">Todos <b>'+state.npcs.length+'</b></button><button class="'+(filter==='npc'?'active':'')+'" data-npc-filter="npc">NPCs <b>'+state.npcs.filter(n=>n.npc_type==='npc').length+'</b></button><button class="'+(filter==='monster'?'active':'')+'" data-npc-filter="monster">Monstros <b>'+state.npcs.filter(n=>n.npc_type==='monster').length+'</b></button></div>';
+  $('npcsGrid').innerHTML=toolbar+(rows.map(n=>{
     const isMonster=n.npc_type==='monster';
-    return '<article class="dataCard">'+
-      '<div class="cardAvatar npc">'+(n.avatar_url?'<img src="'+escapeHtml(n.avatar_url)+'" alt="">':'♜')+'</div>'+
-      '<div class="dataCardMain">'+
-        '<div class="cardKicker">'+(isMonster?'MONSTRO':'NPC')+'</div>'+
-        '<h3>'+escapeHtml(n.name)+'</h3>'+
-        '<p>'+escapeHtml(n.description||'Sem descrição')+'</p>'+
-        '<small class="privateNote">Tipo: '+(isMonster?'Monstro':'NPC')+' · Anotação do mestre: '+escapeHtml(n.notes_private||'—')+'</small>'+
-      '</div>'+
-      '<div class="cardActions"><button data-edit-npc="'+n.id+'">Editar</button>'+
-        (canEdit()?'<button class="softButton" data-add-npc="'+n.id+'">'+(state.entities.some(e=>e.npc_id===n.id)?'Na mesa':'Colocar na mesa')+'</button>':'')+
-      '</div>'+
-    '</article>';
-  }).join('') || '<div class="emptyPanel">Nenhum NPC ou monstro cadastrado.</div>';
+    return '<article class="dataCard"><div class="cardAvatar npc">'+(n.avatar_url?'<img src="'+escapeHtml(n.avatar_url)+'" alt="">':'♜')+'</div><div class="dataCardMain"><div class="cardKicker">'+(isMonster?'MONSTRO':'NPC')+'</div><h3>'+escapeHtml(n.name)+'</h3><p>'+escapeHtml(n.description||'Sem descrição')+'</p><small class="privateNote">Tipo: '+(isMonster?'Monstro':'NPC')+' · Anotação do mestre: '+escapeHtml(n.notes_private||'—')+'</small></div><div class="cardActions"><button data-edit-npc="'+n.id+'">Editar</button>'+(canEdit()?'<button class="softButton" data-add-npc="'+n.id+'">'+(state.entities.some(e=>e.npc_id===n.id)?'Na mesa':'Colocar na mesa')+'</button>':'')+'</div></article>';
+  }).join('') || '<div class="emptyPanel">Nenhum registro nesta categoria.</div>');
+  document.querySelectorAll('[data-npc-filter]').forEach(b=>b.onclick=()=>{state.npcFilter=b.dataset.npcFilter;renderNpcs();});
   document.querySelectorAll('[data-edit-npc]').forEach(b=>b.onclick=()=>openNpcModal(b.dataset.editNpc));
   document.querySelectorAll('[data-add-npc]').forEach(b=>b.onclick=()=>addNpcToBoard(b.dataset.addNpc));
 }
+
 function renderDice(){
   const active=currentSession();
   const history=$('masterDashboardRollHistory');
@@ -2074,8 +2068,8 @@ async function profileModal(){
     try{
       let avatar=$('profileUrl').value.trim()||null;const file=$('profileFile').files[0];if(file)avatar=await uploadMedia(file,'profile');
       const account_type=$('profileAccountType').value;
-      const {data,error}=await sb.from('profiles').update({display_name:$('profileName').value.trim()||'Aventureiro',account_type,avatar_url:avatar,bio:$('profileBio').value.trim()}).eq('id',state.user.id).select().single();
-      if(error)throw error;state.profile=data;closeModal();renderAll();toast(account_type==='master'?'Conta definida como Mestre':'Conta definida como Jogador');
+      const {data,error}=await sb.from('profiles').update({display_name:$('profileName').value.trim()||'Aventureiro',account_type,avatar_url:avatar,bio:$('profileBio').value.trim()}).eq('id',state.user.id).select('*').maybeSingle();
+      if(error||!data)throw error||new Error('Não foi possível atualizar o tipo da conta.');state.profile=data;closeModal();renderAll();toast(account_type==='master'?'Conta definida como Mestre':'Conta definida como Jogador');
     }catch(e){toast(e.message||'Não foi possível salvar o perfil.','error');}
   };
 }
