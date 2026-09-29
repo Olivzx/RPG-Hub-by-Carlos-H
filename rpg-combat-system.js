@@ -155,11 +155,54 @@
   async function remove(id){if(!isMaster())return;const r=cs.combatants.find(x=>x.id===id);if(!r||!confirm('Remover '+r.name+' do combate?'))return;const q=await sb.from('combatants').delete().eq('id',id);if(q.error)return toast(q.error.message||'Não foi possível remover.','error');cs.combatants=cs.combatants.filter(x=>x.id!==id);render();}
   async function advance(){if(!isMaster()||!cs.encounter||cs.encounter.status==='finished')return;const r=rows();if(!r.length)return toast('Adicione combatentes antes de avançar.','error');let i=Number(cs.encounter.current_index||0)+1,round=Number(cs.encounter.round||1);if(i>=r.length){i=0;round++;}const q=await sb.from('combat_encounters').update({current_index:i,round}).eq('id',cs.encounter.id).select('*').maybeSingle();if(q.error)return toast(q.error.message||'Não foi possível avançar.','error');cs.encounter=q.data||await readRow('combat_encounters',cs.encounter.id,'o turno');render();}
   async function end(){if(!isMaster()||!cs.encounter||!confirm('Encerrar o combate atual?'))return;const q=await sb.from('combat_encounters').update({status:'finished'}).eq('id',cs.encounter.id).select('*').maybeSingle();if(q.error)return toast(q.error.message||'Não foi possível encerrar.','error');cs.encounter=q.data||await readRow('combat_encounters',cs.encounter.id,'o encerramento');render();toast('Combate encerrado');}
+
+  async function applyCombatHp(id,delta,reason='ajuste de HP'){
+    if(!isMaster())return;
+    const r=cs.combatants.find(x=>x.id===id); if(!r||r.hp_current==null)return;
+    const max=r.hp_max==null?null:Number(r.hp_max);
+    const before=Number(r.hp_current), nextRaw=before+Number(delta);
+    const after=max==null?Math.max(0,nextRaw):Math.min(max,Math.max(0,nextRaw));
+    const q=await sb.from('combatants').update({hp_current:after}).eq('id',id).select('*').maybeSingle();
+    if(q.error)return toast(q.error.message||'Não foi possível atualizar o HP.','error');
+    const saved=q.data||await readRow('combatants',id,'o HP');
+    cs.combatants=cs.combatants.map(x=>x.id===id?saved:x); render();
+    if(typeof logCampaignActivity==='function'){
+      await logCampaignActivity('combat_hp','combat',r.name+' '+(delta>=0?'recuperou':'perdeu')+' '+Math.abs(Number(delta))+' HP ('+before+' → '+after+')',id,{before,after,delta:Number(delta),reason}).catch(()=>{});
+    }
+    return saved;
+  }
+
+  async function attackModal(){
+    if(!isMaster()||!cs.encounter)return;
+    const list=rows();
+    showModal('<div class="modalHeader"><div><div class="eyebrow">COMBATE</div><h3>Ataque</h3></div><button class="closeButton" data-close>×</button></div><div class="formGrid"><label>Atacante<select id="atkFrom">'+list.map(x=>'<option value="'+esc(x.id)+'">'+esc(x.name)+'</option>').join('')+'</select></label><label>Alvo<select id="atkTarget">'+list.map(x=>'<option value="'+esc(x.id)+'">'+esc(x.name)+'</option>').join('')+'</select></label></div><div class="formGrid"><label>Bônus de ataque<input id="atkBonus" type="number" value="0"></label><label>CA do alvo<input id="atkAc" type="number" value="10"></label><label>Dano<input id="atkDamage" value="1d6+0" placeholder="1d6+3"></label></div><div class="modalActions"><button class="softButton" data-close>Cancelar</button><button class="primarySmall" id="atkRoll">Rolar ataque</button></div>');
+    const sync=()=>{const t=cs.combatants.find(x=>x.id===$('atkTarget').value); $('atkAc').value=t?.armor_class??t?.ac??10;};
+    $('atkTarget').onchange=sync;sync();
+    $('atkRoll').onclick=async()=>{
+      const from=cs.combatants.find(x=>x.id===$('atkFrom').value), target=cs.combatants.find(x=>x.id===$('atkTarget').value);
+      if(!from||!target||from.id===target.id)return toast('Escolha atacante e alvo diferentes.','error');
+      const d20=(crypto.getRandomValues(new Uint32Array(1))[0]%20)+1, bonus=Number($('atkBonus').value||0), ac=Number($('atkAc').value||10), total=d20+bonus, hit=total>=ac;
+      let damage=null;
+      if(hit){
+        const m=/^(\d+)d(\d+)([+-]\d+)?$/i.exec($('atkDamage').value.trim());
+        if(!m)return toast('Dano inválido. Use 1d6 ou 2d6+3.','error');
+        const count=Math.min(50,Math.max(1,Number(m[1]))),sides=Math.min(1000,Math.max(2,Number(m[2]))),mod=Number(m[3]||0);
+        let sum=mod;for(let i=0;i<count;i++)sum+=(crypto.getRandomValues(new Uint32Array(1))[0]%sides)+1;
+        damage=Math.max(0,sum);
+      }
+      const summary=from.name+' atacou '+target.name+': '+total+' vs CA '+ac+' — '+(hit?'ACERTO ('+damage+' dano)':'ERRO');
+      if(hit&&target.hp_current!=null)await applyCombatHp(target.id,-damage,'ataque de '+from.name);
+      if(typeof logCampaignActivity==='function')await logCampaignActivity('combat_attack','combat',summary,null,{attacker_id:from.id,target_id:target.id,attack:d20,bonus,ac,total,hit,damage}).catch(()=>{});
+      closeModal();toast(summary);
+      render();
+    };
+  }
+
   function manage(){if(!isMaster())return;const r=rows();showModal('<div class="modalHeader"><div><div class="eyebrow">COMBATE</div><h3>Combatentes</h3></div><button class="closeButton" data-close>×</button></div><div class="rpgCombatModalList">'+(r.length?r.map(x=>'<article class="rpgCombatModalItem"><div><b>'+esc(x.name)+'</b><small>Iniciativa '+Number(x.initiative||0)+'</small></div><button class="dangerButton" data-mremove="'+x.id+'">Remover</button></article>').join(''):'<div class="rpgCombatEmpty">Nenhum combatente.</div>')+'</div><div class="modalActions"><button class="primarySmall" data-close>Fechar</button></div>');document.querySelectorAll('[data-mremove]').forEach(b=>b.onclick=async()=>{await remove(b.dataset.mremove);closeModal();});}
 
   function bind(){
     const m=$('rpgCombatMount');if(!m||m.dataset.bound)return;m.dataset.bound='1';
-    m.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;if(b.matches('[data-start-combat]'))startCombat();else if(b.matches('[data-add]'))addModal();else if(b.matches('[data-edit]'))editModal(b.dataset.edit);else if(b.matches('[data-remove]'))remove(b.dataset.remove);else if(b.matches('[data-hp]'))hp(b.dataset.hp,b.dataset.delta);else if(b.matches('[data-init]'))rollInit(b.dataset.init);else if(b.matches('[data-advance]'))advance();else if(b.matches('[data-end]'))end();else if(b.matches('[data-manage]'))manage();else if(b.matches('[data-go-table]')){state.view='table';renderView();}else if(b.matches('[data-go-sessions]')){state.view='sessions';renderView();}});
+    m.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;if(b.matches('[data-start-combat]'))startCombat();else if(b.matches('[data-add]'))addModal();else if(b.matches('[data-attack]'))attackModal();else if(b.matches('[data-edit]'))editModal(b.dataset.edit);else if(b.matches('[data-remove]'))remove(b.dataset.remove);else if(b.matches('[data-hp]'))hp(b.dataset.hp,b.dataset.delta);else if(b.matches('[data-init]'))rollInit(b.dataset.init);else if(b.matches('[data-advance]'))advance();else if(b.matches('[data-end]'))end();else if(b.matches('[data-manage]'))manage();else if(b.matches('[data-go-table]')){state.view='table';renderView();}else if(b.matches('[data-go-sessions]')){state.view='sessions';renderView();}});
   }
 
   function init(){
