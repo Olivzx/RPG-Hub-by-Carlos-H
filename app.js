@@ -887,6 +887,21 @@ function bindTableInteractions(){
 function clientToBoardPercent(clientX,clientY,rect){
   return {x:Math.max(0,Math.min(100,(clientX-rect.left)/Math.max(1,rect.width)*100)),y:Math.max(0,Math.min(100,(clientY-rect.top)/Math.max(1,rect.height)*100))};
 }
+function movementProfile(entity){
+  const rules=window.rpgCampaignRules||{};
+  const cfg=rules.config||{};
+  const source=entity?.character_id?state.characters.find(x=>x.id===entity.character_id):null;
+  const speed=Number(source?.movement_speed??source?.speed??cfg.movementUnits??6);
+  return {speed:Math.max(0,speed),unitsPerPercent:Number(cfg.percentPerUnit||1)};
+}
+function movementCost(entity,from,to){
+  const dx=Number(to.x)-Number(from.x),dy=Number(to.y)-Number(from.y);
+  return Math.sqrt(dx*dx+dy*dy);
+}
+function canMoveEntity(entity,from,to){
+  const p=movementProfile(entity),cost=movementCost(entity,from,to);
+  return {ok:cost<=p.speed*p.unitsPerPercent+0.001,cost,remaining:Math.max(0,p.speed-cost/p.unitsPerPercent)};
+}
 function startEntityDrag(e,el){
   if(!canEdit()||state.tool!=='move'||e.button!==0)return;
   e.preventDefault();e.stopPropagation();
@@ -903,6 +918,8 @@ function startEntityDrag(e,el){
     const snapped=window.rpgSnapPoint?window.rpgSnapPoint(target.x,target.y):target;
     latestX=Math.max(1,Math.min(99,snapped.x));latestY=Math.max(1,Math.min(99,snapped.y));
     const room=roomAtPosition(latestX,latestY,current.floor_id||state.floor);
+    const validation=canMoveEntity(current,moveStart,{x:latestX,y:latestY});
+    if(!validation.ok){latestX=previous.x;latestY=previous.y;el.style.left=latestX+'%';el.style.top=latestY+'%';return;}
     const now=performance.now();
     if(now-lastMoveBroadcast>30){
       lastMoveBroadcast=now;
@@ -917,9 +934,10 @@ function startEntityDrag(e,el){
     if(result.error){state.entities=state.entities.map(item=>item.id===id?{...item,...previous}:item);renderTable();toast(result.error.message||'Não foi possível salvar a posição.','error');return;}
     if(!result.data){state.entities=state.entities.map(item=>item.id===id?{...item,...previous}:item);renderTable();toast('A entidade não pôde ser localizada após o movimento.','error');return;}
     const data=result.data;
+    data.movement_remaining=canMoveEntity(data,moveStart,data).remaining;
     state.entities=state.entities.map(item=>item.id===id?data:item);
-    await broadcastEntityMove({entity_id:id,x:latestX,y:latestY,room_id:room?.id||null,floor_id:current.floor_id});
-    setSave(room?'Entidade posicionada em '+room.name:'Posição da entidade salva');
+    await broadcastEntityMove({entity_id:id,x:latestX,y:latestY,room_id:room?.id||null,floor_id:current.floor_id,movement_cost:canMoveEntity(data,moveStart,data).cost,movement_remaining:data.movement_remaining});
+    setSave(room?'Entidade posicionada em '+room.name+' · deslocamento '+data.movement_remaining.toFixed(1):'Posição da entidade salva');
   };
   const cancel=()=>{cleanup();state.entities=state.entities.map(item=>item.id===id?{...item,...previous}:item);renderTable();};
   el.addEventListener('pointermove',move);el.addEventListener('pointerup',up,{once:true});el.addEventListener('pointercancel',cancel,{once:true});
