@@ -1164,3 +1164,10 @@ A configuração SQL da camada central de realtime está registrada em:
 
 ---
 
+
+
+### Segurança da sincronização
+
+- O broadcast de mudanças usa função `SECURITY DEFINER` apenas no trigger privado responsável pela publicação de eventos.
+- A RPC pública `ensure_campaign_world` agora executa como `SECURITY INVOKER`, respeitando as políticas RLS do usuário autenticado.
+- Execução da RPC foi removida do papel `anon`.
