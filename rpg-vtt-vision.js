@@ -66,6 +66,63 @@
     });
   }
 
+  function distancePercent(ax,ay,bx,by){
+    const dx=(bx-ax)/100,dy=(by-ay)/100;
+    return Math.hypot(dx,dy);
+  }
+
+  function segmentBlocked(ax,ay,bx,by){
+    const rdx=bx-ax,rdy=by-ay;
+    const crossFn=(a,b,c,d)=>a*d-b*c;
+    for(const w of V.walls.filter(w=>w.blocks_vision!==false)){
+      const sdx=n(w.x2)-n(w.x1),sdy=n(w.y2)-n(w.y1),den=crossFn(rdx,rdy,sdx,sdy);
+      if(Math.abs(den)<1e-9) continue;
+      const qx=n(w.x1)-ax,qy=n(w.y1)-ay;
+      const t=crossFn(qx,qy,sdx,sdy)/den;
+      const u=crossFn(qx,qy,rdx,rdy)/den;
+      if(t>0.0001&&t<0.9999&&u>=0&&u<=1) return true;
+    }
+    return false;
+  }
+
+  function insideFog(x,y){
+    if(!V.settings?.fog_enabled) return false;
+    return (V.fog||[]).some(r=>!r.revealed&&x>=n(r.x)&&x<=n(r.x)+n(r.width)&&y>=n(r.y)&&y<=n(r.y)+n(r.height));
+  }
+
+  function pointVisible(x,y){
+    if(master()) return true;
+    x=clamp(Number(x)||0);y=clamp(Number(y)||0);
+    if(insideFog(x,y)) return false;
+    if(V.settings?.vision_enabled===false) return true;
+    const st=window.state;
+    const chars=new Map((st?.characters||[]).map(c=>[c.id,c]));
+    const sources=(st?.entities||[]).filter(e=>e.floor_id===fid()&&e.character_id&&chars.get(e.character_id)?.player_id===st?.user?.id);
+    if(!sources.length) return false;
+    const unit=Math.max(.1,n(V.settings?.unit_per_cell,5)),grid=Math.max(.1,n(V.settings?.grid_size,5));
+    return sources.some(src=>{
+      if(insideFog(n(src.x,50),n(src.y,50))) return false;
+      const dx=(x-n(src.x,50))/100,dy=(y-n(src.y,50))/100;
+      const distanceUnits=Math.hypot(dx,dy)*100/grid*unit;
+      const cfg=V.sources.find(s=>s.entity_id===src.id);
+      const range=cfg?n(cfg.range_units,60):60;
+      if(distanceUnits>range) return false;
+      return !segmentBlocked(n(src.x,50),n(src.y,50),x,y);
+    });
+  }
+
+  function roomVisible(x,y,w,h){
+    if(master()) return true;
+    const pts=[
+      [n(x)+n(w)/2,n(y)+n(h)/2],
+      [n(x)+1,n(y)+1],
+      [n(x)+n(w)-1,n(y)+1],
+      [n(x)+1,n(y)+n(h)-1],
+      [n(x)+n(w)-1,n(y)+n(h)-1]
+    ];
+    return pts.some(p=>pointVisible(p[0],p[1]));
+  }
+
   function combatInfo(){
     const e=V.combat.encounter,rows=[...(V.combat.combatants||[])].sort((a,b)=>n(a.turn_order)-n(b.turn_order));
     const idx=Math.max(0,Math.min(n(e?.current_index),Math.max(rows.length-1,0)));return{encounter:e,rows,active:rows[idx]||null}
@@ -119,7 +176,10 @@
     V.settings=a.data||{grid_enabled:true,snap_enabled:true,grid_size:5,unit_per_cell:5,fog_enabled:false,vision_enabled:true};
     V.walls=b.data||[];V.sources=d.data||[];V.fog=g.data||[];V.combat.encounter=e.data?.[0]||null;V.combat.combatants=[];
     if(V.combat.encounter){const q=await api.from('combatants').select('id,character_id,npc_id,name,conditions,turn_order').eq('encounter_id',V.combat.encounter.id).order('turn_order');if(!q.error)V.combat.combatants=q.data||[]}
-    V.campaignId=c;V.floorId=f;V.lastKey=c+':'+f+':'+(session()?.id||'');queue();
+    V.campaignId=c;V.floorId=f;V.lastKey=c+':'+f+':'+(session()?.id||'');
+    window.rpgVttVisibilityReady=true;
+    queue();
+    setTimeout(()=>window.renderTable?.(),0);
   }
 
   async function saveWall(s,e){
@@ -190,8 +250,11 @@
   function init(){
     if(V.initialized)return;inject();V.initialized=true;const b=$('board');
     if(b){b.addEventListener('pointerdown',down,true);b.addEventListener('pointermove',move,true);b.addEventListener('pointerup',up,true);b.addEventListener('pointercancel',up,true)}
-    setInterval(tick,900);tick();
+    setInterval(tick,2500);tick();
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
+  window.rpgVttPointVisible=pointVisible;
+  window.rpgVttRoomVisible=roomVisible;
+  window.rpgVttVisibilityReady=false;
   window.rpgVttVisionRefresh=queue;
 })();
