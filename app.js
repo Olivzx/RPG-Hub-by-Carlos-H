@@ -33,6 +33,7 @@ function mapPointVisible(x,y){
   try{
     if(canEdit()) return true;
     if(typeof window.rpgVttPointVisible === 'function') return !!window.rpgVttPointVisible(Number(x)||0,Number(y)||0);
+    if(window.rpgVttVisibilityReady) return false;
   }catch(err){ console.warn('RPG HUB map visibility:',err); }
   return true;
 }
@@ -65,7 +66,7 @@ async function ensureProfile(){
   const {data,error}=await sb.from('profiles').select('*').eq('id',state.user.id).maybeSingle(); if(error) throw error;
   if(data){state.profile=data;return;}
   const display=state.user.user_metadata?.display_name || state.user.email?.split('@')[0] || 'Aventureiro';
-  const {data:created,error:insertError}=await sb.from('profiles').insert({id:state.user.id,display_name:display,account_type:state.user.user_metadata?.account_type==='master'?'master':'player'}).select('*').single();
+  const {data:created,error:insertError}=await sb.from('profiles').insert({id:state.user.id,display_name:display,account_type:'player'}).select('*').single();
   if(insertError) throw insertError; state.profile=created;
 }
 
@@ -443,10 +444,10 @@ function renderTable(){
     if(selectedRoom && !roomVisibleOnMap(selectedRoom)) state.selected=null;
   }
 
-  $('roomLayer').innerHTML=allRooms.map(r=>`<div class="room ${state.selected?.type==='room'&&state.selected.id===r.id?'roomSelected':''}" data-room-id="${r.id}" style="left:${r.x}%;top:${r.y}%;width:${r.width}%;height:${r.height}%;transform:rotate(${Number(r.rotation)||0}deg)"><span>${escapeHtml(r.name)}</span><div class="roomResize" title="Redimensionar"></div></div>`).join('');
+  $('roomLayer').innerHTML=rooms.map(r=>`<div class="room ${state.selected?.type==='room'&&state.selected.id===r.id?'roomSelected':''}" data-room-id="${r.id}" style="left:${r.x}%;top:${r.y}%;width:${r.width}%;height:${r.height}%;transform:rotate(${Number(r.rotation)||0}deg)"><span>${escapeHtml(r.name)}</span><div class="roomResize" title="Redimensionar"></div></div>`).join('');
   $('roomList').innerHTML=rooms.map(r=>`<button class="roomItem ${state.selected?.type==='room'&&state.selected.id===r.id?'roomChosen':''}" data-room-list="${r.id}"><span class="roomIcon">▧</span><div><b>${escapeHtml(r.name)}</b><small>${escapeHtml(r.description||'Sem descrição')}</small></div><span>›</span></button>`).join('') || '<div class="emptySelect">Nenhum cômodo visível neste momento.</div>';
   $('entityCount').textContent=entities.length;
-  $('tokenLayer').innerHTML=allEntities.map(e=>`<div class="tokenBig ${state.selected?.type==='entity'&&state.selected.id===e.id?'selected':''}" data-entity-id="${e.id}" style="left:${e.x}%;top:${e.y}%;--token-color:${escapeHtml(e.color||'#9487ff')}">${entityAvatarMarkup(e)}<span>${escapeHtml(e.display_name)}</span></div>`).join('');
+  $('tokenLayer').innerHTML=entities.map(e=>`<div class="tokenBig ${state.selected?.type==='entity'&&state.selected.id===e.id?'selected':''}" data-entity-id="${e.id}" style="left:${e.x}%;top:${e.y}%;--token-color:${escapeHtml(e.color||'#9487ff')}">${entityAvatarMarkup(e)}<span>${escapeHtml(e.display_name)}</span></div>`).join('');
   $('entityList').innerHTML=entities.map(e=>`<button class="entityItem ${state.selected?.type==='entity'&&state.selected.id===e.id?'entityChosen':''}" data-entity-list="${e.id}">${entityAvatarMarkup(e,true)}<div><b>${escapeHtml(e.display_name)}</b><small>${escapeHtml(e.entity_kind)}</small></div><span>›</span></button>`).join('') || '<div class="emptySelect">Nenhuma entidade visível neste momento.</div>';
   $('selectedCard').innerHTML=renderSelection();
   bindTableInteractions();
@@ -470,7 +471,7 @@ function bindTableInteractions(){
   document.querySelectorAll('.roomResize').forEach(el=>el.onpointerdown=e=>startRoomResize(e,el.parentElement));
 }
 function startEntityDrag(e,el){
-  if(state.tool!=='move')return;
+  if(!canEdit()||state.tool!=='move')return;
   e.preventDefault();
   const id=el.dataset.entityId;
   const current=state.entities.find(q=>q.id===id);
