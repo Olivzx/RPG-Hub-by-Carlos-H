@@ -120,6 +120,7 @@ async function rows(characterId){
     S.channel=ch;S.campaignId=c;
   }
 
+  window.addEventListener('rpg:realtime-reconnect',()=>{if(S.channel){api()?.removeChannel(S.channel).catch(()=>{});S.channel=null;}realtime();});
   function tick(){injectStyles();mountButtons();realtime();if(!S.observer){const g=$('charactersGrid');if(g){S.observer=new MutationObserver(mountButtons);S.observer.observe(g,{childList:true,subtree:true})}}}
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',tick,{once:true});else tick();
   setInterval(tick,1800);
