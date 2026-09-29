@@ -10,7 +10,7 @@ const state = {
   user:null, profile:null, campaigns:[], campaign:null, role:'player', members:[], profiles:new Map(),
   locations:[], floors:[], rooms:[], characters:[], characterFields:[], npcs:[], entities:[], sessions:[], rolls:[], audioAssets:[], audioPlaylists:[], audioPlaylistItems:[],
   location:null, floor:null, selected:null, view:'table', tool:'move', zoom:100, campaignChannel:null, sessionChannel:null, audioPlayers:new Map(), audioLayers:new Map(),
-  audioEnabled:false, presenceChannel:null, online:1, isLoading:true, campaignChronicle:null, campaignAudioState:null
+  audioEnabled:false, presenceChannel:null, online:1, isLoading:true, campaignChronicle:null, campaignAudioState:null, chatMessages:[]
 };
 
 function isMaster(){ return state.profile?.account_type === 'master'; }
@@ -93,6 +93,13 @@ async function ensureCampaignWorld(campaignId){
   return data;
 }
 
+async function loadCampaignChat(){
+  if(!state.campaign)return; const {data,error}=await sb.from('campaign_chat_messages').select('*').eq('campaign_id',state.campaign.id).order('created_at',{ascending:true}).limit(200); if(error){console.warn('RPG HUB chat:',error);state.chatMessages=[];return;} state.chatMessages=data||[];
+}
+function renderChat(){const box=$('campaignChatMessages');if(!box)return;box.innerHTML=state.chatMessages.map(m=>{const p=profileFor(m.user_id);return '<article class="chatMessage '+(m.user_id===state.user?.id?'mine':'')+'"><div class="chatMessageMeta"><b>'+escapeHtml(p?.display_name||'Aventureiro')+'</b><time>'+escapeHtml(fmtDate(m.created_at))+'</time></div><div class="chatMessageBody">'+escapeHtml(m.content).replace(/\n/g,'<br>')+'</div></article>';}).join('')||'<div class="chatEmpty">Nenhuma mensagem ainda. Comece a conversa da mesa.</div>';box.scrollTop=box.scrollHeight;}
+async function sendChatMessage(){const input=$('campaignChatInput');if(!input||!state.campaign)return;const content=input.value.trim();if(!content)return;input.disabled=true;try{const {data,error}=await sb.from('campaign_chat_messages').insert({campaign_id:state.campaign.id,user_id:state.user.id,content,message_type:canEdit()?'master':'chat'}).select('*').maybeSingle();if(error)throw error;if(data&&!state.chatMessages.some(m=>m.id===data.id))state.chatMessages.push(data);input.value='';renderChat();}catch(e){toast(e.message||'Não foi possível enviar a mensagem.','error');}finally{input.disabled=false;input.focus();}}
+function wireChatControls(){$('campaignChatSend')?.addEventListener('click',sendChatMessage);$('campaignChatInput')?.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendChatMessage();}});}
+
 async function loadCampaignData(){
   if(!state.campaign)return;
   const campaignId=state.campaign.id;
@@ -142,6 +149,7 @@ async function loadCampaignData(){
   }
 
   await loadFloors();
+  await loadCampaignChat();
   if(state.locations.length&&!state.floors.length&&canEdit()){
     await ensureCampaignWorld(campaignId);
     await loadFloors();
@@ -418,6 +426,7 @@ async function subscribeRealtime(){
     campaign.on('broadcast',{event:'room_rotate'},({payload})=>{if(payload?.user_id!==state.user.id)receiveRoomRotate(payload);});
     campaign.on('broadcast',{event:'scene_change'},({payload})=>{if(payload?.user_id!==state.user.id)receiveSceneChange(payload);});
     campaign.on('broadcast',{event:'audio'},({payload})=>{if(payload?.user_id!==state.user.id)receiveAudio(payload);});
+    campaign.on('postgres_changes',{event:'INSERT',schema:'public',table:'campaign_chat_messages',filter:`campaign_id=eq.${campaignId}`},payload=>{const row=payload?.new;if(!row?.id||state.chatMessages.some(m=>m.id===row.id))return;state.chatMessages.push(row);renderChat();});
     campaign.on('postgres_changes',{event:'*',schema:'public',table:'campaign_audio_state',filter:`campaign_id=eq.${campaignId}`},async payload=>{
       if(canEdit()||!state.audioEnabled)return;
       const row=payload?.new;
@@ -672,7 +681,7 @@ function renderMasterDashboard(){
   setTimeout(wireAudioControls,0);
 }
 
-function renderAll(){renderShell();renderTable();renderCharacters();renderWorld();renderSessions();renderNpcs();renderDice();renderMasterDashboard();renderChronicle();renderView();}
+function renderAll(){renderShell();renderTable();renderCharacters();renderWorld();renderSessions();renderNpcs();renderDice();renderMasterDashboard();renderChronicle();renderChat();renderView();}
 function renderShell(){
   $('campaignRole').textContent=isCampaignMaster()?'Mestre da mesa · controle total':state.role==='co_master'?'Co-mestre · permissões da campanha':isMaster()?'Conta Mestre · participante':'Jogador'; const mobileUserName=$('mobileUserName');if(mobileUserName)mobileUserName.textContent=state.profile?.display_name||'Usuário'; $('masterBadge').classList.toggle('hidden',!isCampaignMaster()); const accountTypeLabel=$('accountTypeLabel'); if(accountTypeLabel)accountTypeLabel.textContent=isMaster()?'Mestre':'Jogador';
   $('workspaceTitle').textContent=state.campaign?.name||'RPG HUB'; $('workspaceSubtitle').textContent=state.campaign?.description||'Campanha persistente'; $('boardLocationName').textContent=currentLocation()?.name||'Sem local'; $('userName').textContent=state.profile?.display_name||state.user?.email?.split('@')[0]||'Aventureiro';
@@ -2512,6 +2521,8 @@ async function finishDraw(e){if(!drawStart||drawPointerId!==e.pointerId)return;c
 $('board').addEventListener('pointerup',finishDraw,true);
 $('board').addEventListener('pointercancel',e=>{if(drawPointerId===e.pointerId){drawStart=null;drawPointerId=null;drawPreview?.remove();drawPreview=null;}},true);
 const originalOpenRoom=openRoomModal;
+
+wireChatControls();
 
 Object.assign(window,{
   state,sb,rpgSupabase:sb,escapeHtml,canEdit,canCreateCampaign,isMaster,isCampaignMaster,currentLocation,
