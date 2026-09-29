@@ -1,484 +1,643 @@
-# RPG HUB
+# ✦ RPG HUB
 
-> **Uma mesa virtual completa para organizar, preparar, narrar e jogar campanhas de RPG em tempo real.**
+> **Uma mesa virtual para preparar, organizar, narrar e jogar campanhas de RPG em tempo real.**
 
-**Mapa · Visão Geral · Fichas · Dados · Áudio · Sessões · NPCs · Mundo persistente · Painel do Mestre · Temas personalizados · Realtime**
+**Visão Geral · Mesa · Mapa · Fichas · Dados · Áudio · Sessões · NPCs · Mundo persistente · Painel do Mestre · Temas personalizados · Realtime · Mobile**
+
+<p align="center">
+  <img src="favicon.svg" width="72" alt="RPG HUB">
+</p>
+
+<p align="center"><strong>Carlos Henrique — RPG HUB</strong></p>
 
 ---
 
 ## Sobre o projeto
 
-O **RPG HUB** foi criado por **Carlos Henrique** para centralizar em uma única aplicação as ferramentas que normalmente ficam espalhadas entre Discord, planilhas, sites de rolagem, mapas e documentos.
+O **RPG HUB** é um projeto criado por **Carlos Henrique** para centralizar, em uma única aplicação, as ferramentas usadas durante uma campanha de RPG.
 
-A proposta é simples: o Mestre prepara a campanha e controla a mesa, enquanto os jogadores acompanham as mudanças em tempo real, sem precisar atualizar a página manualmente.
+A proposta é reduzir a necessidade de alternar entre mapa, fichas, sites de rolagem, documentos e ferramentas externas. O Mestre prepara e conduz a campanha enquanto os jogadores acompanham o estado compartilhado da mesa em tempo real.
+
+A estrutura atual separa preparação, informação e jogo:
 
 ```text
-Campanha → Visão Geral → Mesa → Mundo → Personagens → Sessões → Aventura
+Login
+  ↓
+Campanha
+  ↓
+Visão Geral
+  ↓
+Mesa
+  ├── Mapa / Mundo
+  ├── Personagens
+  ├── Sessões
+  ├── NPCs & monstros
+  ├── Utilitários / Dados
+  ├── Painel do Mestre
+  └── Crônica da mesa
 ```
 
-> **Autor:** Carlos Henrique  
-> **Projeto:** RPG HUB  
-> **Status:** Em desenvolvimento ativo
+**Status:** desenvolvimento ativo.
 
 ---
 
-## Preview
+# Preview
 
-> Os previews abaixo são ilustrativos e representam a experiência visual atual do projeto.
+O repositório possui previews visuais para apresentar as principais áreas da aplicação.
 
-![Visão da Mesa](docs/preview/mesa.svg)
+| Mesa | Sistema de dados |
+|---|---|
+| ![Mesa](docs/preview/mesa.svg) | ![Dados](docs/preview/dados.svg) |
 
-![Sistema de Dados](docs/preview/dados.svg)
+| Ficha de personagem | Painel do Mestre |
+|---|---|
+| ![Ficha](docs/preview/personagem.svg) | ![Mestre](docs/preview/mestre.svg) |
 
-![Ficha de Personagem](docs/preview/personagem.svg)
-
-![Painel do Mestre](docs/preview/mestre.svg)
-
----
-
-## Experiência do RPG HUB
-
-O projeto foi estruturado para separar **informação**, **preparação** e **jogo**.
-
-### Visão Geral
-
-A página que aparece antes da Mesa funciona como o dashboard da campanha.
-
-Nela o usuário pode encontrar rapidamente:
-
-- Resumo da campanha.
-- Acesso à Mesa.
-- Acesso aos personagens.
-- Sistema de dados.
-- Áudio da sessão.
-- Atualizações da campanha.
-- Presença dos jogadores.
-- Indicadores e atalhos rápidos.
-
-A ideia é manter a **Mesa limpa**, deixando informações administrativas e atalhos na Visão Geral.
-
-### Mesa
-
-A Mesa é dedicada à experiência de jogo:
-
-- Mapa do cenário.
-- Locais.
-- Andares.
-- Cômodos.
-- Personagens.
-- Entidades.
-- NPCs/monstros.
-- Movimento.
-- Estado dos elementos.
-- Recursos da campanha em tempo real.
+> Os previews são mantidos dentro de `docs/preview/` para que a documentação continue visualmente independente da aplicação publicada.
 
 ---
 
-# Como usar
+# Principais recursos
 
-## Para o Mestre
+## 1. Autenticação e contas
 
-1. Crie sua conta.
-2. Crie uma campanha.
-3. Compartilhe o código da campanha com os jogadores.
-4. Configure locais, andares e cômodos.
-5. Prepare o mapa e os elementos do cenário.
-6. Crie ou revise personagens, NPCs e monstros.
-7. Inicie uma sessão.
-8. Abra a Visão Geral para acompanhar a campanha.
-9. Entre na Mesa para conduzir a aventura.
-10. Use o Painel do Mestre para acompanhar rolagens, fichas e áudio.
-
-## Para o jogador
-
-1. Crie sua conta.
-2. Entre em uma campanha usando o código fornecido pelo Mestre.
-3. Crie ou acesse seu personagem.
-4. Entre na Mesa.
-5. Acompanhe o mapa e as alterações da campanha.
-6. Role dados quando necessário.
-7. Acompanhe o áudio da sessão.
-8. Personalize a aparência da interface de acordo com sua preferência.
-
----
-
-# Funcionalidades
-
-## Autenticação e contas
-
-- Login com Supabase Auth.
-- Criação de conta.
+- Login e cadastro.
 - Recuperação de senha.
 - Perfil do usuário.
 - Nome de exibição.
-- Tipo de conta.
-- Redirecionamento automático para a Mesa quando autenticado.
+- Identificação entre Mestre e jogador.
+- Acesso protegido às áreas da campanha.
+- Identidade **Carlos Henrique — RPG HUB** apresentada na tela de autenticação.
+- Favicon próprio do RPG HUB nas páginas da aplicação.
 
-## Campanhas
-
-- Criação de campanhas.
-- Entrada por código.
-- Membros da campanha.
-- Identificação de Mestre e jogadores.
-- Controle de recursos conforme o papel do usuário.
-
-## Visão Geral
-
-Dashboard independente da Mesa para evitar poluição visual.
-
-Inclui:
-
-- Hero da campanha.
-- Atalhos rápidos.
-- Cards de recursos.
-- Atualizações.
-- Presença dos jogadores.
-- Acesso rápido à Mesa.
-- Acesso aos personagens.
-- Dados.
-- Áudio.
+A autenticação utiliza **Supabase Auth**.
 
 ---
 
-# Sistema de temas
+## 2. Campanhas
 
-A interface possui **personalização visual individual**.
+O sistema trabalha com campanhas persistentes e participantes associados.
 
-Cada usuário pode escolher seu próprio tema sem alterar a aparência dos demais participantes da campanha.
+Recursos:
 
-### Temas disponíveis
+- Criar campanhas.
+- Selecionar campanhas.
+- Entrar em campanhas por código.
+- Identificar o papel do participante.
+- Diferenciar Mestre e jogador.
+- Excluir campanhas quando permitido.
+- Convite para participantes.
+- Estado compartilhado da campanha.
 
-- Violeta
-- Azul
-- Ciano
-- Esmeralda
-- Dourado
-- Laranja
-- Rosa
-- Rubi
+Fluxo básico:
 
-A cor escolhida funciona como **accent color**, mantendo a base escura/premium do RPG HUB.
+```text
+Mestre cria campanha
+        ↓
+Compartilha o acesso
+        ↓
+Jogadores entram
+        ↓
+Todos passam a compartilhar o estado da campanha
+```
 
-A personalização pode influenciar:
+---
 
-- Sidebar.
-- Navegação.
-- Botões.
-- Cards.
-- Estados ativos.
-- Inputs em foco.
-- Elementos interativos.
-- Destaques.
-- Dashboard.
+# 3. Visão Geral
+
+A **Visão Geral** foi separada da Mesa para evitar que o espaço de jogo fique poluído com informações administrativas.
+
+Ela funciona como o dashboard da campanha e reúne atalhos e informações rápidas, como:
+
+- Nome da campanha.
+- Estado da campanha.
+- Acesso à Mesa.
+- Sistema de dados.
+- Personagens.
+- Áudio da sessão.
+- Presença dos jogadores.
+- Atualizações recentes.
+- Recursos da campanha.
+- Acesso aos utilitários.
+
+A Mesa fica reservada para o jogo; a Visão Geral concentra a navegação e os resumos.
+
+---
+
+# 4. Mesa virtual
+
+A **Mesa** é a área principal de jogo.
+
+Ela possui uma interface com sidebar fixa, navegação por áreas e um espaço dedicado ao cenário.
+
+### Navegação
+
+- Visão geral.
 - Mesa.
 - Personagens.
+- Mundo.
+- Sessões.
+- NPCs & monstros.
 - Utilitários.
-- Painel do Mestre.
-- Autenticação e outras áreas da aplicação.
+- Painel do Mestre — somente Mestre.
+- Crônica da mesa — somente Mestre.
 
-A preferência é salva no navegador do usuário.
+### Mapa / cenário
 
-```text
-Jogador A → Azul
-Jogador B → Rubi
-Jogador C → Esmeralda
-Mestre    → Violeta
-```
-
-Todos podem permanecer na mesma campanha simultaneamente.
-
----
-
-# Mapa e mundo persistente
-
-A estrutura do mundo segue uma hierarquia:
-
-```text
-Campanha
- └── Local
-      └── Andar
-           └── Cômodo
-                └── Entidades
-```
-
-O sistema suporta:
+O Mestre pode trabalhar com:
 
 - Locais.
 - Andares.
 - Cômodos.
 - Entidades.
+- Personagens.
+- NPCs.
+- Criaturas.
 - Posicionamento.
 - Movimento.
 - Redimensionamento.
-- Rotação dos cômodos.
-- Alterações do cenário.
-- Persistência das informações.
-- Atualização em tempo real.
+- Rotação de cômodos.
+- Estado persistente do cenário.
 
-Quando o Mestre altera o cenário, os jogadores podem receber a atualização sem precisar apertar `F5`.
+As alterações do mundo são preparadas para sincronização em tempo real, evitando que cada jogador precise usar `F5` para acompanhar uma mudança.
 
 ---
 
-# Personagens e fichas
+# 5. Mundo persistente
 
-As fichas foram estruturadas para funcionar como um recurso real da campanha.
-
-Incluem:
-
-- Nome.
-- Jogador.
-- HP atual.
-- HP máximo.
-- Defesa.
-- Atributos.
-- Equipamentos.
-- Informações adicionais.
-- Campos personalizados.
-- Estado do personagem.
-
-### Fichas personalizáveis
-
-O Mestre pode definir campos adicionais para adaptar as fichas ao sistema de RPG utilizado.
-
-### HP e mapa
-
-Quando um personagem chega a **0 HP**, ele pode ser retirado visualmente do mapa sem perder suas informações históricas.
-
-Isso permite preservar o registro do que aconteceu durante a campanha.
-
-### Administração
-
-O Mestre pode:
-
-- Criar fichas.
-- Editar fichas.
-- Excluir fichas.
-- Acompanhar HP.
-- Ver defesa.
-- Consultar informações dos personagens.
-
----
-
-# Sistema de dados
-
-O RPG HUB possui rolagem integrada à Mesa.
-
-Exemplos:
+A estrutura do mundo segue uma hierarquia simples:
 
 ```text
-1d20
-2d20 + 4
-3d6 - 1
-1d37
-2d127
-1d999
+Campanha
+└── Local
+    └── Andar
+        └── Cômodo
+            └── Entidades
 ```
 
-## Dados disponíveis
+Isso permite montar um cenário com múltiplos andares e ambientes sem perder a organização.
 
-A biblioteca suporta diversos tipos de dados, incluindo dados tradicionais e valores personalizados.
+O estado do cenário pode ser persistido para que o Mestre continue a campanha de onde parou.
+
+### Atualizações em tempo real
+
+Quando o Mestre altera elementos compartilhados, a aplicação utiliza o estado da campanha para distribuir essas mudanças aos participantes.
 
 Exemplos:
+
+- Adicionar cômodo.
+- Alterar cômodo.
+- Rotacionar cômodo.
+- Mover entidade.
+- Alterar posição.
+- Adicionar personagem ao mapa.
+- Remover personagem do mapa.
+- Atualizar estado de elementos.
+
+---
+
+# 6. Personagens e fichas
+
+As fichas receberam uma reformulação visual para transformar a consulta do personagem em uma experiência mais organizada e agradável.
+
+A visualização atual utiliza um layout de ficha dividido em áreas, cards e blocos de informação com bordas arredondadas.
+
+### Informações principais
+
+- Nome.
+- Nível.
+- Jogador responsável.
+- Classe / função.
+- Origem / ancestralidade.
+- HP atual.
+- HP máximo.
+- Defesa / CA.
+- Sorte.
+- Atributos.
+- Armas.
+- Itens e equipamentos.
+- Ficha complementar.
+- Campos personalizados.
+- Avatar.
+
+### Atributos
+
+A ficha organiza atributos em uma grade própria:
+
+```text
+Força          Destreza
+Constituição   Inteligência
+Sabedoria      Carisma
+```
+
+### Combate
+
+Os principais dados de combate aparecem em cards independentes:
+
+```text
+┌────────────┐ ┌────────────┐ ┌────────────┐
+│    VIDA    │ │   DEFESA   │ │   SORTE    │
+│   28 / 30  │ │     15     │ │      0     │
+└────────────┘ └────────────┘ └────────────┘
+```
+
+### Armas
+
+A ficha possui uma área específica para armas utilizadas pelo personagem.
+
+As armas podem ser apresentadas como cards de texto, sem exigir uma imagem para cada item.
+
+### Itens & equipamentos
+
+O inventário possui uma área própria para registrar os equipamentos utilizados pelo personagem.
+
+### Ficha complementar
+
+Área destinada a:
+
+- História.
+- Personalidade.
+- Habilidades.
+- Observações.
+- Informações adicionais.
+
+### Campos personalizados
+
+A arquitetura permite trabalhar com campos adicionais para adaptar a ficha ao sistema de RPG utilizado pela campanha.
+
+---
+
+# 7. Fluxo de ficha
+
+O fluxo principal de consulta é:
+
+```text
+Personagens
+    ↓
+Abrir ficha
+    ↓
+Nova visualização da ficha
+    ↓
+Consultar informações
+    ↓
+Editar ficha
+```
+
+O botão **Editar ficha** fica na área superior da visualização da ficha, junto das ações principais.
+
+O Mestre também possui controle administrativo para criar, editar e excluir fichas quando autorizado.
+
+---
+
+# 8. HP e estado do personagem
+
+O sistema foi pensado para diferenciar o estado visual do personagem do histórico da campanha.
+
+Quando um personagem chega a **0 HP**, a intenção do fluxo é retirá-lo da representação ativa do mapa sem apagar suas informações históricas.
+
+Assim, o personagem pode deixar de aparecer como entidade ativa na cena enquanto seus dados continuam disponíveis para consulta e histórico.
+
+---
+
+# 9. Sistema de dados
+
+O RPG HUB possui uma área própria de rolagem de dados.
+
+A interface permite definir:
+
+- Quantidade de dados.
+- Tipo de dado.
+- Modificador.
+- Regra de rolagem.
+
+Exemplo:
+
+```text
+Quantidade: 2
+Tipo: d20
+Modificador: +0
+Regra: Normal
+
+Resultado:
+Dado 1 → 7
+Dado 2 → 16
+Total → 23
+```
+
+### Dados tradicionais
+
+Entre os formatos utilizados estão:
 
 ```text
 d2 · d4 · d6 · d8 · d10 · d12 · d20 · d30 · d50 · d100
 ```
 
-E também dados não tradicionais, como:
+### Dados personalizados
+
+O sistema também foi preparado para permitir dados não tradicionais, por exemplo:
 
 ```text
-d37 · d127 · d999 · d1000
+d37
+d127
+d999
+d1000
 ```
 
-## Dados personalizados
+A proposta é que o jogador possa criar um dado personalizado definindo o número de faces e reutilizá-lo normalmente no mecanismo de rolagem.
 
-O jogador pode criar dados personalizados definindo:
+Isso permite utilizar sistemas de RPG que não dependem exclusivamente dos dados tradicionais.
 
-- Nome.
-- Número de faces.
-- Atalho para reutilização.
+### Regras de rolagem
 
-Os dados personalizados continuam usando o mesmo mecanismo de rolagem do sistema.
-
-## Modos
+A interface contempla:
 
 - Normal.
 - Vantagem.
 - Desvantagem.
 - Modificadores positivos.
 - Modificadores negativos.
-- Quantidade múltipla de dados.
+- Múltiplos dados.
 
-O resultado pode apresentar:
+Os resultados podem apresentar os dados individualmente e o total calculado.
 
-- Fórmula.
+---
+
+# 10. Histórico de rolagens
+
+O histórico de rolagens foi retirado da área pública de Utilitários.
+
+Ele é destinado ao **Painel do Mestre**.
+
+O Mestre pode consultar informações como:
+
+- Jogador que realizou a rolagem.
+- Personagem associado.
+- Fórmula utilizada.
 - Dados individuais.
 - Modificador.
-- Total.
-- Regra aplicada.
-
----
-
-# Histórico de rolagens
-
-O histórico completo das rolagens é um recurso **privado do Mestre**.
-
-O Mestre pode visualizar:
-
-- Quem rolou.
-- Personagem utilizado.
-- Dados utilizados.
-- Resultados individuais.
 - Resultado final.
-- Modificadores.
-- Data e horário.
+- Regra aplicada.
+- Registro da ação.
 
-O histórico não fica exposto na área pública de Utilitários para os jogadores.
+Isso permite que o Mestre acompanhe as rolagens da mesa sem expor o histórico administrativo para todos os jogadores.
 
 ---
 
-# Painel do Mestre
+# 11. Painel do Mestre
 
-O Mestre possui uma área própria para administração da mesa.
+O RPG HUB possui uma área exclusiva para o Mestre.
 
-### Recursos
+O objetivo é concentrar funções administrativas sem sobrecarregar a interface da Mesa.
 
-- Histórico de dados.
-- Identificação do jogador que rolou.
-- Consulta de personagens.
-- HP.
-- Defesa.
-- Acesso às fichas.
+### O Mestre pode acompanhar
+
+- Histórico das rolagens.
+- Quem realizou cada rolagem.
+- Fichas dos personagens.
+- Estado dos personagens.
+- Recursos da campanha.
 - Controle de áudio.
-- Recursos administrativos da campanha.
+- Informações administrativas.
+- Crônica da mesa.
 
-O objetivo é concentrar ferramentas que não precisam ocupar espaço na Mesa principal.
+A navegação do Painel do Mestre é protegida por elementos específicos para o papel de Mestre.
 
 ---
 
-# Sistema de áudio
+# 12. Áudio da sessão
 
-O RPG HUB possui áudio compartilhado para a sessão.
+O RPG HUB possui uma área dedicada ao **áudio da sessão**.
 
-Recursos previstos na arquitetura atual:
+A ideia é permitir que o Mestre controle o ambiente sonoro da campanha e compartilhe o estado do áudio com os participantes.
 
-- Controle de áudio da campanha.
-- Playlists.
+Recursos da arquitetura:
+
+- Controle de áudio da sessão.
 - Assets de áudio.
-- Estado compartilhado da sessão.
-- Sincronização em tempo real.
+- Playlists.
+- Estado compartilhado.
+- Controles para o Mestre.
+- Sincronização da sessão.
 
-A intenção é permitir que os participantes escutem o mesmo ambiente sonoro enquanto a campanha acontece.
-
----
-
-# Sessões
-
-As campanhas podem ser divididas em sessões e cenas.
-
-Isso permite organizar a evolução da aventura e manter o contexto da campanha estruturado.
+A interface mantém o áudio separado da área principal do mapa para não poluir a Mesa.
 
 ---
 
-# NPCs e monstros
+# 13. Sessões
 
-Área dedicada à organização de personagens não jogáveis e criaturas.
+As campanhas podem ser organizadas por sessões e cenas.
 
-Pode ser utilizada pelo Mestre para preparar encontros, inimigos e personagens relevantes para a aventura.
-
----
-
-# Crônica da mesa
-
-A campanha possui uma área de crônica para registrar acontecimentos importantes.
-
-O recurso é pensado como um registro da narrativa e pode ser utilizado pelo Mestre para manter a história organizada ao longo das sessões.
+Isso permite separar diferentes momentos da aventura e manter a evolução da campanha estruturada.
 
 ---
 
-# Realtime
+# 14. NPCs & monstros
 
-O RPG HUB utiliza **Supabase Realtime** para sincronizar alterações entre os participantes.
+Área destinada ao gerenciamento de entidades que não são personagens jogadores.
 
-Fluxo conceitual:
+Pode ser utilizada para organizar:
+
+- NPCs.
+- Monstros.
+- Criaturas.
+- Personagens secundários.
+- Entidades utilizadas no cenário.
+
+---
+
+# 15. Crônica da mesa
+
+A crônica funciona como um registro narrativo da campanha.
+
+O objetivo é manter acontecimentos importantes organizados entre as sessões e preservar a história da mesa.
+
+---
+
+# 16. Sistema de temas personalizados
+
+Uma das personalizações adicionadas recentemente é o **seletor global de temas**.
+
+O usuário pode escolher uma variação de cor para personalizar a interface de acordo com sua preferência.
+
+### Temas disponíveis
+
+- 🟣 Violeta
+- 🔵 Azul
+- 🟦 Ciano
+- 🟢 Esmeralda
+- 🟡 Dourado
+- 🟠 Laranja
+- 🌸 Rosa
+- 🔴 Rubi
+
+A cor selecionada funciona como a cor de destaque da interface.
+
+### O tema afeta
+
+- Sidebar.
+- Navegação.
+- Botões.
+- Cards.
+- Bordas de destaque.
+- Estados ativos.
+- Foco de inputs.
+- Elementos interativos.
+- Dashboard.
+- Mesa.
+- Personagens.
+- Utilitários.
+- Painel do Mestre.
+- Áreas de autenticação.
+
+### Personalização individual
+
+A preferência é armazenada no navegador do próprio usuário.
+
+Isso significa que participantes da mesma campanha podem utilizar cores diferentes:
 
 ```text
-Alteração
-   ↓
-Supabase
-   ↓
-Realtime
-   ↓
-Participantes da campanha
-   ↓
-Interface atualizada
+Mestre      → Violeta
+Jogador 01  → Azul
+Jogador 02  → Esmeralda
+Jogador 03  → Rubi
 ```
 
-Entre os eventos contemplados pela arquitetura estão:
+Uma escolha de tema não deve alterar a preferência visual dos outros participantes.
 
-- Personagens.
-- Entidades.
-- Movimento.
-- Cômodos.
-- Redimensionamento.
-- Rotação.
-- Cenário.
-- Sessões.
-- Rolagens.
-- Áudio.
-- Presença.
+### Local do seletor
 
-A proposta é reduzir ao máximo a necessidade de atualizar a página manualmente.
+O seletor fica associado à área inferior da sidebar, próximo ao perfil do usuário, mantendo as configurações visuais fora da Mesa para evitar poluição visual.
 
 ---
 
-# Interface e responsividade
+# 17. Interface responsiva
 
-O projeto possui interface adaptada para diferentes tamanhos de tela.
+A interface foi trabalhada para funcionar em desktop e dispositivos móveis.
 
 ### Desktop
 
 - Sidebar fixa.
-- Navegação completa.
-- Painéis amplos.
-- Dashboard com cards.
-- Mapa com área de trabalho maior.
+- Navegação lateral.
+- Área de trabalho ampla.
+- Cards organizados em grids.
+- Mapa com espaço maior.
+- Painéis laterais para controles.
 
 ### Mobile
 
-- Navegação adaptada.
-- Layout responsivo.
-- Cards reorganizados.
-- Modais adaptados.
-- Controles acessíveis em telas menores.
+A experiência mobile foi adaptada para preservar as informações em vez de simplesmente escondê-las.
+
+A interface pode reorganizar:
+
+- Sidebar.
+- Navegação.
+- Cards.
+- Fichas.
+- Modais.
+- Formulários.
+- Controles do mapa.
+- Painéis administrativos.
+
+O objetivo é manter as funções acessíveis mesmo em telas pequenas.
 
 ---
 
-# Privacidade e permissões
+# 18. Sidebar e navegação
 
-O sistema diferencia Mestre e jogador.
+A sidebar foi estruturada para permanecer estável durante a navegação e evitar que ações importantes, como perfil e saída, desapareçam quando o conteúdo da página cresce.
 
-Recursos administrativos incluem:
+No mobile, a navegação precisa continuar disponível por um mecanismo adaptado à tela, evitando que o usuário fique preso em uma única área da aplicação.
+
+---
+
+# 19. Realtime
+
+O RPG HUB utiliza **Supabase Realtime** como parte da arquitetura de sincronização.
+
+Fluxo conceitual:
+
+```text
+Mestre / Jogador
+       ↓
+Alteração na aplicação
+       ↓
+Supabase
+       ↓
+Realtime
+       ↓
+Participantes da campanha
+       ↓
+Interface atualizada
+```
+
+O mecanismo é utilizado para suportar a experiência compartilhada da campanha.
+
+Exemplos de estados que precisam permanecer sincronizados:
+
+- Personagens.
+- Personagens adicionados à mesa.
+- Cômodos.
+- Rotação de cômodos.
+- Posicionamento.
+- Entidades.
+- Estado do cenário.
+- Sessões.
+- Presença.
+- Rolagens.
+- Áudio.
+
+A meta é reduzir a necessidade de atualização manual da página.
+
+---
+
+# 20. Permissões
+
+A aplicação diferencia os recursos disponíveis para Mestre e jogador.
+
+### Jogador
+
+Pode acessar recursos da campanha destinados à participação na mesa, como:
+
+- Mesa.
+- Personagens.
+- Dados.
+- Mundo.
+- Sessões.
+- NPCs conforme permissão.
+- Áudio da sessão.
+- Personalização visual.
+
+### Mestre
+
+Além dos recursos de jogador, possui acesso administrativo a áreas como:
 
 - Painel do Mestre.
-- Histórico completo de rolagens.
-- Crônica.
-- Administração de fichas.
-- Controle de recursos da campanha.
+- Histórico de rolagens.
+- Gerenciamento de fichas.
+- Exclusão de fichas.
+- Controle de áudio.
+- Crônica da mesa.
+- Recursos de preparação do cenário.
 
-A aplicação utiliza verificações de permissão no frontend e deve utilizar **RLS no Supabase** para garantir a proteção das operações sensíveis no banco.
-
-> Nunca coloque chaves administrativas ou secrets do Supabase no frontend.
+> A segurança definitiva das operações deve ser garantida também pelas políticas de acesso do banco, especialmente através de **RLS no Supabase**. Nunca exponha chaves administrativas no frontend.
 
 ---
 
-# Arquitetura
+# 21. Arquitetura
 
-Stack principal:
+### Stack principal
 
-**HTML5 · CSS3 · JavaScript · Supabase JS 2.117.2 · PostgreSQL · Supabase Auth · Supabase Realtime · GitHub · Vercel**
+- **HTML5**
+- **CSS3**
+- **JavaScript**
+- **Supabase JS 2.117.2**
+- **PostgreSQL / Supabase**
+- **Supabase Auth**
+- **Supabase Realtime**
+- **GitHub**
+- **Vercel**
 
-### Principais entidades
+### Entidades principais utilizadas pela aplicação
 
 ```text
 profiles
@@ -499,102 +658,281 @@ campaign_audio_state
 campaign_chronicles
 ```
 
-### Arquivos principais
+### Arquivos importantes
 
 ```text
 index.html
 login.html
 mesa.html
 styles.css
+mobile-responsive-fixes.css
 app.js
 supabase.js
+rpg-theme-customizer.js
+character-sheet-viewer.js
 rpg-realtime-enhancements.js
 rpg-character-dice-enhancements.js
-rpg-theme-customizer.js
 rpg-dashboard-ui.js
 docs/
 ```
 
 ---
 
-# Desenvolvimento
+# 22. Identidade visual
 
-Clone o repositório:
+O RPG HUB utiliza uma linguagem visual baseada em:
+
+- Interface escura.
+- Roxo como destaque padrão.
+- Cards com bordas arredondadas.
+- Contraste elevado.
+- Tipografia clara.
+- Componentes compactos.
+- Estados ativos destacados.
+- Elementos de interface com aparência de aplicação desktop.
+
+O sistema de temas permite alterar a cor de destaque sem destruir a identidade visual geral.
+
+---
+
+# 23. Favicon e identidade da aplicação
+
+As páginas do RPG HUB utilizam o ícone oficial do projeto através de `favicon.svg`.
+
+Exemplo no HTML:
+
+```html
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+```
+
+Isso faz com que o ícone apareça na aba do navegador e reforça a identidade visual do projeto.
+
+---
+
+# Como usar
+
+## Mestre
+
+1. Crie sua conta.
+2. Entre na aplicação.
+3. Crie uma campanha.
+4. Gere/compartilhe o acesso da campanha.
+5. Configure o mundo.
+6. Crie os cômodos e andares.
+7. Cadastre personagens, NPCs e monstros.
+8. Prepare as fichas.
+9. Inicie uma sessão.
+10. Entre na Mesa.
+11. Controle o cenário e os recursos da campanha.
+12. Utilize o Painel do Mestre para acompanhar rolagens e informações administrativas.
+13. Controle o áudio da sessão.
+14. Registre acontecimentos importantes na crônica.
+
+## Jogador
+
+1. Crie sua conta.
+2. Entre na campanha usando o acesso fornecido pelo Mestre.
+3. Crie ou selecione seu personagem.
+4. Entre na Mesa.
+5. Acompanhe o mapa e o estado da campanha.
+6. Role os dados normalmente ou utilize dados personalizados.
+7. Acompanhe os recursos de áudio da sessão.
+8. Personalize a cor da interface no seletor de temas.
+
+---
+
+# Desenvolvimento local
+
+Clone o projeto:
 
 ```bash
 git clone https://github.com/Olivzx/RPG-Hub-by-Carlos-H.git
 cd RPG-Hub-by-Carlos-H
 ```
 
-Configure a conexão do Supabase em `supabase.js`.
+Como o projeto utiliza recursos web e Supabase, recomenda-se executar através de um servidor HTTP local em vez de abrir os arquivos diretamente com `file://`.
 
-Para desenvolvimento local, utilize um servidor HTTP local em vez de abrir os arquivos diretamente pelo `file://`.
+Exemplo com Python:
+
+```bash
+python -m http.server 8000
+```
+
+Depois acesse a aplicação pelo endereço local fornecido pelo servidor.
 
 ---
 
 # Deploy
 
-Fluxo atual:
+O projeto está estruturado para publicação através do GitHub e Vercel:
 
 ```text
+Código
+  ↓
 GitHub
-   ↓
-Branch principal / branch de publicação
-   ↓
+  ↓
+Branch principal
+  ↓
 Vercel
-   ↓
-RPG HUB
+  ↓
+RPG HUB publicado
 ```
 
-Após qualquer publicação, recomenda-se testar:
+Depois de uma publicação, recomenda-se validar principalmente:
 
 - Login.
 - Cadastro.
 - Criação de campanha.
-- Entrada de jogador.
+- Entrada na campanha.
 - Visão Geral.
 - Mesa.
+- Mapa.
 - Personagens.
+- Visualização da ficha.
+- Edição da ficha.
 - Dados.
 - Dados personalizados.
+- Histórico privado do Mestre.
 - Realtime.
 - Áudio.
 - Painel do Mestre.
-- Permissões.
 - Temas.
-- Responsividade.
+- Mobile.
+- Permissões.
+- Favicon.
 
 ---
 
-# Evolução recente
+# Evolução recente do projeto
 
-O RPG HUB passou por uma série de evoluções para sair de uma estrutura inicial e chegar a uma plataforma de mesa virtual mais completa.
+O RPG HUB recebeu uma sequência grande de melhorias de arquitetura, experiência de uso e interface.
 
-Entre as principais mudanças:
+### Mundo e realtime
 
+- Atualização de personagens na mesa sem F5.
+- Atualização de cômodos em tempo real.
+- Rotação de cômodos.
+- Sincronização de elementos do cenário.
 - Mundo persistente.
-- Supabase Realtime.
-- Atualização de personagens sem F5.
-- Atualização de cômodos sem F5.
-- Rotação de cômodos em tempo real.
-- Sincronização de cenário.
-- HP e remoção visual de personagens.
-- Histórico de personagens.
-- Exclusão de fichas pelo Mestre.
-- Áudio compartilhado.
-- Painel privado do Mestre.
-- Histórico de rolagens privado.
-- Identificação do jogador que rolou.
-- Sistema expandido de dados.
+- Estrutura por locais, andares e cômodos.
+- Estado compartilhado da campanha.
+
+### Personagens
+
+- Administração de fichas pelo Mestre.
+- Exclusão de fichas.
+- Histórico das fichas.
+- Tratamento de personagem com HP zerado.
+- Nova visualização de ficha.
+- Cards de combate.
+- Cards de atributos.
+- Área de armas.
+- Área de itens e equipamentos.
+- Ficha complementar.
+- Campos personalizados.
+- Avatar.
+- Botão de edição integrado à visualização da ficha.
+
+### Dados
+
+- Sistema de rolagem integrado.
+- Mais opções de dados.
+- Dados não tradicionais.
 - Dados personalizados.
-- Reformulação visual das fichas.
+- Quantidade múltipla.
+- Modificadores.
+- Regras de rolagem.
+- Histórico privado para o Mestre.
+- Registro de quem realizou a rolagem.
+
+### Mestre
+
+- Painel próprio.
+- Histórico de rolagens.
+- Consulta das fichas.
+- Controle de áudio.
+- Recursos administrativos.
+- Crônica da mesa.
+
+### Interface
+
 - Visão Geral separada da Mesa.
 - Sidebar fixa.
-- Sistema de temas personalizados.
-- Temas aplicados globalmente à aplicação.
+- Sistema global de temas.
+- Seletor de cores na área do perfil/sidebar.
+- Tema individual por dispositivo.
 - Melhorias de responsividade.
-- Correção do fluxo de criação de personagem relacionado a `room.appendChild is not a function`.
+- Navegação mobile.
+- Identidade visual consistente entre as áreas.
+- Favicon do projeto.
 - Identificação de autoria na tela de login.
+
+### Correções e estabilidade
+
+- Correção do fluxo de criação de personagem entre campanhas.
+- Correções relacionadas ao erro `room.appendChild is not a function`.
+- Ajustes de layout em telas pequenas.
+- Correções de posicionamento de elementos da interface.
+- Separação de recursos administrativos para reduzir poluição visual.
+
+---
+
+# Estrutura visual do projeto
+
+```text
+RPG HUB
+│
+├── Login
+│   └── Autenticação + identidade do projeto
+│
+├── Visão Geral
+│   ├── Resumo da campanha
+│   ├── Atualizações
+│   ├── Presença
+│   └── Atalhos
+│
+├── Mesa
+│   ├── Mapa
+│   ├── Andares
+│   ├── Cômodos
+│   ├── Entidades
+│   └── Estado em tempo real
+│
+├── Personagens
+│   ├── Fichas
+│   ├── Visualização detalhada
+│   ├── Edição
+│   ├── Armas
+│   └── Equipamentos
+│
+├── Mundo
+├── Sessões
+├── NPCs & monstros
+├── Utilitários
+│   └── Dados
+│
+├── Painel do Mestre
+│   ├── Rolagens
+│   ├── Fichas
+│   └── Áudio
+│
+└── Crônica da mesa
+```
+
+---
+
+# Documentação complementar
+
+Os materiais complementares do projeto ficam organizados em `docs/`.
+
+```text
+docs/
+└── preview/
+    ├── mesa.svg
+    ├── dados.svg
+    ├── personagem.svg
+    └── mestre.svg
+```
 
 ---
 
@@ -602,39 +940,21 @@ Entre as principais mudanças:
 
 ## Carlos Henrique — RPG HUB
 
-O RPG HUB é um projeto desenvolvido por **Carlos Henrique**.
+O **RPG HUB** é um projeto desenvolvido por **Carlos Henrique**.
 
-A identidade do projeto também é apresentada na tela de autenticação da aplicação para deixar clara a autoria e origem do sistema.
-
----
-
-# Documentação complementar
-
-- [Guia completo de uso](docs/GUIA-DE-USO.md)
-- [Arquitetura e segurança](docs/ARQUITETURA.md)
-- [Histórico de evolução](docs/HISTORICO.md)
+A autoria também aparece dentro da experiência de autenticação da aplicação para deixar clara a identidade do projeto.
 
 ---
 
-# Estado atual
+# Licença
 
-**Projeto em desenvolvimento ativo.**
+Este repositório representa um projeto pessoal em desenvolvimento.
 
-```text
-main
-deploy/rpg-hub-stable
-```
-
-Novas funcionalidades continuam sendo adicionadas conforme o projeto evolui.
+Antes de reutilizar, redistribuir ou incorporar partes do projeto em outro produto, consulte os arquivos e as condições de licença presentes no repositório.
 
 ---
 
-<div align="center">
-
-### RPG HUB
-
-**Mapa. Fichas. Dados. Áudio. Sessões. Mundo. Realtime. Tudo na mesma mesa.**
-
-**Desenvolvido por Carlos Henrique.**
-
-</div>
+<p align="center">
+  <strong>✦ RPG HUB</strong><br>
+  Uma mesa. Um mundo. Uma campanha persistente.
+</p>
