@@ -661,9 +661,16 @@ async function setActiveScene(floorId,roomId=null){
 }
 const movementSync={entity:new Map(),room:new Map(),seq:new Map(),last:new Map()};
 function movementSeq(key){
-  const next=(movementSync.seq.get(key)||0)+1;
-  movementSync.seq.set(key,next);
+  const next=Math.max(movementSync.seq.get(key)||0,loadMovementRevision(key))+1;
+  movementSync.seq.set(key,next);persistMovementRevision(key,next);
   return next;
+}
+function movementRevisionKey(key){return 'rpg-movement-revision:'+state.campaign?.id+':'+key}
+function persistMovementRevision(key,seq){
+  try{localStorage.setItem(movementRevisionKey(key),String(seq))}catch(_){}
+}
+function loadMovementRevision(key){
+  try{return Number(localStorage.getItem(movementRevisionKey(key))||0)}catch(_){return 0}
 }
 async function sendMovement(event,payload,key){
   if(!state.campaignChannel||!canEdit())return;
