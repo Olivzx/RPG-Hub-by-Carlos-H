@@ -18,8 +18,8 @@
   };
   function characterImage(c) { return first(c, ['avatar_url','avatar','image_url','photo_url','photo','portrait_url','portrait','foto_url','foto'], ''); }
   function customFields(c) { const raw = first(c, ['custom_fields','fields','extra_fields','metadata'], null); if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return []; return Object.entries(raw).filter(([_,v]) => v !== null && v !== undefined && String(v).trim() !== '').map(([k,v]) => [k,v]); }
-  function weapons(c) { return arr(first(c, ['weapons','weapon','armas','arma','armamentos','weapon_list'], '')); }
-  function equipment(c) { return arr(first(c, ['equipment','equipments','equipamentos','inventory','inventario','items','itens','gear'], '')); }
+  function weapons(c) { const sheet=c?.sheet_data&&typeof c.sheet_data==='object'&&!Array.isArray(c.sheet_data)?c.sheet_data:{}; return arr(first(c, ['weapons','weapon','armas','arma','armamentos','weapon_list'], sheet.weapons||'')); }
+  function equipment(c) { const sheet=c?.sheet_data&&typeof c.sheet_data==='object'&&!Array.isArray(c.sheet_data)?c.sheet_data:{}; return arr(first(c, ['equipment','equipments','equipamentos','inventory','inventario','items','itens','gear'], sheet.current_items||'')); }
   function itemLabel(item) { if (typeof item === 'string') return item; if (!item || typeof item !== 'object') return String(item ?? ''); return first(item, ['name','nome','title','item','description','descricao'], 'Item'); }
   function statCard(label, value, tone='') { return `<div class="rpg-sheet-stat ${tone}"><span>${esc(label)}</span><b>${esc(value || '—')}</b></div>`; }
   function itemCard(title) { return `<div class="rpg-sheet-item"><div class="rpg-sheet-item-icon">◆</div><div><b>${esc(title)}</b></div></div>`; }
