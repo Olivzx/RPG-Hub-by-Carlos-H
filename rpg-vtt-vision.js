@@ -175,22 +175,32 @@
 
   async function load(){
     const c=cid(),f=fid(),api=sb();if(!c||!f||!api)return;
-    const [a,b,d,g,e]=await Promise.all([
-      api.from('map_settings').select('*').eq('campaign_id',c).eq('floor_id',f).maybeSingle(),
-      api.from('map_walls').select('*').eq('campaign_id',c).eq('floor_id',f).order('created_at'),
-      api.from('vision_sources').select('*').eq('campaign_id',c).eq('floor_id',f).order('updated_at',{ascending:false}),
-      api.from('fog_regions').select('*').eq('campaign_id',c).eq('floor_id',f).order('created_at'),
-      session()?api.from('combat_encounters').select('id,current_index,round,status').eq('campaign_id',c).eq('session_id',session().id).order('created_at',{ascending:false}).limit(1):Promise.resolve({data:[]})
-    ]);
-    V.settings=a.data||{grid_enabled:true,snap_enabled:true,grid_size:5,unit_per_cell:5,fog_enabled:false,vision_enabled:false};
-    V.walls=b.data||[];V.sources=d.data||[];V.fog=g.data||[];V.combat.encounter=e.data?.[0]||null;V.combat.combatants=[];
-    if(V.combat.encounter){const q=await api.from('combatants').select('id,character_id,npc_id,name,conditions,turn_order').eq('encounter_id',V.combat.encounter.id).order('turn_order');if(!q.error)V.combat.combatants=q.data||[]}
+    const defaults={grid_enabled:true,snap_enabled:true,grid_size:5,unit_per_cell:5,fog_enabled:false,vision_enabled:false};
+    // Não reaproveitar a visão do andar/campanha anterior enquanto o novo estado está carregando.
+    V.settings=defaults;V.walls=[];V.sources=[];V.fog=[];V.combat.encounter=null;V.combat.combatants=[];
+    try{
+      const [a,b,d,g,e]=await Promise.all([
+        api.from('map_settings').select('*').eq('campaign_id',c).eq('floor_id',f).maybeSingle(),
+        api.from('map_walls').select('*').eq('campaign_id',c).eq('floor_id',f).order('created_at'),
+        api.from('vision_sources').select('*').eq('campaign_id',c).eq('floor_id',f).order('updated_at',{ascending:false}),
+        api.from('fog_regions').select('*').eq('campaign_id',c).eq('floor_id',f).order('created_at'),
+        session()?api.from('combat_encounters').select('id,current_index,round,status').eq('campaign_id',c).eq('session_id',session().id).order('created_at',{ascending:false}).limit(1):Promise.resolve({data:[]})
+      ]);
+      if(a.error)console.warn('[RPG HUB] Configuração de visão indisponível:',a.error);
+      if(b.error)console.warn('[RPG HUB] Paredes indisponíveis:',b.error);
+      if(d.error)console.warn('[RPG HUB] Fontes de visão indisponíveis:',d.error);
+      if(g.error)console.warn('[RPG HUB] Névoa indisponível:',g.error);
+      V.settings=a.data||defaults;
+      V.walls=b.error?[]:(b.data||[]);V.sources=d.error?[]:(d.data||[]);V.fog=g.error?[]:(g.data||[]);V.combat.encounter=e.data?.[0]||null;
+      if(V.combat.encounter){const q=await api.from('combatants').select('id,character_id,npc_id,name,conditions,turn_order').eq('encounter_id',V.combat.encounter.id).order('turn_order');if(!q.error)V.combat.combatants=q.data||[]}
+    }catch(error){
+      console.warn('[RPG HUB] Falha ao carregar camada de visão:',error);
+    }
     V.campaignId=c;V.floorId=f;V.lastKey=c+':'+f+':'+(session()?.id||'');
     window.rpgVttVisibilityReady=true;
     queue();
     setTimeout(()=>window.renderTable?.(),0);
   }
-
   async function saveWall(s,e){
     const dx=e.x-s.x,dy=e.y-s.y;if(Math.hypot(dx,dy)<1)return;
     const q=await sb().from('map_walls').insert({campaign_id:cid(),floor_id:fid(),x1:clamp(s.x),y1:clamp(s.y),x2:clamp(e.x),y2:clamp(e.y),thickness:2,blocks_vision:true,created_by:window.state.user.id}).select().single();
