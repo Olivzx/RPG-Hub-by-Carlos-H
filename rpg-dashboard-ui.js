@@ -11,12 +11,13 @@
     else {
       document.querySelectorAll('.view').forEach(el => el.classList.toggle('active', el.id === `view${view.charAt(0).toUpperCase()}${view.slice(1)}`));
       document.querySelectorAll('#sideNav [data-view]').forEach(btn => btn.classList.toggle('active', btn.dataset.view === view));
+      document.querySelectorAll('#mobileBottomNav [data-mobile-view]').forEach(btn => btn.classList.toggle('active', btn.dataset.mobileView === view));
     }
   }
 
   function goTo(view){
     const button = document.querySelector(`#sideNav [data-view="${view}"]`);
-    if(button && !button.classList.contains('rpg-dashboard-nav')){
+    if(button){
       button.click();
       return;
     }
@@ -28,25 +29,11 @@
     const tableView = document.getElementById('viewTable');
     if(!nav || !tableView || document.getElementById('viewDashboard')) return;
 
-    /* Cria a navegação "Visão geral" imediatamente antes de Mesa. */
-    const tableButton = nav.querySelector('[data-view="table"]');
-    const dashboardButton = document.createElement('button');
-    dashboardButton.type = 'button';
-    dashboardButton.dataset.view = 'dashboard';
-    dashboardButton.className = 'rpg-dashboard-nav';
-    dashboardButton.innerHTML = '✦ <span>Visão geral</span>';
-    if(tableButton) nav.insertBefore(dashboardButton, tableButton);
-    else nav.prepend(dashboardButton);
+    /* A navegação da Visão Geral já existe no HTML principal.
+       Não criamos outro botão dinamicamente para evitar duplicação. */
+    const dashboardButton = nav.querySelector('[data-view="dashboard"]');
+    if(dashboardButton) dashboardButton.classList.add('rpg-dashboard-nav');
 
-    /* O app principal não conhece este botão porque ele é criado depois do carregamento.
-       Registramos o clique explicitamente para permitir voltar à Visão geral de qualquer aba. */
-    dashboardButton.addEventListener('click', (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      activateView('dashboard');
-    });
-
-    /* O dashboard é uma view independente. Nada é inserido dentro da Mesa. */
     const view = document.createElement('section');
     view.id = 'viewDashboard';
     view.className = 'view rpg-dashboard-view';
@@ -77,18 +64,18 @@
         <section class="rpg-dashboard-lower">
           <article class="rpg-activity-card">
             <header><div><span class="rpg-dashboard-kicker">CAMPANHA</span><h3>Estado da aventura</h3><p>Informações rápidas sobre o ambiente compartilhado.</p></div><span class="rpg-live-pill"><i></i> ONLINE</span></header>
-          <div class="rpg-activity-list" id="rpgDashboardActivity">
-            <div class="rpg-activity-item"><span class="rpg-activity-avatar">✦</span><div><b>Mesa sincronizada</b><small>O estado da campanha é compartilhado em tempo real entre os participantes.</small></div><time>agora</time></div>
-            <div class="rpg-activity-item"><span class="rpg-activity-avatar">◇</span><div><b>Dados disponíveis</b><small>As rolagens usam o sistema da sessão e podem incluir dados personalizados.</small></div><time>agora</time></div>
-            <div class="rpg-activity-item"><span class="rpg-activity-avatar">♙</span><div><b>Fichas da campanha</b><small>Os personagens permanecem sincronizados com a mesa.</small></div><time>agora</time></div>
-          </div>
-        </article>
-        <aside class="rpg-presence-card">
-          <header><div class="rpg-feature-icon small">♧</div><div><h3>Presença dos jogadores</h3><p><strong id="rpgDashboardOnlineCount">—</strong> conectados</p></div></header>
-          <div class="rpg-presence-status"><i></i><span>Campanha online</span></div>
-          <div class="rpg-presence-copy">A comunicação da campanha permanece ativa enquanto os participantes estiverem conectados.</div>
-        </aside>
-      </section>
+            <div class="rpg-activity-list" id="rpgDashboardActivity">
+              <div class="rpg-activity-item"><span class="rpg-activity-avatar">✦</span><div><b>Mesa sincronizada</b><small>O estado da campanha é compartilhado em tempo real entre os participantes.</small></div><time>agora</time></div>
+              <div class="rpg-activity-item"><span class="rpg-activity-avatar">◇</span><div><b>Dados disponíveis</b><small>As rolagens usam o sistema da sessão e podem incluir dados personalizados.</small></div><time>agora</time></div>
+              <div class="rpg-activity-item"><span class="rpg-activity-avatar">♙</span><div><b>Fichas da campanha</b><small>Os personagens permanecem sincronizados com a mesa.</small></div><time>agora</time></div>
+            </div>
+          </article>
+          <aside class="rpg-presence-card">
+            <header><div class="rpg-feature-icon small">♧</div><div><h3>Presença dos jogadores</h3><p><strong id="rpgDashboardOnlineCount">—</strong> conectados</p></div></header>
+            <div class="rpg-presence-status"><i></i><span>Campanha online</span></div>
+            <div class="rpg-presence-copy">A comunicação da campanha permanece ativa enquanto os participantes estiverem conectados.</div>
+          </aside>
+        </section>
       </div>
     `;
 
@@ -97,10 +84,7 @@
     view.querySelectorAll('[data-dashboard-view]').forEach(el => {
       el.addEventListener('click', () => {
         const target = el.dataset.dashboardView;
-        if(target === 'table-map'){
-          goTo('table');
-          return;
-        }
+        if(target === 'table-map') return goTo('table');
         if(target === 'dice-audio'){
           goTo('dice');
           setTimeout(() => document.getElementById('sessionAudioCard')?.scrollIntoView({behavior:'smooth',block:'start'}), 120);
@@ -118,7 +102,6 @@
     syncOnline();
     if(online) new MutationObserver(syncOnline).observe(online,{childList:true,subtree:true,characterData:true});
 
-    /* A nova aba é a tela inicial, mas o jogador pode entrar na Mesa normalmente. */
     if(typeof state !== 'undefined'){
       state.view = 'dashboard';
       if(typeof renderView === 'function') renderView();
