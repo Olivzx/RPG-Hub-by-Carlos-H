@@ -1,6 +1,8 @@
 @import url("https://cdn.jsdelivr.net/gh/Olivzx/RPG-Hub-by-Carlos-H@d105e395f1c67508aed725a5013333a5e12cb8e4/styles.css");
 
-/* RPG HUB — identidade visual + adaptação responsiva */
+/* =========================================================
+   RPG HUB — tema global
+   ========================================================= */
 :root{
   --rpg-accent:#8b5cf6;
   --rpg-accent-strong:#6d4ad8;
@@ -20,108 +22,161 @@ input:focus,select:focus,textarea:focus,.authCard input:focus,.authCard select:f
 .rollQuickRow button:hover,.textButton:hover,.sectionTitle button,.cardActions button,.sessionCardActions button{color:var(--rpg-accent)!important}
 
 /* =========================================================
-   MOBILE — conteúdo continua disponível, apenas reorganizado
+   DASHBOARD / VISÃO GERAL
    ========================================================= */
-@media (max-width: 900px){
-  html,body{max-width:100%;overflow-x:hidden}
-  body{font-size:14px}
-
-  .appShell,.appLayout,.mainLayout,.pageLayout{display:block!important;width:100%!important;min-width:0!important}
-  .sideNav,.sidebar{display:none!important}
-  .mainContent,.content,.pageContent,.view{width:100%!important;min-width:0!important;max-width:100%!important;padding-left:12px!important;padding-right:12px!important;padding-bottom:92px!important}
-
-  /* Grids e cards: preserva todos os dados, reorganizando em uma coluna */
-  .grid,.cardsGrid,.dashboardGrid,.statsGrid,.characterGrid,.npcGrid,.sessionGrid,.roomGrid,.worldGrid,.formGrid,.twoColumn,.threeColumn{grid-template-columns:1fr!important}
-  .grid>*,.cardsGrid>*{min-width:0!important}
-  .card,.panel,.sectionCard,.characterCard,.npcCard,.sessionCard,.dashboardCard,.infoCard,.modalCard{max-width:100%!important;min-width:0!important}
-
-  /* Tabelas: não escondemos colunas; permitimos rolagem horizontal */
-  table{min-width:560px}
-  .tableWrap,.tableContainer,.dataTable,.historyTable{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
-  .tableWrap table,.tableContainer table,.dataTable table,.historyTable table{margin-bottom:0}
-
-  /* Cabeçalhos e ações */
-  .pageHeader,.sectionHeader,.panelHeader,.cardHeader,.toolbar,.topBar,.headerActions{flex-wrap:wrap!important;gap:8px!important}
-  .pageHeader>* ,.sectionHeader>*{max-width:100%}
-  .pageTitle,.sectionTitle,h1{font-size:clamp(20px,6vw,30px)!important;line-height:1.15}
-  h2{font-size:clamp(18px,5vw,24px)!important}
-  h3{font-size:16px!important}
-
-  /* Formulários: campos continuam completos e confortáveis */
-  form{width:100%;max-width:100%}
-  input,select,textarea,button{max-width:100%;font-size:16px}
-  textarea{min-height:110px}
-  .formRow,.fieldRow,.inputRow{display:grid!important;grid-template-columns:1fr!important;gap:10px!important}
-  .formActions,.modalActions,.cardActions{display:flex!important;flex-wrap:wrap!important;gap:8px!important}
-  .formActions button,.modalActions button{flex:1 1 140px}
-
-  /* Modais ocupam o espaço útil, sem cortar informações */
-  .modalBackdrop{padding:10px!important;align-items:flex-start!important;overflow-y:auto}
-  .modalCard{width:min(100%,680px)!important;max-height:calc(100dvh - 20px)!important;overflow:auto!important;border-radius:16px!important}
-  .modalBody{overflow:visible!important}
-
-  /* Ficha de personagem: compacta, mas sem remover campos */
-  .characterSheet,.characterProfile,.characterDetails{width:100%!important}
-  .characterSheet .statGrid,.characterProfile .statGrid{grid-template-columns:repeat(2,minmax(0,1fr))!important}
-  .characterSheet .fullWidth,.characterProfile .fullWidth{grid-column:1/-1!important}
-
-  /* Dashboard */
-  .dashboardHero,.heroCard{padding:20px!important;min-height:auto!important}
-  .dashboardHero h1,.heroCard h1{font-size:clamp(24px,8vw,38px)!important}
-  .dashboardHero .heroActions,.heroCard .heroActions{display:grid!important;grid-template-columns:1fr!important}
-  .dashboardCard{padding:15px!important}
-
-  /* Mapa: preserva ferramentas e evita que a página estoure lateralmente */
-  .mapArea,.mapCanvas,.boardWrap,.boardContainer{width:100%!important;max-width:100%!important;overflow:auto!important;-webkit-overflow-scrolling:touch}
-  .mapToolbar,.mapControls,.boardToolbar{flex-wrap:wrap!important;gap:6px!important}
-  .mapToolbar button,.mapControls button,.boardToolbar button{flex:0 0 auto}
-
-  /* Utilitários e dados */
-  .diceLayout,.utilitiesLayout{display:block!important}
-  .dicePanel,.diceHistory,.utilityPanel{width:100%!important;max-width:none!important}
-  .diceButtons,.rollQuickRow{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:7px!important}
-  .diceButtons button,.rollQuickRow button{min-height:42px}
-
-  /* Áudio */
-  .audioPlayer,.audioPanel,.playlistPanel{width:100%!important;min-width:0!important}
-  .audioControls{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:8px!important}
-
-  /* Presença, listas e informações longas */
-  .playerList,.presenceList,.activityList,.entityList{width:100%!important}
-  .playerRow,.presenceRow,.activityItem,.entityRow{min-width:0!important;flex-wrap:wrap!important}
-  .playerRow .name,.presenceRow .name,.activityItem .description{overflow-wrap:anywhere}
-
-  /* Painel do Mestre */
-  .masterPanel,.gmPanel{display:block!important;width:100%!important}
-  .masterPanel .panelGrid,.gmPanel .panelGrid{grid-template-columns:1fr!important}
-
-  /* Navegação mobile existente: não deixa conteúdo atrás dela */
-  .mobileBottomNav,.mobileNav,.mobileNavigation{position:fixed!important;left:0!important;right:0!important;bottom:0!important;z-index:1000!important}
-  .mobileBottomNav{padding-bottom:max(8px,env(safe-area-inset-bottom))!important}
-
-  /* Textos longos nunca são cortados */
-  .card p,.panel p,.description,.subtitle,.meta,.helpText{overflow-wrap:anywhere;word-break:normal}
-}
-
-@media (max-width:520px){
-  body{font-size:13px}
-  .mainContent,.content,.pageContent,.view{padding-left:8px!important;padding-right:8px!important;padding-bottom:88px!important}
-  .characterSheet .statGrid,.characterProfile .statGrid{grid-template-columns:1fr 1fr!important}
-  .diceButtons,.rollQuickRow{grid-template-columns:repeat(2,minmax(0,1fr))!important}
-  .audioControls{grid-template-columns:1fr!important}
-  .formActions button,.modalActions button{flex:1 1 100%}
-  .card,.panel,.sectionCard{border-radius:12px!important}
-  .dashboardHero,.heroCard{padding:16px!important}
-}
+.rpg-dashboard-view{width:100%;min-width:0}
+.rpg-dashboard{display:grid;gap:18px;margin-top:24px;min-width:0}
+.rpg-dashboard-hero{position:relative;min-height:245px;overflow:hidden;border:1px solid rgba(139,92,246,.24);border-radius:18px;background:radial-gradient(circle at 82% 20%,rgba(var(--rpg-accent-rgb),.18),transparent 36%),linear-gradient(135deg,#0d1018,#0a0d13);box-shadow:0 24px 70px rgba(0,0,0,.28)}
+.rpg-dashboard-hero:after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(8,10,15,.96) 0%,rgba(8,10,15,.82) 44%,rgba(8,10,15,.25) 100%);pointer-events:none}
+.rpg-dashboard-hero-content{position:relative;z-index:2;max-width:760px;padding:34px 38px}
+.rpg-dashboard-kicker{display:block;color:var(--rpg-accent);font-size:9px;letter-spacing:.16em;font-weight:700}
+.rpg-dashboard-hero h2{font-size:32px;line-height:1.05;letter-spacing:-.04em;margin:11px 0 10px;color:#f1f2f6}
+.rpg-dashboard-hero p{max-width:650px;margin:0;color:#8e96a7;font-size:12px;line-height:1.7}
+.rpg-dashboard-actions{display:flex;gap:10px;margin-top:22px;flex-wrap:wrap}
+.rpg-dashboard-primary,.rpg-dashboard-secondary{display:inline-flex;align-items:center;justify-content:center;gap:9px;min-height:42px;padding:0 17px;border-radius:11px;border:1px solid rgba(var(--rpg-accent-rgb),.6);font-size:11px;font-weight:700;cursor:pointer;transition:.18s}
+.rpg-dashboard-primary{background:linear-gradient(135deg,var(--rpg-accent),var(--rpg-accent-strong));color:#fff;box-shadow:0 10px 28px rgba(var(--rpg-accent-rgb),.22)}
+.rpg-dashboard-secondary{background:rgba(10,13,18,.7);color:#c9c4ef}
+.rpg-dashboard-primary:hover,.rpg-dashboard-secondary:hover{transform:translateY(-1px);filter:brightness(1.08)}
+.rpg-dashboard-orb{position:absolute;border-radius:50%;filter:blur(8px);pointer-events:none;z-index:1}
+.rpg-dashboard-orb.orb-one{width:220px;height:220px;right:9%;top:-55px;background:rgba(var(--rpg-accent-rgb),.13)}
+.rpg-dashboard-orb.orb-two{width:140px;height:140px;right:27%;bottom:-70px;background:rgba(90,130,255,.08)}
+.rpg-dashboard-feature-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.rpg-feature-card{min-width:0;min-height:190px;display:flex;flex-direction:column;border:1px solid #232832;border-radius:16px;background:linear-gradient(180deg,#0e1219,#0b0e14);padding:18px;cursor:pointer;transition:.18s;box-shadow:0 14px 45px rgba(0,0,0,.12)}
+.rpg-feature-card:hover{transform:translateY(-2px);border-color:rgba(var(--rpg-accent-rgb),.45);box-shadow:0 18px 55px rgba(var(--rpg-accent-rgb),.08)}
+.rpg-feature-icon{width:43px;height:43px;flex:0 0 auto;display:grid;place-items:center;border-radius:12px;background:rgba(var(--rpg-accent-rgb),.12);border:1px solid rgba(var(--rpg-accent-rgb),.18);color:var(--rpg-accent);font-size:20px}
+.rpg-feature-icon.small{width:36px;height:36px;font-size:15px}
+.rpg-feature-card h3{font-size:14px;margin:15px 0 7px;color:#eef0f5}
+.rpg-feature-card p{margin:0;color:#7e8798;font-size:10px;line-height:1.6;min-height:48px}
+.rpg-feature-card button{margin-top:auto;width:100%;height:35px;border:1px solid #292f3b;border-radius:9px;background:#0a0d12;color:#b9b2e7;font-size:10px;text-align:left;padding:0 12px;cursor:pointer}
+.rpg-feature-card button b{float:right;font-size:15px;font-weight:400}
+.rpg-dashboard-lower{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(260px,.7fr);gap:14px;min-width:0}
+.rpg-activity-card,.rpg-presence-card{border:1px solid #232832;border-radius:16px;background:#0d1016;min-width:0;overflow:hidden}
+.rpg-activity-card>header,.rpg-presence-card>header{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:18px;border-bottom:1px solid #20252f}
+.rpg-activity-card h3,.rpg-presence-card h3{margin:4px 0 4px;color:#eef0f5;font-size:14px}
+.rpg-activity-card header p,.rpg-presence-card header p{margin:0;color:#737c8c;font-size:10px;line-height:1.5}
+.rpg-live-pill{display:inline-flex;align-items:center;gap:6px;color:#70dca5;font-size:9px;white-space:nowrap}
+.rpg-live-pill i,.rpg-presence-status i{width:6px;height:6px;border-radius:50%;background:#63d39b;box-shadow:0 0 12px rgba(99,211,155,.7)}
+.rpg-activity-list{display:grid}
+.rpg-activity-item{display:grid;grid-template-columns:34px minmax(0,1fr) auto;align-items:center;gap:11px;padding:13px 18px;border-bottom:1px solid #1b2028}
+.rpg-activity-item:last-child{border-bottom:0}
+.rpg-activity-avatar{width:31px;height:31px;border-radius:9px;display:grid;place-items:center;background:rgba(var(--rpg-accent-rgb),.11);color:var(--rpg-accent);font-size:12px}
+.rpg-activity-item b{display:block;color:#dfe2e9;font-size:10px;margin-bottom:3px}
+.rpg-activity-item small{display:block;color:#727b8b;font-size:9px;line-height:1.5}
+.rpg-activity-item time{color:#596170;font-size:8px;white-space:nowrap}
+.rpg-presence-card{padding-bottom:18px}
+.rpg-presence-card>header{justify-content:flex-start;border-bottom:0;padding-bottom:12px}
+.rpg-presence-status{display:flex;align-items:center;gap:7px;margin:0 18px;padding:10px 11px;border-radius:9px;background:#0a0d12;border:1px solid #20252f;color:#8e97a7;font-size:9px}
+.rpg-presence-copy{padding:12px 18px 0;color:#6f7787;font-size:9px;line-height:1.6}
 
 /* =========================================================
-   TEMAS — variáveis podem ser alteradas pelo customizador
+   MOBILE — redimensionar e reorganizar sem esconder dados
    ========================================================= */
-[data-theme="blue"]{--rpg-accent:#3b82f6;--rpg-accent-strong:#2563eb;--rpg-accent-rgb:59,130,246}
-[data-theme="cyan"]{--rpg-accent:#06b6d4;--rpg-accent-strong:#0891b2;--rpg-accent-rgb:6,182,212}
-[data-theme="emerald"]{--rpg-accent:#10b981;--rpg-accent-strong:#059669;--rpg-accent-rgb:16,185,129}
-[data-theme="gold"]{--rpg-accent:#f59e0b;--rpg-accent-strong:#d97706;--rpg-accent-rgb:245,158,11}
-[data-theme="orange"]{--rpg-accent:#f97316;--rpg-accent-strong:#ea580c;--rpg-accent-rgb:249,115,22}
-[data-theme="pink"]{--rpg-accent:#ec4899;--rpg-accent-strong:#db2777;--rpg-accent-rgb:236,72,153}
-[data-theme="ruby"]{--rpg-accent:#ef4444;--rpg-accent-strong:#dc2626;--rpg-accent-rgb:239,68,68}
-[data-theme="violet"],:root{--rpg-accent:#8b5cf6;--rpg-accent-strong:#6d4ad8;--rpg-accent-rgb:139,92,246}
+.mobileAppHeader,.mobileBottomNav{display:none}
+
+@media (max-width:1100px){
+  .appShell{grid-template-columns:220px minmax(0,1fr)}
+  .workspace{padding:24px 22px 90px}
+  .rpg-dashboard-feature-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .rpg-dashboard-lower{grid-template-columns:1fr}
+  .tableLayout{grid-template-columns:minmax(0,1fr) 270px}
+}
+
+@media (max-width:760px){
+  html,body{width:100%;max-width:100%;overflow-x:hidden}
+  .appBody{padding-bottom:78px}
+  .appShell{display:block;min-height:100vh}
+  .sidebar{display:none!important}
+  .workspace{width:100%;min-width:0;padding:0 12px 96px}
+  .mobileAppHeader{display:block;position:sticky;top:0;z-index:80;margin:0 -12px;padding:10px 12px 9px;background:rgba(7,9,13,.96);backdrop-filter:blur(18px);border-bottom:1px solid #20252f}
+  .mobileHeaderTop{display:flex;align-items:center;justify-content:space-between;gap:10px}
+  .mobileBrand{font-size:13px}
+  .mobileProfileButton{display:flex;align-items:center;gap:7px;max-width:135px;padding:4px 0;color:#aeb5c2;font-size:10px;overflow:hidden}
+  .mobileProfileButton .avatar{width:27px;height:27px;flex:0 0 auto}
+  .mobileProfileButton span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .mobileCampaignBar{display:grid;grid-template-columns:minmax(0,1fr) 38px 38px;gap:6px;margin-top:8px}
+  .mobileCampaignSelectWrap select{width:100%;height:35px;background:#0a0d12;border:1px solid #292f3a;border-radius:9px;color:#dfe2e8;padding:0 9px;font-size:10px}
+  .mobileCampaignButton{height:35px;border:1px solid #292f3a;border-radius:9px;background:#0c1016;color:#aeb5c2;font-size:12px}
+  .workspaceTop{display:block;padding:17px 2px 0}
+  .workspaceTop h1{font-size:24px;margin:5px 0 3px}
+  .workspaceSubtitle{font-size:10px}
+  .topActions{margin-top:12px;display:flex;flex-wrap:wrap;gap:7px}
+  .topActions .softButton{min-height:34px;padding:8px 10px;font-size:10px}
+  .sessionOnline{margin-left:auto}
+  .sessionMetaBar{margin-top:15px;padding:10px 0}
+  .sessionMetaBar b{font-size:10px}
+  .sessionMetaBar span{font-size:9px}
+  .sessionMetaBar .softButton{font-size:9px;padding:8px 9px}
+  .rpg-dashboard{margin-top:15px;gap:12px}
+  .rpg-dashboard-hero{min-height:0;border-radius:14px}
+  .rpg-dashboard-hero-content{padding:22px 18px}
+  .rpg-dashboard-hero h2{font-size:24px;line-height:1.08}
+  .rpg-dashboard-hero p{font-size:10px;line-height:1.6}
+  .rpg-dashboard-actions{gap:7px;margin-top:15px}
+  .rpg-dashboard-primary,.rpg-dashboard-secondary{min-height:38px;padding:0 12px;font-size:9px}
+  .rpg-dashboard-feature-grid{grid-template-columns:1fr;gap:10px}
+  .rpg-feature-card{min-height:0;padding:14px}
+  .rpg-feature-card h3{font-size:13px;margin:11px 0 5px}
+  .rpg-feature-card p{font-size:10px;min-height:0;margin-bottom:12px}
+  .rpg-dashboard-lower{grid-template-columns:1fr;gap:10px}
+  .rpg-activity-card>header,.rpg-presence-card>header{padding:14px}
+  .rpg-activity-item{grid-template-columns:30px minmax(0,1fr) auto;padding:11px 14px;gap:9px}
+  .rpg-activity-item small{font-size:8px}
+  .rpg-activity-item time{font-size:7px}
+  .rpg-presence-copy{padding:10px 14px 0}
+
+  /* Todas as telas internas mantêm as informações, apenas reorganizam os blocos. */
+  .sectionTop{display:flex;flex-direction:column;align-items:stretch!important;gap:12px}
+  .sectionTop h2{font-size:21px;line-height:1.15}
+  .sectionTop p{font-size:10px;line-height:1.55}
+  .sectionActions{display:flex;flex-wrap:wrap;gap:7px}
+  .sectionActions>*{max-width:100%}
+  .tableLayout,.worldLayout,.masterDashboardGrid{display:flex;flex-direction:column;gap:10px}
+  .boardPanel,.contextPanel,.dataCard,.sessionCard,.locationCard,.diceCard,.audioCard,.statsPanel{border-radius:13px}
+  .boardToolbar{align-items:stretch;flex-direction:column;gap:8px;padding:9px}
+  .toolbarBlock{min-width:0}
+  .toolbarActions{justify-content:flex-end;flex-wrap:wrap}
+  .boardFrame{min-height:420px;overflow:auto;-webkit-overflow-scrolling:touch}
+  .boardGrid{min-width:560px;min-height:420px}
+  .contextPanel{width:100%}
+  .cardGrid{grid-template-columns:1fr!important}
+  .diceMainColumn{display:flex;flex-direction:column;gap:10px}
+  .diceBuilder{grid-template-columns:1fr 1fr!important}
+  .diceBuilder label:nth-child(3),.diceBuilder label:nth-child(4){grid-column:auto}
+  .diceBuilder #rollBtn{grid-column:1/-1;width:100%}
+  .dicePresetRow{display:flex;flex-wrap:wrap;gap:6px}
+  .dicePresetRow button{flex:1 1 calc(33.333% - 6px);min-width:70px}
+  .bigRoll{font-size:58px!important;min-height:110px}
+  .rollBreakdown{overflow:auto;max-width:100%}
+  .modalOverlay{padding:10px!important;align-items:flex-start!important}
+  .modalCard{width:min(100%,560px)!important;max-height:calc(100vh - 20px);overflow:auto;border-radius:14px}
+  .modalBody{max-height:none!important}
+  .masterDashboardGrid{display:flex;flex-direction:column}
+  .masterDashboardCard{width:100%;min-width:0}
+  .masterRollHistory,.masterCharactersGrid{overflow-x:auto;max-width:100%}
+  .chronicleCard{width:100%;overflow:hidden}
+  .chronicleEditor{min-height:55vh;width:100%;font-size:12px}
+
+  /* Tabelas/listas: não removemos colunas; permitimos rolagem horizontal. */
+  .tableWrap,.tableContainer,.dataTableWrap,.rollHistoryTable,.historyTable{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
+  table{min-width:620px}
+
+  /* Rodapé de navegação mobile */
+  .mobileBottomNav{position:fixed;display:grid;grid-template-columns:repeat(6,minmax(0,1fr));left:0;right:0;bottom:0;z-index:100;padding:7px 5px calc(7px + env(safe-area-inset-bottom));background:rgba(10,12,17,.97);backdrop-filter:blur(18px);border-top:1px solid #252a35;box-shadow:0 -12px 35px rgba(0,0,0,.35)}
+  .mobileBottomNav button{min-width:0;min-height:51px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;border-radius:9px;color:#737c8d;font-size:16px}
+  .mobileBottomNav button.active{background:rgba(var(--rpg-accent-rgb),.13);color:#fff;box-shadow:inset 0 2px 0 var(--rpg-accent)}
+  .mobileBottomNav small{font-size:7px;line-height:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+}
+
+@media (max-width:420px){
+  .workspace{padding-left:9px;padding-right:9px}
+  .mobileAppHeader{margin-left:-9px;margin-right:-9px;padding-left:9px;padding-right:9px}
+  .workspaceTop h1{font-size:21px}
+  .rpg-dashboard-hero h2{font-size:21px}
+  .rpg-dashboard-hero-content{padding:19px 15px}
+  .rpg-dashboard-actions>*{flex:1 1 100%;width:100%}
+  .diceBuilder{grid-template-columns:1fr!important}
+  .diceBuilder #rollBtn,.diceBuilder label:nth-child(3),.diceBuilder label:nth-child(4){grid-column:auto}
+  .bigRoll{font-size:48px!important}
+  .mobileBottomNav button{min-height:48px;font-size:14px}
+  .mobileBottomNav small{font-size:6.5px}
+}
