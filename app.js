@@ -991,40 +991,36 @@ function startEntityDrag(e,el){
   e.preventDefault();e.stopPropagation();
   const id=el.dataset.entityId,current=state.entities.find(q=>q.id===id);if(!current)return;
   const board=$('board'),rect=board.getBoundingClientRect(),start=clientToBoardPercent(e.clientX,e.clientY,rect);
-  const previous={x:Number(current.x),y:Number(current.y),room_id:current.room_id??null,floor_id:current.floor_id};
-  const moveStart={x:previous.x,y:previous.y};
+  const previous={x:Number(current.x),y:Number(current.y),room_id:current.room_id??null,floor_id:current.floor_id,updated_at:current.updated_at};
   const grabOffset={x:start.x-previous.x,y:start.y-previous.y};
-  let latestX=previous.x,latestY=previous.y,finished=false,lastMoveBroadcast=0;
-  const movementKey='entity:'+id;
+  let latestX=previous.x,latestY=previous.y,finished=false;
   el.classList.add('dragging');el.dataset.wasDragged='1';el.setPointerCapture?.(e.pointerId);
   const cleanup=()=>{if(finished)return;finished=true;try{el.releasePointerCapture?.(e.pointerId)}catch(_){}el.classList.remove('dragging');el.removeEventListener('pointermove',move);el.removeEventListener('pointerup',up);el.removeEventListener('pointercancel',cancel);};
   const move=ev=>{
     const raw=clientToBoardPercent(ev.clientX,ev.clientY,rect),target={x:raw.x-grabOffset.x,y:raw.y-grabOffset.y};
     const snapped=window.rpgSnapPoint?window.rpgSnapPoint(target.x,target.y):target;
-    latestX=Math.max(1,Math.min(99,snapped.x));latestY=Math.max(1,Math.min(99,snapped.y));
+    latestX=Math.max(1,Math.min(99,Number(snapped.x)||0));latestY=Math.max(1,Math.min(99,Number(snapped.y)||0));
     const room=roomAtPosition(latestX,latestY,current.floor_id||state.floor);
-    const validation=canMoveEntity(current,moveStart,{x:latestX,y:latestY});
-    if(!validation.ok){latestX=previous.x;latestY=previous.y;el.style.left=latestX+'%';el.style.top=latestY+'%';return;}
-    const now=performance.now();
-    if(now-lastMoveBroadcast>30){
-      lastMoveBroadcast=now;
-      broadcastEntityMove({entity_id:id,x:latestX,y:latestY,room_id:room?.id||null,floor_id:current.floor_id}).catch(()=>{});
-    }
     state.entities=state.entities.map(item=>item.id===id?{...item,x:latestX,y:latestY,room_id:room?.id||null}:item);
     el.style.left=latestX+'%';el.style.top=latestY+'%';
   };
   const up=async()=>{
-    cleanup();const room=roomAtPosition(latestX,latestY,current.floor_id||state.floor);
-    const result=await sb.from('world_entities').update({x:latestX,y:latestY,room_id:room?.id||null,updated_at:new Date().toISOString()}).eq('id',id).eq('updated_at',current.updated_at).select().maybeSingle();
-    if(result.error){state.entities=state.entities.map(item=>item.id===id?{...item,...previous}:item);renderTable();toast(result.error.message||'Não foi possível salvar a posição.','error');return;}
-    if(!result.data){state.entities=state.entities.map(item=>item.id===id?{...item,...previous}:item);renderTable();toast('A entidade não pôde ser localizada após o movimento.','error');return;}
-    const data=result.data;
-    data.movement_remaining=canMoveEntity(data,moveStart,data).remaining;
-    const movement=canMoveEntity(data,moveStart,{x:latestX,y:latestY});
-    data.movement_remaining=movement.remaining;
+    cleanup();
+    const room=roomAtPosition(latestX,latestY,current.floor_id||state.floor);
+    const movement=canMoveEntity(current,previous,{x:latestX,y:latestY});
+    if(!movement.ok){
+      state.entities=state.entities.map(item=>item.id===id?{...item,...previous}:item);
+      renderTable();toast('Movimento excede a velocidade disponível neste turno.','error');return;
+    }
+    const result=await sb.from('world_entities').update({x:latestX,y:latestY,room_id:room?.id||null,updated_at:new Date().toISOString()}).eq('id',id).eq('updated_at',previous.updated_at).select().maybeSingle();
+    if(result.error||!result.data){
+      state.entities=state.entities.map(item=>item.id===id?{...item,...previous}:item);
+      renderTable();toast(result.error?.message||'A entidade foi alterada em outra sessão. Recarregue e tente novamente.','error');return;
+    }
+    const data=result.data;data.movement_remaining=movement.remaining;
     state.entities=state.entities.map(item=>item.id===id?data:item);
     await broadcastEntityMove({entity_id:id,x:latestX,y:latestY,room_id:room?.id||null,floor_id:current.floor_id,movement_cost:movement.cost,movement_remaining:data.movement_remaining});
-    setSave(room?'Entidade posicionada em '+room.name+' · deslocamento '+data.movement_remaining.toFixed(1):'Posição da entidade salva');
+    setSave(room?'Entidade posicionada em '+room.name+' · '+movement.cost.toFixed(1)+' unidades':'Posição da entidade salva');
   };
   const cancel=()=>{cleanup();state.entities=state.entities.map(item=>item.id===id?{...item,...previous}:item);renderTable();};
   el.addEventListener('pointermove',move);el.addEventListener('pointerup',up,{once:true});el.addEventListener('pointercancel',cancel,{once:true});
