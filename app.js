@@ -69,18 +69,11 @@ function attachAuthListener(){ sb.auth.onAuthStateChange((event,session)=>{ if(e
 
 async function ensureProfile(){
   const {data,error}=await sb.from('profiles').select('*').eq('id',state.user.id).maybeSingle(); if(error) throw error;
-  const metadataType=state.user.user_metadata?.account_type==='master'?'master':'player';
   if(data){
-    // Contas criadas escolhendo Mestre precisam conservar essa escolha.
-    // Não sobrescrevemos manualmente uma conta existente que já foi definida como Jogador.
-    if(data.account_type==='player' && metadataType==='master'){
-      const upgraded=await sb.from('profiles').update({account_type:'master'}).eq('id',state.user.id).select('*').maybeSingle();
-      if(upgraded.error) throw upgraded.error;
-      if(upgraded.data) state.profile=upgraded.data;
-      else state.profile=data;
-    }else{
-      state.profile=data;
-    }
+    // O perfil persistido é a fonte oficial do tipo de conta.
+    // user_metadata só é usado na criação inicial e não pode sobrescrever
+    // uma escolha posterior feita pelo próprio usuário.
+    state.profile=data;
     return;
   }
   const display=state.user.user_metadata?.display_name || state.user.email?.split('@')[0] || 'Aventureiro';
