@@ -461,7 +461,13 @@
   }
   window.rpgVttRefreshGrid=renderGrid;
   window.rpgVttRefreshMapLayout=refreshMapLayout;
-  window.rpgVttSetTool=setTool;
+  window.rpgVttSetTool=tool=>{
+    if(tool==='move'){
+      vtt.activeTool='move';clearMeasure();updateToolbar();
+      return;
+    }
+    setTool(tool);
+  };
   window.rpgVttSetGrid=enabled=>saveSettings({grid_enabled:!!enabled});
   window.rpgVttGetGrid=()=>!!vtt.settings?.grid_enabled;
   window.rpgVttContextChanged=()=>loadFloorDataWhenChanged();
