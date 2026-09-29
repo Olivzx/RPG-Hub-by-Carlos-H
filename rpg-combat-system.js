@@ -97,6 +97,12 @@
     highlight();
   }
 
+  async function preloadEquipment(){
+    const ids=[...new Set(rows().map(x=>x.character_id).filter(Boolean))];
+    if(!ids.length)return;
+    const q=await sb.from('character_inventory').select('id,character_id,name,equipped,metadata').in('character_id',ids).eq('equipped',true);
+    if(!q.error){window.rpgEquipmentCache={};(q.data||[]).forEach(x=>(window.rpgEquipmentCache[x.character_id]??=[]).push(x));}
+  }
   async function loadCombat(force=false){
     const c=cid(), s=activeSession(), sid=s?.id||null, key=c+':'+sid;
     if(!c||!sid){cs.encounter=null;cs.combatants=[];cs.actions=[];cs.key=key;render();return;}
