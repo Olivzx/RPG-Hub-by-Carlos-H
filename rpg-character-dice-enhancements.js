@@ -62,7 +62,7 @@
     if (!canEdit()) return;
     const room = state.rooms.find(item => item.id === id); if (!room) return;
     let next = (Number(room.rotation) || 0) + Number(delta || 15); while (next > 180) next -= 360; while (next < -180) next += 360;
-    const result = await sb.from('rooms').update({ rotation: next }).eq('id', id).select().single();
+    const result = await sb.from('rooms').update({ rotation: next }).eq('id', id).select().maybeSingle();
     if (result.error) { toast(result.error.message || 'Não foi possível rotacionar o cômodo.', 'error'); return; }
     state.rooms = state.rooms.map(item => item.id === id ? result.data : item); await broadcastRoomRotate({ room_id: id, rotation: next }); renderTable(); setSave('Rotação do cômodo salva');
   }
