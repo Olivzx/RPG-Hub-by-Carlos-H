@@ -220,7 +220,12 @@
     const after=max==null?Math.max(0,Number(next)):Math.min(max,Math.max(0,Number(next)));
     const expectedUpdatedAt=r.updated_at||null; const q=await sb.from('combatants').update({hp_current:after,updated_at:new Date().toISOString()}).eq('id',id).eq('updated_at',expectedUpdatedAt).select('*').maybeSingle();
     if(q.error)return toast(q.error.message||'Não foi possível atualizar o HP.','error');
-    const saved=q.data||await readRow('combatants',id,'o HP');
+    if(!q.data){
+      const latest=await readRow('combatants',id,'o HP');
+      if(expectedUpdatedAt&&latest?.updated_at!==expectedUpdatedAt)return toast('Conflito de atualização: o HP mudou em outra sessão. O valor mais recente foi recarregado.','error');
+      return toast('Não foi possível confirmar a atualização do HP.','error');
+    }
+    const saved=q.data;
     try{await mirrorHpToSource(saved,after);}catch(err){console.warn('RPG HUB combat mirror HP:',err);}
     cs.combatants=cs.combatants.map(x=>x.id===id?saved:x);render();highlight();
     const delta=after-before;
