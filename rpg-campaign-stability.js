@@ -127,6 +127,7 @@
   async function loadCampaignDataStable(){
     if(!state.campaign)return;
     const campaignId=state.campaign.id;
+    try{localStorage.setItem('rpg-hub-active-campaign',campaignId)}catch(_){}
 
     // Core campaign state is loaded first. Secondary modules are isolated
     // so a permission/data problem in audio or chronology cannot black out the map.
@@ -405,25 +406,6 @@
   window.createCampaign=createCampaignStable;
   window.loadFloors=loadFloorsStable;
   window.updateAndReadRow=updateAndReadRow;
-
-  // Campaign selectors now retain the active campaign and surface failures.
-  const wireCampaignSelectors=()=>{
-    const main=document.getElementById('campaignSelect');
-    const mobile=document.getElementById('mobileCampaignSelect');
-    const bind=(el)=>{
-      if(!el||el.dataset.rpgStabilityBound)return;
-      el.dataset.rpgStabilityBound='1';
-      el.addEventListener('change',async()=>{
-        const next=state.campaigns.find(c=>c.id===el.value);
-        if(!next)return;
-        state.campaign=next;state.floor=null;state.selected=null;
-        try{localStorage.setItem('rpg-hub-active-campaign',next.id)}catch(_){}
-        try{await loadCampaignDataStable();}catch(error){toast(error.message||'Não foi possível carregar esta campanha.','error');}
-      });
-    };
-    bind(main);bind(mobile);
-  };
-  wireCampaignSelectors();
 
   // Expose the stable methods again after feature modules load.
   window.rpgCampaignStability={
