@@ -1349,6 +1349,8 @@ function serializeActiveAudioLayers(){
     name:layer.name||'Áudio',
     kind:layer.kind||'other',
     loop:!!layer.loop,
+    status:layer.status||'playing',
+    position:Number(layer.status==='paused'?layer.position:audioElapsed(layer)),
     volume:Number(layer.volume??0.75),
     asset_id:layer.asset_id||null,
     playlist_id:layer.playlist_id||null,
@@ -1380,6 +1382,7 @@ function scheduleAudioStatePersist(){
   window.__audioPersistTimer=setTimeout(()=>persistAudioStateNow().catch(e=>console.warn('Falha ao persistir estado do áudio',e)),300);
 }
 function audioElapsed(layer){
+  if(layer?.status==='paused')return Math.max(0,Number(layer.position||0));
   const started=layer?.started_at?new Date(layer.started_at).getTime():Date.now();
   const offset=Number(layer?.start_offset||0);
   return Math.max(0,(Date.now()-started)/1000)+offset;
@@ -1452,6 +1455,8 @@ async function playAudioLayer(payload,opts={}){
   const broadcast=opts.broadcast!==false;
   if(!state.audioEnabled&&!canEdit())return;
   if(payload.action==='stop-layer'){await stopAudioLayer(payload.layer_id,{broadcast});return;}
+  if(payload.action==='pause-layer'){await pauseAudioLayer(payload.layer_id,{broadcast});return;}
+  if(payload.action==='resume-layer'){await resumeAudioLayer(payload.layer_id,{broadcast});return;}
   if(!payload.url)throw new Error('Este áudio não possui uma URL válida.');
   state.audioEnabled=true;
   if(payload.target_user_id&&payload.target_user_id!==state.user.id)return;
@@ -1467,7 +1472,7 @@ async function playAudioLayer(payload,opts={}){
 
   const startedAt=payload.started_at||new Date().toISOString();
   const currentTime=Number.isFinite(Number(payload.current_time))?Number(payload.current_time):0;
-  const layer={...payload,layerId,volume:audio.volume,loop:audio.loop,audio,started_at:startedAt,start_offset:Number(payload.start_offset??currentTime)};
+  const layer={...payload,layerId,volume:audio.volume,loop:audio.loop,audio,status:payload.status||'playing',position:Number(payload.position??currentTime),started_at:startedAt,start_offset:Number(payload.start_offset??currentTime)};
   state.audioPlayers.set(layerId,audio);
   state.audioLayers.set(layerId,layer);
 
@@ -1489,6 +1494,7 @@ async function playAudioLayer(payload,opts={}){
     }
     await audio.play();
     if(Number.isFinite(currentTime)&&audio.readyState>=1){try{audio.currentTime=Math.max(0,currentTime);}catch(e){}}
+    if(layer.status==='paused'){audio.pause();layer.position=Math.max(0,currentTime);}
   }catch(e){
     state.audioPlayers.delete(layerId);state.audioLayers.delete(layerId);
     console.warn('Audio playback failed',payload.url,e);
@@ -1503,6 +1509,8 @@ async function playAudioLayer(payload,opts={}){
   return layerId;
 }
 
+async function pauseAudioLayer(layerId,opts={}){const broadcast=opts.broadcast!==false;const layer=state.audioLayers.get(layerId);if(!layer)return;const audio=state.audioPlayers.get(layerId);const position=audio?Math.max(0,Number(audio.currentTime)||0):audioElapsed(layer);if(audio)audio.pause();layer.status='paused';layer.position=position;layer.start_offset=position;layer.started_at=new Date().toISOString();state.audioLayers.set(layerId,layer);renderDice();if(broadcast&&canEdit()){await persistAudioStateNow();await broadcastAudio({action:'pause-layer',layer_id:layerId,position});}}
+async function resumeAudioLayer(layerId,opts={}){const broadcast=opts.broadcast!==false;const layer=state.audioLayers.get(layerId);if(!layer)return;const audio=state.audioPlayers.get(layerId);if(!audio)return;const position=Math.max(0,Number(layer.position||0));try{audio.currentTime=position;await audio.play();}catch(e){throw new Error('Não foi possível retomar este áudio.');}layer.status='playing';layer.position=position;layer.start_offset=position;layer.started_at=new Date().toISOString();state.audioLayers.set(layerId,layer);renderDice();if(broadcast&&canEdit()){await persistAudioStateNow();await broadcastAudio({action:'resume-layer',layer_id:layerId,position,started_at:layer.started_at,start_offset:position});}}
 async function stopAudioLayer(layerId,opts={}){
   const broadcast=opts.broadcast!==false;
   const audio=state.audioPlayers.get(layerId);
