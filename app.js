@@ -442,6 +442,7 @@ async function subscribeRealtime(){
     campaign.on('postgres_changes',{event:'*',schema:'public',table:'characters',filter:`campaign_id=eq.${campaignId}`},payload=>{receiveCharacterChange(payload);});
     campaign.subscribe((status,err)=>{if(status==='CHANNEL_ERROR'||status==='TIMED_OUT')console.warn('Campanha realtime:',status,err);});
     state.campaignChannel=campaign;
+    startAudioDriftSync();
   }
 
   const sid=currentSession()?.id;
@@ -1387,6 +1388,27 @@ function audioElapsed(layer){
   const offset=Number(layer?.start_offset||0);
   return Math.max(0,(Date.now()-started)/1000)+offset;
 }
+let __audioDriftTimer=null;
+function startAudioDriftSync(){
+  clearInterval(__audioDriftTimer);
+  if(!state.campaign)return;
+  __audioDriftTimer=setInterval(async()=>{
+    if(!state.audioEnabled||!state.campaign)return;
+    const desired=getPersistedAudioLayers();
+    for(const layer of desired){
+      const local=state.audioLayers.get(layer.layer_id);
+      if(!local?.audio||local.status==='paused')continue;
+      const expected=audioElapsed(layer);
+      const actual=Number(local.audio.currentTime)||0;
+      const drift=expected-actual;
+      if(Math.abs(drift)>0.6){
+        try{local.audio.currentTime=Math.max(0,expected);local.position=expected;state.audioLayers.set(layer.layer_id,local);}catch(e){}
+      }
+    }
+  },5000);
+}
+function stopAudioDriftSync(){clearInterval(__audioDriftTimer);__audioDriftTimer=null;}
+
 async function syncPersistedAudioState(opts={}){
   if(!state.audioEnabled||!state.campaign)return;
   const desired=getPersistedAudioLayers();
