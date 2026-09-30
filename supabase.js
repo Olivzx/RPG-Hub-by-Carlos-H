@@ -25,7 +25,7 @@
     if (window.__rpgChatRealtimeFixLoaded) return;
     window.__rpgChatRealtimeFixLoaded = true;
     const script = document.createElement('script');
-    script.src = 'rpg-chat-realtime-fix.js?v=20260929-1';
+    script.src = 'rpg-chat-realtime-fix.js?v=20260930-1';
     script.async = true;
     document.head.appendChild(script);
   };
