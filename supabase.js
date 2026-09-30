@@ -16,7 +16,7 @@
     if (window.__rpgMultiplayerLayerLoaded) return;
     window.__rpgMultiplayerLayerLoaded = true;
     const script = document.createElement('script');
-    script.src = 'rpg-multiplayer-combat.js?v=20260929';
+    script.src = 'rpg-multiplayer-combat.js?v=20260930.2';
     script.async = true;
     document.head.appendChild(script);
   };
