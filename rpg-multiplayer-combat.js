@@ -1,5 +1,7 @@
 (() => {
   'use strict';
+  if (window.__rpgMultiplayerCombatLoaded) return;
+  window.__rpgMultiplayerCombatLoaded = true;
 
   const mp = {
     presence: null,
@@ -9,7 +11,8 @@
     lastEncounter: null,
     boundMount: null,
     observer: null,
-    poll: null
+    poll: null,
+    presenceStatus: 'IDLE'
   };
 
   const $ = id => document.getElementById(id);
@@ -72,7 +75,7 @@
 
   function renderPresence() {
     const users = presenceUsers();
-    const count = Math.max(1, users.length);
+    const count = users.length;
     const countEl = $('onlineCount');
     if (countEl) countEl.textContent = `${count} online`;
     let wrap = document.querySelector('.rpgOnlineWrap');
@@ -86,7 +89,7 @@
         button.type='button'; button.className='rpgOnlineButton'; button.id='rpgOnlineButton';
         button.innerHTML='<i></i><span id="rpgOnlineCountText">1 online</span>';
         const list=document.createElement('div'); list.className='rpgOnlineList'; list.id='rpgOnlineList';
-        list.innerHTML='<h4>Jogadores nesta seção</h4><div id="rpgOnlineUsers"></div>';
+        list.innerHTML='<h4>Quem está online</h4><div id="rpgOnlineUsers"></div>';
         wrap.append(button,list);
         button.addEventListener('click',e=>{e.stopPropagation();list.classList.toggle('open')});
         document.addEventListener('click',()=>list.classList.remove('open'));
@@ -94,7 +97,7 @@
     }
     const text=$('rpgOnlineCountText');if(text)text.textContent=`${count} online`;
     const list=$('rpgOnlineUsers');if(list){
-      list.innerHTML=users.length?users.map(u=>`<div class="rpgOnlineUser"><i class="rpgOnlineDot"></i><div><b>${esc(u.name)}</b><small>${esc(u.role)} · ${esc(u.view)}</small></div></div>`).join(''):'<div class="rpgOnlineUser"><i class="rpgOnlineDot"></i><div><b>Você</b><small>Conectado</small></div></div>';
+      list.innerHTML=users.length?users.map(u=>`<div class="rpgOnlineUser"><i class="rpgOnlineDot"></i><div><b>${esc(u.name)}</b><small>${esc(u.role)} · ${esc(u.view)}</small></div></div>`).join(''):mp.presenceStatus==='SUBSCRIBED'?'<div class="rpgOnlineUser"><i class="rpgOnlineDot"></i><div><b>Nenhum participante</b><small>Sem presença recebida</small></div></div>':'<div class="rpgOnlineUser"><i class="rpgOnlineDot"></i><div><b>Conectando…</b><small>Aguardando presença da campanha</small></div></div>';
     }
   }
 
@@ -102,18 +105,35 @@
     const c=campaignId(); if(!c||!state?.user)return;
     if(mp.presenceCampaign===c && mp.presence)return;
     if(mp.presence){await sb.removeChannel(mp.presence).catch(()=>{});mp.presence=null;}
-    if(state.presenceChannel && state.presenceChannel !== mp.presence){await sb.removeChannel(state.presenceChannel).catch(()=>{});state.presenceChannel=null;}
+    mp.presenceCampaign=null;
+    mp.presenceStatus='CONNECTING';
+    renderPresence();
     const ch=sb.channel(`rpg-hub-presence-v2-${c}`,{config:{private:true,presence:{key:state.user.id}}});
     ch.on('presence',{event:'sync'},renderPresence);
     ch.on('presence',{event:'join'},renderPresence);
     ch.on('presence',{event:'leave'},renderPresence);
     ch.subscribe(async status=>{
+      mp.presenceStatus=status;
       if(status==='SUBSCRIBED'){
-        await ch.track({user_id:state.user.id,display_name:state.profile?.display_name||'Aventureiro',account_type:state.profile?.account_type||'player',view:state.view||'table',joined_at:Date.now()});
+        try {
+          await ch.track({user_id:state.user.id,display_name:state.profile?.display_name||'Aventureiro',account_type:state.profile?.account_type||'player',view:state.view||'table',joined_at:Date.now()});
+        } catch(e) {
+          console.warn('Presença: falha ao publicar estado',e);
+        }
         renderPresence();
+      } else if(status==='CHANNEL_ERROR'||status==='TIMED_OUT'){
+        console.warn('Presença realtime:',status);
+        if(mp.presence===ch){mp.presence=null;mp.presenceCampaign=null;}
+        renderPresence();
+        setTimeout(()=>connectPresence(),1000);
       }
     });
     mp.presence=ch;mp.presenceCampaign=c;state.presenceChannel=ch;
+  }
+
+  async function reconnectPresence(){
+    if(mp.presence){try{await sb.removeChannel(mp.presence)}catch(e){};mp.presence=null;mp.presenceCampaign=null;}
+    await connectPresence();
   }
 
   async function updatePresenceView(){
@@ -224,6 +244,7 @@
       if(state.view==='combat')injectActionUI();
     },2500);
     document.addEventListener('click',e=>{if(e.target.closest('[data-view]')||e.target.closest('[data-mobile-view]'))setTimeout(updatePresenceView,50)});
+    window.addEventListener('rpg:realtime-reconnect',()=>reconnectPresence().catch(e=>console.warn('Presença reconnect:',e)));
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
 })();
