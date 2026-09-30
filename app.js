@@ -518,7 +518,6 @@ function scheduleRealtimeRecovery(reason='reconnect'){
 async function subscribeRealtime(){
   if(state.campaignChannel)await sb.removeChannel(state.campaignChannel).catch(()=>{});
   if(state.sessionChannel)await sb.removeChannel(state.sessionChannel).catch(()=>{});
-  if(state.presenceChannel)await sb.removeChannel(state.presenceChannel).catch(()=>{});
 
   const campaignId=state.campaign?.id;
   if(campaignId){
@@ -584,10 +583,8 @@ async function subscribeRealtime(){
     state.sessionChannel=session;
   }
 
-  const presence=sb.channel(`rpg-hub-presence-${state.campaign.id}`,{config:{private:true,presence:{key:state.user.id}}});
-  presence.on('presence',{event:'sync'},()=>{state.online=Object.keys(presence.presenceState()).length;$('onlineCount').textContent=`${Math.max(1,state.online)} online`;});
-  presence.subscribe(async status=>{if(status==='SUBSCRIBED'){await presence.track({user_id:state.user.id,display_name:state.profile?.display_name||'Aventureiro'});scheduleRealtimeRecovery('presence-subscribed');}else if(status==='CHANNEL_ERROR'||status==='TIMED_OUT'){console.warn('Presença realtime:',status);scheduleRealtimeRecovery('presence-'+status);}});
-  state.presenceChannel=presence;
+  // A presença da campanha é gerenciada exclusivamente por rpg-multiplayer-combat.js.
+  // Isso evita dois canais concorrentes (v1/v2) disputando state.presenceChannel e o contador online.
 }
 
 function receiveCharacterChange(payload){
