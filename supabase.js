@@ -20,9 +20,23 @@
     script.async = true;
     document.head.appendChild(script);
   };
+
+  const loadChatRealtimeFix = () => {
+    if (window.__rpgChatRealtimeFixLoaded) return;
+    window.__rpgChatRealtimeFixLoaded = true;
+    const script = document.createElement('script');
+    script.src = 'rpg-chat-realtime-fix.js?v=20260929-1';
+    script.async = true;
+    document.head.appendChild(script);
+  };
+
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => setTimeout(loadMultiplayerLayer, 700), { once: true });
+    document.addEventListener('DOMContentLoaded', () => {
+      setTimeout(loadMultiplayerLayer, 700);
+      setTimeout(loadChatRealtimeFix, 900);
+    }, { once: true });
   } else {
     setTimeout(loadMultiplayerLayer, 700);
+    setTimeout(loadChatRealtimeFix, 900);
   }
 })();
