@@ -1164,7 +1164,158 @@ A configuração SQL da camada central de realtime está registrada em:
 
 ---
 
+# Atualização — Mesa Online e Chat em tempo real — 30/09/2026
 
+A camada multiplayer da Mesa foi corrigida para que **presença, estado compartilhado e chat da campanha** funcionem por Realtime sem depender de atualização manual da página.
+
+## Mesa Online
+
+A Mesa utiliza canais privados do **Supabase Realtime** para distribuir o estado da campanha aos participantes autorizados.
+
+Os canais principais da camada multiplayer incluem:
+
+`rpg-hub-campaign-<campaign_id>`  
+`rpg-hub-presence-v2-<campaign_id>`  
+`rpg-hub-world-realtime-<campaign_id>`  
+`rpg-hub-vtt-engine-<campaign_id>`  
+`rpg-hub-real-vision-<campaign_id>`  
+`rpg-hub-combat-<campaign_id>`  
+`rpg-hub-combat-actions-<campaign_id>`  
+`rpg-hub-audit-<campaign_id>`  
+`rpg-hub-dice-<campaign_id>`
+
+A autorização desses canais é controlada por políticas RLS em `realtime.messages`. O usuário precisa ser **proprietário da campanha ou membro autorizado** para participar dos canais correspondentes.
+
+### Presença dos participantes
+
+A presença utiliza o canal:
+
+`rpg-hub-presence-v2-<campaign_id>`
+
+O estado transmitido inclui informações como:
+
+- ID do usuário.
+- Nome de exibição.
+- Tipo da conta.
+- Área atual da aplicação.
+- Momento da entrada na sessão.
+
+A interface mostra a quantidade de participantes conectados e pode exibir os usuários atualmente presentes na campanha.
+
+### Sincronização da Mesa
+
+As alterações compartilhadas continuam sendo persistidas no Supabase antes de serem refletidas nos clientes.
+
+O Realtime é utilizado para atualizar imediatamente elementos como:
+
+- Cenários.
+- Andares.
+- Cômodos.
+- Entidades.
+- Personagens adicionados à mesa.
+- Posicionamento.
+- Sessão ativa.
+- Combate.
+- Rolagens.
+- Configurações do mapa.
+- Visão e névoa.
+- Áudio.
+
+A aplicação também possui rotinas de reconciliação após reconexão para recuperar o estado atual diretamente do banco quando uma conexão WebSocket é perdida ou restabelecida.
+
+## Chat da campanha
+
+O chat da Mesa utiliza a tabela:
+
+`campaign_chat_messages`
+
+Cada mensagem é persistida no PostgreSQL com o ID da campanha e do usuário que realizou o envio.
+
+Após a confirmação da gravação, a aplicação publica a mensagem imediatamente no canal privado da campanha usando o evento:
+
+`chat_message`
+
+Fluxo:
+
+`Usuário → INSERT em campaign_chat_messages → Broadcast chat_message → Clientes conectados → renderChat()`
+
+Com isso, uma mensagem enviada por Mestre ou jogador aparece nos demais clientes sem F5.
+
+### Proteções do chat
+
+- Mensagens são limitadas a `2000` caracteres no frontend.
+- O usuário só pode gravar mensagens em campanhas às quais possui acesso.
+- O evento de transmissão verifica o `campaign_id` antes de atualizar o estado local.
+- Mensagens já presentes no estado são ignoradas para evitar duplicação.
+- A permissão de envio do evento `chat_message` é separada das permissões administrativas da Mesa.
+- Jogadores não recebem autorização para publicar eventos destinados exclusivamente ao estado administrativo do Mestre.
+
+### Compatibilidade e persistência
+
+O Broadcast é utilizado como atualização instantânea, enquanto o registro no PostgreSQL permanece como fonte persistente do histórico do chat.
+
+Isso permite que um participante entre novamente na campanha e carregue as mensagens já existentes através de uma consulta histórica, enquanto novas mensagens continuam chegando pelo WebSocket.
+
+## Correção de autorização do Realtime
+
+Foi identificado que diversos canais privados estavam retornando:
+
+`Unauthorized: You do not have permissions to read from this Channel topic`
+
+A causa era a ausência de políticas de autorização correspondentes aos novos tópicos privados utilizados pelas camadas multiplayer.
+
+Foram adicionadas políticas para leitura e/ou envio nos canais de:
+
+- Chat da campanha.
+- Presença `v2`.
+- Mundo.
+- VTT.
+- Visão.
+- Combate.
+- Ações de combate.
+- Auditoria.
+- Dados.
+
+A correção mantém o modelo de segurança baseado em campanha e evita abrir os canais como públicos apenas para contornar o problema.
+
+## Hardening da ponte legada de chat
+
+O projeto possuía uma função antiga chamada:
+
+`public.broadcast_campaign_chat_message()`
+
+Essa função era `SECURITY DEFINER` e estava exposta para execução por `anon` e `authenticated`.
+
+Como o fluxo atual do chat não depende mais de execução pública dessa RPC, a permissão de execução foi removida desses papéis. O trigger interno da tabela continua podendo executar a função conforme necessário.
+
+## Validação pós-correção
+
+Após a aplicação das políticas e a publicação da nova versão:
+
+- Os canais privados da camada multiplayer passaram a possuir regras de autorização correspondentes.
+- A política de envio do `chat_message` foi criada para usuários autorizados da campanha.
+- A política de presença `v2` foi criada para leitura e publicação pelos participantes autorizados.
+- A RPC legada `broadcast_campaign_chat_message()` deixou de ser executável por `anon` e `authenticated`.
+- O deploy de produção foi concluído com status `READY`.
+- A página da Mesa publicada respondeu com HTTP `200`.
+- O monitoramento do Supabase não registrou novos erros `Unauthorized` no Realtime no intervalo imediatamente posterior à correção.
+
+### Commits relacionados
+
+`4bfe3d3` — `fix: make campaign chat realtime for all members`  
+`d2834ff` — `chore: bust mesa runtime cache after realtime fixes`  
+`6604239` — `chore: bust chat realtime bridge cache`
+
+### Estado atual
+
+A arquitetura atual da Mesa considera o seguinte princípio:
+
+`PostgreSQL = persistência`  
+`Supabase Realtime = distribuição instantânea`  
+`RLS = autorização`  
+`Frontend = renderização e reconciliação do estado`
+
+---
 
 ### Segurança da sincronização
 
