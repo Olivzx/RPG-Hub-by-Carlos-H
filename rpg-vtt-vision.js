@@ -219,8 +219,13 @@
   async function load(){
     const c=cid(),f=fid(),api=sb();if(!c||!f||!api)return;
     const defaults={grid_enabled:true,snap_enabled:true,grid_size:5,unit_per_cell:5,fog_enabled:false,vision_enabled:false};
-    // Não reaproveitar a visão do andar/campanha anterior enquanto o novo estado está carregando.
-    V.settings=defaults;V.walls=[];V.sources=[];V.fog=[];V.explored=[];V.combat.encounter=null;V.combat.combatants=[];
+    const contextChanged=V.campaignId!==c||V.floorId!==f;
+    // Limpa dados do contexto anterior ao trocar de campanha/andar, mas preserva
+    // o último snapshot válido durante uma reconexão do mesmo contexto.
+    if(contextChanged){
+      V.settings=defaults;V.walls=[];V.sources=[];V.fog=[];V.explored=[];
+      V.combat.encounter=null;V.combat.combatants=[];
+    }
     try{
       const [a,b,d,g,h,e]=await Promise.all([
         api.from('map_settings').select('*').eq('campaign_id',c).eq('floor_id',f).maybeSingle(),
@@ -236,9 +241,19 @@
       if(d.error)console.warn('[RPG HUB] Fontes de visão indisponíveis:',d.error);
       if(g.error)console.warn('[RPG HUB] Névoa indisponível:',g.error);
       if(h?.error)console.warn('[RPG HUB] Exploração persistente indisponível:',h.error);
-      V.settings=a.data||defaults;
-      V.walls=b.error?[]:(b.data||[]);V.sources=d.error?[]:(d.data||[]);V.fog=g.error?[]:(g.data||[]);V.explored=h?.error?[]:(h?.data||[]);V.combat.encounter=e.data?.[0]||null;
-      if(V.combat.encounter){const q=await api.from('combatants').select('id,character_id,npc_id,name,conditions,turn_order').eq('encounter_id',V.combat.encounter.id).order('turn_order');if(!q.error&&cid()===c&&fid()===f)V.combat.combatants=q.data||[]}
+      if(cid()!==c||fid()!==f)return;
+      if(!a.error)V.settings=a.data||defaults;
+      if(!b.error)V.walls=b.data||[];
+      if(!d.error)V.sources=d.data||[];
+      if(!g.error)V.fog=g.data||[];
+      if(!h?.error&&h)V.explored=h.data||[];
+      if(!e.error)V.combat.encounter=e.data?.[0]||null;
+      if(V.combat.encounter){
+        const q=await api.from('combatants').select('id,character_id,npc_id,name,conditions,turn_order').eq('encounter_id',V.combat.encounter.id).order('turn_order');
+        if(!q.error&&cid()===c&&fid()===f)V.combat.combatants=q.data||[];
+        else if(q.error)console.warn('[RPG HUB] Combatentes indisponíveis:',q.error);
+      }
+      if(cid()!==c||fid()!==f)return;
     }catch(error){
       console.warn('[RPG HUB] Falha ao carregar camada de visão:',error);
     }
