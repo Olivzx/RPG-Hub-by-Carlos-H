@@ -110,14 +110,16 @@
         try {
           await verifyAuthApi();
           if (mode==='register') {
-            const {data,error}=await sb.auth.signUp({email,password,options:{data:{display_name:display,account_type:accountType}}});
+            const emailRedirectTo = new URL('mesa.html', location.href).href;
+            const {data,error}=await sb.auth.signUp({email,password,options:{emailRedirectTo,data:{display_name:display,account_type:accountType}}});
             if(error) throw error;
             if(data.session){ location.href='mesa.html'; return; }
-            $('authMessage').classList.add('success'); $('authMessage').textContent='Conta criada. Confira seu e-mail para confirmar o acesso.';
+            $('authMessage').classList.add('success'); $('authMessage').textContent='Conta criada. Confirme seu e-mail; o link retornará diretamente para a mesa do RPG HUB.';
           } else {
             const {data,error}=await sb.auth.signInWithPassword({email,password});
             if(error) throw error;
             if(data.session) location.href='mesa.html';
+            else throw new Error('O login foi aceito, mas o Supabase não retornou uma sessão ativa. Verifique a confirmação do e-mail e tente novamente.');
           }
         } catch(err) {
           console.error('[RPG HUB Auth] Falha no acesso:', err);
@@ -133,7 +135,7 @@
         const {error}=await sb.auth.resetPasswordForEmail(email,{redirectTo:location.origin+location.pathname});
         $('authMessage').className='formMessage '+(error?'error':'success'); $('authMessage').textContent=error?.message || 'Se o e-mail existir, o link de redefinição foi enviado.';
       };
-      sb.auth.getSession().then(({data})=>{if(data.session) location.href='mesa.html';});
+      sb.auth.getSession().then(({data,error})=>{if(error)throw error;if(data.session)location.href='mesa.html';}).catch(error=>{console.warn('[RPG HUB Auth] Não foi possível restaurar a sessão:',error);if($('authMessage')&&!$('authMessage').textContent)$('authMessage').textContent='Não foi possível restaurar sua sessão. Entre novamente.';});
       render();
     })();
   </script>
