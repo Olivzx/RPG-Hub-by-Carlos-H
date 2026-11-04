@@ -21,6 +21,8 @@
     drag:null,
     measure:null,
     channel:null,
+    reconnectTimer:null,
+    reconnectAttempt:0,
     conditionCache:{key:null,rows:[],promise:null}
   };
 
@@ -573,6 +575,11 @@
       api.from('fog_regions').select('*').eq('campaign_id',c).eq('floor_id',f).order('created_at'),
       api.from('aoe_effects').select('*').eq('campaign_id',c).eq('floor_id',f).order('created_at')
     ]);
+    if(cid()!==c||fid()!==f)return;
+    if(a.error||g.error||o.error){
+      console.warn('RPG HUB VTT: snapshot incompleto; mantendo o último estado válido.',a.error||g.error||o.error);
+      return;
+    }
     vtt.settings=a.data||settingsDefault();vtt.fog=g.data||[];vtt.aoe=o.data||[];
     vtt.campaignId=c;vtt.floorId=f;vtt.conditionCache={key:null,rows:[],promise:null};
     renderGrid();renderFog();renderAoe();decorateTokens();refreshMapLayout();
@@ -697,10 +704,18 @@
     if(c!==vtt.campaignId||f!==vtt.floorId||!vtt.settings)await loadFloorData();
   }
 
-  function realtime(){
-    const c=cid(),api=sbc();if(!c||!api)return;
+  async function realtime(){
+    const c=cid(),api=sbc();
+    if(!c||!api)return;
     if(vtt.channel&&vtt.campaignId===c)return;
-    if(vtt.channel)api.removeChannel(vtt.channel).catch(()=>{});
+
+    if(vtt.channel){
+      const previous=vtt.channel;
+      vtt.channel=null;
+      vtt.campaignId=null;
+      await api.removeChannel(previous).catch(()=>{});
+    }
+
     const ch=api.channel('rpg-hub-vtt-engine-'+c,{config:{private:true}});
     const floorMatch=p=>{const r=p.new||p.old;return r&&r.floor_id===fid()};
     ch.on('postgres_changes',{event:'*',schema:'public',table:'map_settings',filter:'campaign_id=eq.'+c},p=>{if(!floorMatch(p))return;vtt.settings=p.new||settingsDefault();renderGrid();updatePanel()});
@@ -710,11 +725,45 @@
     ch.on('postgres_changes',{event:'*',schema:'public',table:'world_entities',filter:'campaign_id=eq.'+c},()=>{if(window.state?.view==='table'){window.renderTable?.();}});
     ch.on('postgres_changes',{event:'*',schema:'public',table:'combat_encounters',filter:'campaign_id=eq.'+c},()=>{vtt.conditionCache={key:null,rows:[],promise:null};decorateTokens()});
     ch.on('postgres_changes',{event:'*',schema:'public',table:'combatants'},()=>{vtt.conditionCache={key:null,rows:[],promise:null};decorateTokens()});
-    ch.subscribe((status,error)=>{if(status==='CHANNEL_ERROR'||status==='TIMED_OUT')console.warn('RPG HUB VTT realtime:',status,error)});
-    vtt.channel=ch;vtt.campaignId=c;
+
+    vtt.channel=ch;
+    vtt.campaignId=c;
+    ch.subscribe((status,error)=>{
+      if(vtt.channel!==ch)return;
+      if(status==='SUBSCRIBED'){
+        vtt.reconnectAttempt=0;
+        if(vtt.reconnectTimer){clearTimeout(vtt.reconnectTimer);vtt.reconnectTimer=null;}
+        loadFloorData().catch(err=>console.warn('RPG HUB VTT resync:',err));
+        return;
+      }
+      if(status==='CHANNEL_ERROR'||status==='TIMED_OUT'||status==='CLOSED'){
+        console.warn('RPG HUB VTT realtime:',status,error);
+        vtt.channel=null;
+        vtt.campaignId=null;
+        api.removeChannel(ch).catch(()=>{});
+        if(vtt.reconnectTimer)clearTimeout(vtt.reconnectTimer);
+        vtt.reconnectAttempt=Math.min(vtt.reconnectAttempt+1,6);
+        const delay=Math.min(20000,1000*Math.pow(2,vtt.reconnectAttempt-1));
+        vtt.reconnectTimer=setTimeout(()=>{
+          vtt.reconnectTimer=null;
+          if(cid()===c)realtime().catch(err=>console.warn('RPG HUB VTT reconnect:',err));
+        },delay);
+      }
+    });
   }
 
-    window.addEventListener('rpg:realtime-reconnect',()=>{if(vtt.channel){sbc()?.removeChannel(vtt.channel).catch(()=>{});vtt.channel=null;}realtime();});
+  window.addEventListener('rpg:realtime-reconnect',()=>{
+    if(vtt.reconnectTimer){clearTimeout(vtt.reconnectTimer);vtt.reconnectTimer=null;}
+    vtt.reconnectAttempt=0;
+    if(vtt.channel){
+      const previous=vtt.channel;
+      vtt.channel=null;
+      vtt.campaignId=null;
+      sbc()?.removeChannel(previous).catch(()=>{});
+    }
+    realtime().catch(err=>console.warn('RPG HUB VTT reconnect:',err));
+    loadFloorDataWhenChanged();
+  });
 function init(){
     if(vtt.initialized)return;
     const run=()=>{

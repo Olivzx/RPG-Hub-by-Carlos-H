@@ -49,8 +49,16 @@ function roomVisibleOnMap(room){
   return mapPointVisible(Number(room.x)+Number(room.width)/2, Number(room.y)+Number(room.height)/2);
 }
 
-window.addEventListener('online',()=>scheduleRealtimeRecovery('browser-online'));
-document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')scheduleRealtimeRecovery('tab-visible')});
+window.addEventListener('online',()=>{
+  scheduleRealtimeRecovery('browser-online');
+  if(state.campaign?.id)subscribeRealtime({preserveAttempts:true}).catch(err=>console.warn('RPG HUB online reconnect:',err));
+});
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='visible'){
+    scheduleRealtimeRecovery('tab-visible');
+    if(state.campaign?.id&&!state.campaignChannel)subscribeRealtime({preserveAttempts:true}).catch(err=>console.warn('RPG HUB tab reconnect:',err));
+  }
+});
 async function boot(){
   try{
     const {data,error}=await sb.auth.getSession(); if(error) throw error;
@@ -459,11 +467,33 @@ function receiveRealtimeBroadcast(message){
 
 let realtimeRecoveryTimer=null;
 let realtimeRecoveryRunning=false;
+let realtimeRecoveryGeneration=0;
+let realtimeSubscriptionGeneration=0;
+let campaignReconnectTimer=null;
+let campaignReconnectAttempt=0;
+
+function scheduleCampaignRealtimeReconnect(campaignId,reason='reconnect'){
+  if(!campaignId||state.campaign?.id!==campaignId)return;
+  clearTimeout(campaignReconnectTimer);
+  campaignReconnectAttempt=Math.min(campaignReconnectAttempt+1,6);
+  const delay=Math.min(30000,750*Math.pow(2,campaignReconnectAttempt-1));
+  console.warn('RPG HUB: nova tentativa de conexão em '+delay+'ms ('+reason+').');
+  campaignReconnectTimer=setTimeout(()=>{
+    campaignReconnectTimer=null;
+    if(state.campaign?.id!==campaignId)return;
+    subscribeRealtime({preserveAttempts:true}).catch(error=>{
+      console.warn('RPG HUB: falha ao reconstruir canal da campanha:',error);
+      scheduleCampaignRealtimeReconnect(campaignId,'rebuild-failed');
+    });
+  },delay);
+}
 async function reconcileRealtimeState(reason='reconnect'){
-  if(realtimeRecoveryRunning||!state.campaign?.id)return;
+  const cid=state.campaign?.id;
+  if(!cid)return;
+  const generation=++realtimeRecoveryGeneration;
+  const isCurrent=()=>generation===realtimeRecoveryGeneration&&state.campaign?.id===cid;
   realtimeRecoveryRunning=true;
   try{
-    const cid=state.campaign.id;
     const [locations,entities,sessions,characters]=await Promise.all([
       sb.from('locations').select('*').eq('campaign_id',cid).order('sort_order'),
       sb.from('world_entities').select('*').eq('campaign_id',cid).order('created_at'),
@@ -474,19 +504,30 @@ async function reconcileRealtimeState(reason='reconnect'){
     if(entities.error)throw entities.error;
     if(sessions.error)throw sessions.error;
     if(characters.error)throw characters.error;
-    state.locations=locations.data||[];
-    if(state.locations.length){
-      const locIds=state.locations.map(l=>l.id);
+    if(!isCurrent())return;
+
+    const nextLocations=locations.data||[];
+    let nextFloors=[];
+    let nextRooms=[];
+    if(nextLocations.length){
+      const locIds=nextLocations.map(l=>l.id);
       const floors=await sb.from('floors').select('*').in('location_id',locIds).order('sort_order');
       if(floors.error)throw floors.error;
-      state.floors=floors.data||[];
-      if(state.floors.length){
-        const floorIds=state.floors.map(f=>f.id);
+      if(!isCurrent())return;
+      nextFloors=floors.data||[];
+      if(nextFloors.length){
+        const floorIds=nextFloors.map(f=>f.id);
         const rooms=await sb.from('rooms').select('*').in('floor_id',floorIds).order('sort_order');
         if(rooms.error)throw rooms.error;
-        state.rooms=rooms.data||[];
-      }else state.rooms=[];
-    }else{state.floors=[];state.rooms=[];}
+        if(!isCurrent())return;
+        nextRooms=rooms.data||[];
+      }
+    }
+    if(!isCurrent())return;
+
+    state.locations=nextLocations;
+    state.floors=nextFloors;
+    state.rooms=nextRooms;
     state.entities=entities.data||[];
     state.sessions=sessions.data||[];
     state.characters=characters.data||[];
@@ -509,84 +550,84 @@ async function reconcileRealtimeState(reason='reconnect'){
     window.rpgCombatReconnect?.();
   }catch(err){
     console.warn('RPG HUB state reconciliation:',reason,err);
-  }finally{realtimeRecoveryRunning=false;}
+  }finally{
+    if(generation===realtimeRecoveryGeneration)realtimeRecoveryRunning=false;
+  }
 }
 function scheduleRealtimeRecovery(reason='reconnect'){
   clearTimeout(realtimeRecoveryTimer);
   realtimeRecoveryTimer=setTimeout(()=>reconcileRealtimeState(reason),350);
 }
-async function subscribeRealtime(){
-  if(state.campaignChannel)await sb.removeChannel(state.campaignChannel).catch(()=>{});
-  if(state.sessionChannel)await sb.removeChannel(state.sessionChannel).catch(()=>{});
+async function subscribeRealtime(options={}){
+  const generation=++realtimeSubscriptionGeneration;
+  if(!options.preserveAttempts)campaignReconnectAttempt=0;
+  clearTimeout(campaignReconnectTimer);
+  campaignReconnectTimer=null;
+
+  const previousCampaign=state.campaignChannel;
+  const previousSession=state.sessionChannel;
+  state.campaignChannel=null;
+  state.sessionChannel=null;
+  await Promise.all([
+    previousCampaign?sb.removeChannel(previousCampaign).catch(()=>{}):Promise.resolve(),
+    previousSession?sb.removeChannel(previousSession).catch(()=>{}):Promise.resolve()
+  ]);
+  if(generation!==realtimeSubscriptionGeneration)return;
 
   const campaignId=state.campaign?.id;
-  if(campaignId){
-    const campaign=sb.channel(`rpg-hub-campaign-${campaignId}`,{config:{private:true}});
-    campaign.on('broadcast',{event:'entity_move'},({payload})=>{if(payload?.user_id!==state.user.id)receiveEntityMove(payload);});
-    campaign.on('broadcast',{event:'room_move'},({payload})=>{if(payload?.user_id!==state.user.id)receiveRoomMove(payload);});
-    campaign.on('broadcast',{event:'room_resize'},({payload})=>{if(payload?.user_id!==state.user.id)receiveRoomResize(payload);});
-    campaign.on('broadcast',{event:'room_rotate'},({payload})=>{if(payload?.user_id!==state.user.id)receiveRoomRotate(payload);});
-    campaign.on('broadcast',{event:'scene_change'},({payload})=>{if(payload?.user_id!==state.user.id)receiveSceneChange(payload);});
-    campaign.on('broadcast',{event:'audio'},({payload})=>{if(payload?.user_id!==state.user.id)receiveAudio(payload);});
-    campaign.on('broadcast',{event:'dice_roll'},({payload})=>{if(payload?.user_id!==state.user.id)receiveRoll(payload);});
-    campaign.on('postgres_changes',{event:'INSERT',schema:'public',table:'campaign_chat_messages',filter:`campaign_id=eq.${campaignId}`},payload=>{const row=payload?.new;if(!row?.id||state.chatMessages.some(m=>m.id===row.id))return;state.chatMessages.push(row);renderChat();});
-    campaign.on('broadcast',{event:'activity'},({payload})=>{if(payload?.user_id!==state.user.id)receiveCampaignActivity(payload);});
-    campaign.on('broadcast',{event:'chat_message'},({payload})=>{const row=payload?.record;if(!row?.id||row.campaign_id!==state.campaign?.id||row.user_id===state.user.id)return;if(state.chatMessages.some(m=>m.id===row.id))return;state.chatMessages=[...state.chatMessages,row].slice(-200);renderChat();});
-    campaign.on('postgres_changes',{event:'*',schema:'public',table:'campaign_audio_state',filter:`campaign_id=eq.${campaignId}`},async payload=>{
-      if(canEdit()||!state.audioEnabled)return;
-      const row=payload?.new;
-      if(!row)return;
-      state.campaignAudioState=row;
-      await syncPersistedAudioState({broadcast:false}).catch(err=>console.warn('RPG HUB audio realtime:',err));
-    });
-    campaign.on('broadcast',{event:'INSERT'},payload=>receiveRealtimeBroadcast(payload));
-    campaign.on('broadcast',{event:'UPDATE'},payload=>receiveRealtimeBroadcast(payload));
-    campaign.on('broadcast',{event:'DELETE'},payload=>receiveRealtimeBroadcast(payload));
-    campaign.on('postgres_changes',{event:'INSERT',schema:'public',table:'dice_rolls',filter:`campaign_id=eq.${campaignId}`},payload=>{
-      const row=payload?.new;
-      if(!row?.id)return;
-      receiveRoll(row);
-    });
-    campaign.on('postgres_changes',{event:'*',schema:'public',table:'characters',filter:`campaign_id=eq.${campaignId}`},payload=>{receiveCharacterChange(payload);});
-    campaign.subscribe((status,err)=>{if(status==='SUBSCRIBED'){scheduleRealtimeRecovery('campaign-subscribed');}if(status==='CHANNEL_ERROR'||status==='TIMED_OUT'){console.warn('Campanha realtime:',status,err);scheduleRealtimeRecovery('campaign-'+status);}});
-    state.campaignChannel=campaign;
-    startAudioDriftSync();
-  }
+  if(!campaignId)return;
 
-  const sid=currentSession()?.id;
-  if(sid){
-    const session=sb.channel(`rpg-hub-session-${sid}`,{config:{private:true}});
-    session.on('postgres_changes',{event:'UPDATE',schema:'public',table:'sessions',filter:`id=eq.${sid}`},payload=>{
-      const row=payload.new;if(!row)return;
-      const before=currentSession();
-      const changed=row.id===before?.id&&(row.active_floor_id!==before?.active_floor_id||row.active_room_id!==before?.active_room_id);
-      state.sessions=state.sessions.map(x=>x.id===row.id?row:x);
-      if(changed&&!canEdit()){
-        receiveSceneChange({
-          floor_id:row.active_floor_id,
-          room_id:row.active_room_id,
-          room_name:state.rooms.find(r=>r.id===row.active_room_id)?.name,
-          silent:true
-        });
-      }
-    });
-    session.on('postgres_changes',{event:'UPDATE',schema:'public',table:'world_entities',filter:`campaign_id=eq.${state.campaign.id}`},payload=>{
-      const row=payload.new;
-      if(!row||payload.old?.updated_at===row.updated_at)return;
-      receiveEntityMove({entity_id:row.id,x:row.x,y:row.y,room_id:row.room_id,floor_id:row.floor_id});
-    });
-    session.on('postgres_changes',{event:'UPDATE',schema:'public',table:'rooms'},payload=>{
-      const row=payload.new;
-      if(row?.id)receiveRoomMove({room_id:row.id,x:row.x,y:row.y});
-    });
-    session.subscribe((status,err)=>{if(status==='SUBSCRIBED'){scheduleRealtimeRecovery('session-subscribed');}if(status==='CHANNEL_ERROR'||status==='TIMED_OUT'){console.warn('Sessão realtime:',status,err);scheduleRealtimeRecovery('session-'+status);}});
-    state.sessionChannel=session;
-  }
+  const campaign=sb.channel(`rpg-hub-campaign-${campaignId}`,{config:{private:true}});
+  campaign.on('broadcast',{event:'entity_move'},({payload})=>{if(payload?.user_id!==state.user.id)receiveEntityMove(payload);});
+  campaign.on('broadcast',{event:'room_move'},({payload})=>{if(payload?.user_id!==state.user.id)receiveRoomMove(payload);});
+  campaign.on('broadcast',{event:'room_resize'},({payload})=>{if(payload?.user_id!==state.user.id)receiveRoomResize(payload);});
+  campaign.on('broadcast',{event:'room_rotate'},({payload})=>{if(payload?.user_id!==state.user.id)receiveRoomRotate(payload);});
+  campaign.on('broadcast',{event:'scene_change'},({payload})=>{if(payload?.user_id!==state.user.id)receiveSceneChange(payload);});
+  campaign.on('broadcast',{event:'audio'},({payload})=>{if(payload?.user_id!==state.user.id)receiveAudio(payload);});
+  campaign.on('broadcast',{event:'dice_roll'},({payload})=>{if(payload?.user_id!==state.user.id)receiveRoll(payload);});
+  campaign.on('postgres_changes',{event:'INSERT',schema:'public',table:'campaign_chat_messages',filter:`campaign_id=eq.${campaignId}`},payload=>{const row=payload?.new;if(!row?.id||state.chatMessages.some(m=>m.id===row.id))return;state.chatMessages.push(row);renderChat();});
+  campaign.on('broadcast',{event:'activity'},({payload})=>{if(payload?.user_id!==state.user.id)receiveCampaignActivity(payload);});
+  campaign.on('broadcast',{event:'chat_message'},({payload})=>{const row=payload?.record;if(!row?.id||row.campaign_id!==state.campaign?.id||row.user_id===state.user.id)return;if(state.chatMessages.some(m=>m.id===row.id))return;state.chatMessages=[...state.chatMessages,row].slice(-200);renderChat();});
+  campaign.on('postgres_changes',{event:'*',schema:'public',table:'campaign_audio_state',filter:`campaign_id=eq.${campaignId}`},async payload=>{
+    if(canEdit()||!state.audioEnabled)return;
+    const row=payload?.new;
+    if(!row)return;
+    state.campaignAudioState=row;
+    await syncPersistedAudioState({broadcast:false}).catch(err=>console.warn('RPG HUB audio realtime:',err));
+  });
+  campaign.on('broadcast',{event:'INSERT'},payload=>receiveRealtimeBroadcast(payload));
+  campaign.on('broadcast',{event:'UPDATE'},payload=>receiveRealtimeBroadcast(payload));
+  campaign.on('broadcast',{event:'DELETE'},payload=>receiveRealtimeBroadcast(payload));
+  campaign.on('postgres_changes',{event:'INSERT',schema:'public',table:'dice_rolls',filter:`campaign_id=eq.${campaignId}`},payload=>{
+    const row=payload?.new;
+    if(!row?.id)return;
+    receiveRoll(row);
+  });
+  campaign.on('postgres_changes',{event:'*',schema:'public',table:'characters',filter:`campaign_id=eq.${campaignId}`},payload=>receiveCharacterChange(payload));
 
-  // A presença da campanha é gerenciada exclusivamente por rpg-multiplayer-combat.js.
-  // Isso evita dois canais concorrentes (v1/v2) disputando state.presenceChannel e o contador online.
+  state.campaignChannel=campaign;
+  campaign.subscribe((status,err)=>{
+    if(generation!==realtimeSubscriptionGeneration||state.campaignChannel!==campaign)return;
+    if(status==='SUBSCRIBED'){
+      campaignReconnectAttempt=0;
+      clearTimeout(campaignReconnectTimer);
+      campaignReconnectTimer=null;
+      scheduleRealtimeRecovery('campaign-subscribed');
+      return;
+    }
+    if(status==='CHANNEL_ERROR'||status==='TIMED_OUT'||status==='CLOSED'){
+      console.warn('Campanha realtime:',status,err);
+      state.campaignChannel=null;
+      sb.removeChannel(campaign).catch(()=>{});
+      scheduleCampaignRealtimeReconnect(campaignId,'campaign-'+status);
+    }
+  });
+  startAudioDriftSync();
+
+  // Os eventos persistentes de sessões, salas e tokens chegam pelo Broadcast
+  // transacional da campanha. Um segundo canal por sessão gerava assinaturas
+  // duplicadas e podia deixar a interface com versões concorrentes dos dados.
 }
-
 function receiveCharacterChange(payload){
   if(!payload)return;
   const eventType=payload.eventType;
