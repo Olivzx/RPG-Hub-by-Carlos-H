@@ -230,6 +230,7 @@
         !master()?api.from('fog_exploration_cells').select('id,cell_x,cell_y,last_seen_at').eq('campaign_id',c).eq('floor_id',f).eq('user_id',window.state.user.id).order('cell_y').order('cell_x'):Promise.resolve({data:[]}),
         session()?api.from('combat_encounters').select('id,current_index,round,status').eq('campaign_id',c).eq('session_id',session().id).order('created_at',{ascending:false}).limit(1):Promise.resolve({data:[]})
       ]);
+      if(cid()!==c||fid()!==f)return;
       if(a.error)console.warn('[RPG HUB] Configuração de visão indisponível:',a.error);
       if(b.error)console.warn('[RPG HUB] Paredes indisponíveis:',b.error);
       if(d.error)console.warn('[RPG HUB] Fontes de visão indisponíveis:',d.error);
@@ -237,7 +238,7 @@
       if(h?.error)console.warn('[RPG HUB] Exploração persistente indisponível:',h.error);
       V.settings=a.data||defaults;
       V.walls=b.error?[]:(b.data||[]);V.sources=d.error?[]:(d.data||[]);V.fog=g.error?[]:(g.data||[]);V.explored=h?.error?[]:(h?.data||[]);V.combat.encounter=e.data?.[0]||null;
-      if(V.combat.encounter){const q=await api.from('combatants').select('id,character_id,npc_id,name,conditions,turn_order').eq('encounter_id',V.combat.encounter.id).order('turn_order');if(!q.error)V.combat.combatants=q.data||[]}
+      if(V.combat.encounter){const q=await api.from('combatants').select('id,character_id,npc_id,name,conditions,turn_order').eq('encounter_id',V.combat.encounter.id).order('turn_order');if(!q.error&&cid()===c&&fid()===f)V.combat.combatants=q.data||[]}
     }catch(error){
       console.warn('[RPG HUB] Falha ao carregar camada de visão:',error);
     }
