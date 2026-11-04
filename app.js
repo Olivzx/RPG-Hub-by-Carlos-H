@@ -2167,16 +2167,19 @@ function normalizeFieldKey(label){
 }
 function fieldValueFromCharacter(character,field){
   const path=String(field.data_key||'').split('.');
-  const source=field.player_visible===false?(character?.private_data||{}):character;
-  if(path.length===1)return source?.[path[0]];
-  return source?.[path[0]]?.[path[1]];
+  if(field.player_visible===false){
+    const privateKey=path.length>1?path[path.length-1]:path[0];
+    return character?.private_data?.[privateKey];
+  }
+  if(path.length===1)return character?.[path[0]];
+  return character?.[path[0]]?.[path[1]];
 }
 function setFieldValue(payload,field,value){
   const path=String(field.data_key||'').split('.');
   if(field.player_visible===false){
     if(!payload.private_data||typeof payload.private_data!=='object')payload.private_data={};
-    if(path.length===1)payload.private_data[path[0]]=value;
-    else{if(!payload.private_data[path[0]]||typeof payload.private_data[path[0]]!=='object')payload.private_data[path[0]]={};payload.private_data[path[0]][path[1]]=value;}
+    const privateKey=path.length>1?path[path.length-1]:path[0];
+    payload.private_data[privateKey]=value;
     return;
   }
   if(path.length===1){payload[path[0]]=value;return;}
@@ -2426,16 +2429,19 @@ function normalizeFieldKey(label){
 }
 function fieldValueFromCharacter(character,field){
   const path=String(field.data_key||'').split('.');
-  const source=field.player_visible===false?(character?.private_data||{}):character;
-  if(path.length===1)return source?.[path[0]];
-  return source?.[path[0]]?.[path[1]];
+  if(field.player_visible===false){
+    const privateKey=path.length>1?path[path.length-1]:path[0];
+    return character?.private_data?.[privateKey];
+  }
+  if(path.length===1)return character?.[path[0]];
+  return character?.[path[0]]?.[path[1]];
 }
 function setFieldValue(payload,field,value){
   const path=String(field.data_key||'').split('.');
   if(field.player_visible===false){
     if(!payload.private_data||typeof payload.private_data!=='object')payload.private_data={};
-    if(path.length===1)payload.private_data[path[0]]=value;
-    else{if(!payload.private_data[path[0]]||typeof payload.private_data[path[0]]!=='object')payload.private_data[path[0]]={};payload.private_data[path[0]][path[1]]=value;}
+    const privateKey=path.length>1?path[path.length-1]:path[0];
+    payload.private_data[privateKey]=value;
     return;
   }
   if(path.length===1){payload[path[0]]=value;return;}
