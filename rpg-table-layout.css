@@ -1,0 +1,232 @@
+/* RPG HUB — mesa: layout unificado e responsivo */
+.appShell{
+  grid-template-columns:252px minmax(0,1fr);
+  min-height:100vh;
+}
+.sidebar{
+  position:sticky;
+  top:0;
+  height:100vh;
+  min-height:100vh;
+  overflow-y:auto;
+  overscroll-behavior:contain;
+  border-right:1px solid #222936;
+  background:linear-gradient(180deg,#0d1119 0%,#090c12 100%);
+}
+.workspace{
+  width:100%;
+  min-width:0;
+  padding:26px clamp(18px,2.5vw,38px) 64px;
+}
+.workspaceTop{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:20px;
+  padding:0 0 20px;
+  border-bottom:1px solid rgba(255,255,255,.06);
+}
+.workspaceTop>div:first-child{min-width:0}
+.workspaceTop h1{letter-spacing:-.035em}
+.topActions{display:flex;align-items:center;justify-content:flex-end;gap:9px;flex-wrap:wrap}
+.sessionMetaBar{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:16px;
+  margin:16px 0;
+  padding:12px 16px;
+  border:1px solid #252d3a;
+  border-radius:14px;
+  background:linear-gradient(120deg,rgba(20,26,38,.95),rgba(12,16,24,.92));
+}
+.sessionMetaBar>div{display:grid;gap:4px;min-width:0}
+.sessionMetaBar span{color:#8792a5}
+.tableLayout{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) 328px;
+  align-items:start;
+  gap:16px;
+}
+.boardPanel{
+  min-width:0;
+  overflow:hidden;
+  border:1px solid #283141;
+  border-radius:18px;
+  background:#0b0f16;
+  box-shadow:0 18px 54px rgba(0,0,0,.18);
+}
+.boardToolbar{
+  min-width:0;
+  padding:13px 15px;
+  border-bottom:1px solid #252d39;
+  background:linear-gradient(180deg,#121823,#0e131c);
+}
+.boardFrame{
+  width:100%;
+  height:auto;
+  min-height:0;
+  max-height:none;
+  overflow:auto;
+  padding:13px;
+  background:linear-gradient(180deg,#0b1018,#080b11);
+}
+.boardGrid{
+  width:100%;
+  height:clamp(500px,calc(100vh - 325px),760px);
+  min-width:0!important;
+  min-height:0!important;
+  border:1px solid #30394a;
+  border-radius:13px;
+}
+.boardFooter{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:14px;
+  padding:11px 15px;
+  border-top:1px solid #202835;
+  background:#0c1119;
+}
+.contextPanel{
+  width:100%;
+  min-width:0;
+  position:sticky;
+  top:18px;
+  max-height:calc(100vh - 36px);
+  overflow:auto;
+  overscroll-behavior:contain;
+  padding:14px;
+  border:1px solid #283141;
+  border-radius:18px;
+  background:linear-gradient(180deg,#101620,#0b1018);
+  box-shadow:0 18px 54px rgba(0,0,0,.18);
+}
+.contextHead{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  padding:2px 1px 13px;
+  border-bottom:1px solid rgba(255,255,255,.07);
+}
+.contextSection{
+  padding:14px 0;
+  border-bottom:1px solid rgba(255,255,255,.065);
+}
+.contextSection:last-of-type{border-bottom:0}
+.sectionTitle{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+.selectedCard{
+  margin-top:12px;
+  padding:12px;
+  border:1px solid #2b3444;
+  border-radius:13px;
+  background:rgba(5,8,13,.45);
+}
+.tableAudioDetails{
+  margin-top:16px;
+  border:1px solid #293344;
+  border-radius:16px;
+  overflow:hidden;
+  background:linear-gradient(180deg,#101722,#0b1018);
+}
+.tableAudioDetails>summary{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  min-height:54px;
+  padding:0 16px;
+  color:#e6e9f1;
+  font-size:12px;
+  font-weight:750;
+  cursor:pointer;
+  list-style:none;
+}
+.tableAudioDetails>summary::-webkit-details-marker{display:none}
+.tableAudioDetails>summary:after{content:"+";font-size:20px;color:var(--rpg-accent);font-weight:400}
+.tableAudioDetails[open]>summary:after{content:"−"}
+.tableAudioDetails>summary span{margin-left:auto;color:#7f899a;font-size:10px;font-weight:500}
+.tableAudioPanel{padding:0 14px 14px}
+.npcSheetGrid{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:12px;
+  margin:12px 0;
+}
+.npcSheetGroup{min-width:0;padding:13px;border:1px solid #2a3342;border-radius:13px;background:rgba(8,12,18,.52)}
+.npcSheetGroup h4{margin:0 0 10px;color:#c6cde0;font-size:11px;letter-spacing:.07em;text-transform:uppercase}
+.npcCustomFields{display:grid;gap:9px}
+.npcCustomRow{
+  display:grid;
+  grid-template-columns:minmax(130px,.7fr) minmax(0,1.3fr) auto;
+  gap:9px;
+  align-items:end;
+  padding:10px;
+  border:1px solid #293343;
+  border-radius:11px;
+  background:rgba(7,10,16,.48);
+}
+.npcCustomRow label{min-width:0}
+.npcCustomRow .dangerGhost{min-height:36px}
+.npcSheetGroup .dynamicField small{display:block;color:#7f899a;margin-top:5px;font-size:10px}
+@media(max-width:1200px){
+  .appShell{grid-template-columns:222px minmax(0,1fr)}
+  .workspace{padding:22px 18px 58px}
+  .tableLayout{grid-template-columns:minmax(0,1fr) 286px;gap:13px}
+  .contextPanel{padding:12px}
+}
+@media(max-width:900px){
+  .tableLayout{grid-template-columns:minmax(0,1fr) 250px;gap:11px}
+  .boardToolbar{padding:10px}
+  .boardGrid{height:clamp(460px,calc(100vh - 340px),680px)}
+}
+@media(max-width:760px){
+  .appShell{display:block;min-height:100vh}
+  .sidebar{display:none!important}
+  .workspace{width:100%;min-width:0;padding:0 12px 100px}
+  .workspaceTop{display:block;padding:14px 2px 13px}
+  .workspaceTop h1{font-size:23px}
+  .topActions{justify-content:flex-start;margin-top:10px}
+  .sessionMetaBar{margin:12px 0;padding:10px 11px}
+  .sessionMetaBar .softButton{white-space:nowrap}
+  .tableLayout{display:grid;grid-template-columns:minmax(0,1fr);gap:12px}
+  .boardPanel{width:100%;border-radius:15px}
+  .boardToolbar{position:relative;top:auto;z-index:20;padding:9px}
+  .boardFrame{
+    height:auto;
+    min-height:0;
+    max-height:none;
+    overflow-x:hidden;
+    overflow-y:visible;
+    padding:8px;
+  }
+  .boardGrid{
+    width:100%!important;
+    height:clamp(420px,60vh,570px)!important;
+    min-width:0!important;
+    min-height:420px!important;
+  }
+  .contextPanel{
+    width:100%;
+    position:static;
+    top:auto;
+    max-height:none;
+    overflow:visible;
+    padding:12px;
+  }
+  .contextSection{padding:12px 0}
+  .selectedCard{margin-top:9px}
+  .tableAudioDetails{margin-top:12px}
+  .npcSheetGrid{grid-template-columns:1fr}
+  .npcCustomRow{grid-template-columns:1fr}
+  .npcCustomRow .dangerGhost{justify-self:start}
+}
+@media(max-width:420px){
+  .workspace{padding-left:9px;padding-right:9px}
+  .mobileAppHeader{margin-left:-9px;margin-right:-9px;padding-left:9px;padding-right:9px}
+  .workspaceTop h1{font-size:21px}
+  .boardGrid{height:430px!important;min-height:430px!important}
+  .boardToolbar .toolbarActions{gap:4px}
+  .sessionMetaBar{align-items:flex-start}
+}
