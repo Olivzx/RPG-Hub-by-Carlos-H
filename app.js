@@ -2426,11 +2426,18 @@ function normalizeFieldKey(label){
 }
 function fieldValueFromCharacter(character,field){
   const path=String(field.data_key||'').split('.');
-  if(path.length===1)return character?.[path[0]];
-  return character?.[path[0]]?.[path[1]];
+  const source=field.player_visible===false?(character?.private_data||{}):character;
+  if(path.length===1)return source?.[path[0]];
+  return source?.[path[0]]?.[path[1]];
 }
 function setFieldValue(payload,field,value){
   const path=String(field.data_key||'').split('.');
+  if(field.player_visible===false){
+    if(!payload.private_data||typeof payload.private_data!=='object')payload.private_data={};
+    if(path.length===1)payload.private_data[path[0]]=value;
+    else{if(!payload.private_data[path[0]]||typeof payload.private_data[path[0]]!=='object')payload.private_data[path[0]]={};payload.private_data[path[0]][path[1]]=value;}
+    return;
+  }
   if(path.length===1){payload[path[0]]=value;return;}
   if(!payload[path[0]]||typeof payload[path[0]]!=='object')payload[path[0]]={};
   payload[path[0]][path[1]]=value;
@@ -2463,8 +2470,8 @@ function fieldInputHtml(field,character,isMasterEditor){
 function getDynamicFieldDefinitions(isMasterEditor){
   return (state.characterFields||[]).filter(f=>f.enabled && (isMasterEditor || f.player_visible)).sort((a,b)=>Number(a.sort_order)-Number(b.sort_order));
 }
-function buildCharacterPayloadFromFields(formRoot){
-  const payload={campaign_id:state.campaign.id,attributes:{},sheet_data:{}};
+function buildCharacterPayloadFromFields(formRoot,existingCharacter=null){
+  const payload={campaign_id:state.campaign.id,attributes:{},sheet_data:{},private_data:{...(existingCharacter?.private_data||{})}};
   formRoot.querySelectorAll('[data-field-id]').forEach(el=>{
     const type=el.dataset.type;
     let value;
@@ -2493,7 +2500,7 @@ async function openCharacterModal(id){
     <div class="modalActions"><button class="softButton" data-close>Cancelar</button><button id="saveCharacter" class="primarySmall">Salvar ficha</button></div>`);
   $('saveCharacter').onclick=async()=>{
     try{
-      const payload=buildCharacterPayloadFromFields($('dynamicCharacterFields'));
+      const payload=buildCharacterPayloadFromFields($('dynamicCharacterFields'),existing);
       payload.id=undefined;
       payload.campaign_id=state.campaign.id;
       if(isMasterEditor){payload.player_id=$('charPlayer')?.value||null;}else{payload.player_id=state.user.id;}
@@ -2507,6 +2514,8 @@ async function openCharacterModal(id){
       }
       if(!payload.attributes)payload.attributes={};
       if(!payload.sheet_data)payload.sheet_data={};
+      const privateData=payload.private_data||{};delete payload.private_data;
+      let savedCharacterId=existing?.id||null;
       if(existing){
         const updatePayload={...payload};delete updatePayload.id;
         const result=await sb.from('characters').update(updatePayload).eq('id',existing.id).select('*').maybeSingle();
@@ -2518,7 +2527,7 @@ async function openCharacterModal(id){
           data=verify.data;
         }
         if(!data)throw new Error('A ficha foi alterada, mas não pôde ser lida de volta.');
-        state.characters=state.characters.map(x=>x.id===existing.id?data:x);
+        state.characters=state.characters.map(x=>x.id===existing.id?data:x);savedCharacterId=existing.id;
       }else{
         const characterId=uid();
         payload.id=characterId;
@@ -2531,7 +2540,11 @@ async function openCharacterModal(id){
           data=verify.data;
         }
         if(!data)throw new Error('A ficha foi criada, mas não pôde ser carregada de volta.');
-        state.characters.push(data);
+        state.characters.push(data);savedCharacterId=characterId;
+      }
+      if(isMasterEditor&&savedCharacterId){
+        await savePrivateCharacterData(savedCharacterId,state.campaign.id,privateData);
+        state.characters=state.characters.map(x=>x.id===savedCharacterId?{...x,private_data:privateData}:x);
       }
       const fileIds=visibleFields.filter(f=>f.data_key==='avatar_url').map(f=>f.id);
       for(const fieldId of fileIds){
@@ -2548,7 +2561,8 @@ async function openCharacterModal(id){
             data=verify.data;
           }
           if(!data)throw new Error('A ficha recebeu a imagem, mas não pôde ser recarregada.');
-          state.characters=state.characters.map(x=>x.id===targetId?data:x);
+          const current=state.characters.find(x=>x.id===targetId);
+          state.characters=state.characters.map(x=>x.id===targetId?{...data,private_data:current?.private_data||{}}:x);
         }
       }
       closeModal();renderAll();toast('Ficha salva');
