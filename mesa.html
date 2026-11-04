@@ -8,6 +8,7 @@
   <title>RPG HUB — Mesa</title>
   <link rel="stylesheet" href="styles.css">
   <link rel="stylesheet" href="mobile-responsive-fixes.css">
+  <link rel="stylesheet" href="rpg-table-layout.css?v=20261104.5">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2"></script>
   <script src="supabase.js?v=20261104.4"></script>
   <script src="rpg-theme-customizer.js"></script>
@@ -77,6 +78,7 @@
             <div class="selectedCard" id="selectedCard"><div class="emptySelect">Selecione uma entidade ou cômodo.</div></div>
           </aside>
         </div>
+        <details class="tableAudioDetails"><summary>Mixagem da mesa <span>Música, ambientes e efeitos</span></summary><div id="tableAudioPanel" class="tableAudioPanel"></div></details>
       </section>
 
       <section id="viewCharacters" class="view"><div class="sectionTop"><div><div class="eyebrow">FICHAS</div><h2>Personagens da campanha</h2><p>O mestre visualiza as fichas vinculadas aos jogadores.</p></div><div class="sectionActions"><button id="characterFieldsBtn" class="softButton hidden">⚙ Campos da ficha</button><button id="newCharacterBtn" class="primarySmall">+ Novo personagem</button></div></div><div id="charactersGrid" class="cardGrid"></div></section>
@@ -120,7 +122,7 @@
   <div id="modalBackdrop" class="modalBackdrop" aria-hidden="true"><div id="modalCard" class="modalCard"></div></div>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
-  <script src="app.js?v=20260930.2"></script>
+  <script src="app.js?v=20261104.5"></script>
   <script src="rpg-campaign-stability.js?v=20260930.1"></script>
   <script src="rpg-realtime-enhancements.js"></script>
   <script src="rpg-character-dice-enhancements.js"></script>
