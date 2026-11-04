@@ -611,8 +611,8 @@ begin
     return private.is_campaign_member(v_campaign_id);
   end if;
 
-  if left(p_topic,17)='rpg-hub-session-' then
-    v_session_id := substring(p_topic from 18)::uuid;
+  if left(p_topic,16)='rpg-hub-session-' then
+    v_session_id := substring(p_topic from 17)::uuid;
     select s.campaign_id into v_campaign_id
     from public.sessions s where s.id=v_session_id;
     return v_campaign_id is not null and private.is_campaign_member(v_campaign_id);
@@ -1021,7 +1021,7 @@ begin
 
   if v_location_id is null then
     insert into public.locations(campaign_id,name,location_type,description,created_by,sort_order)
-    values(p_campaign_id,'Primeiro cenário','Local','','auth.uid()',0)
+    values(p_campaign_id,'Primeiro cenário','Local','',(select auth.uid()),0)
     returning id into v_location_id;
   end if;
 
