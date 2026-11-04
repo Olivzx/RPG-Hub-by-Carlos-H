@@ -1368,7 +1368,6 @@ using (bucket_id='rpg-media' and (storage.foldername(name))[1]=(select auth.uid(
 
 -- Browser clients use authenticated private channels. Access is tied to the campaign
 -- (or session) encoded in the topic, never to a globally open authenticated policy.
-alter table realtime.messages enable row level security;
 drop policy if exists rpg_hub_private_channel_read on realtime.messages;
 drop policy if exists rpg_hub_private_channel_send on realtime.messages;
 create policy rpg_hub_private_channel_read on realtime.messages for select to authenticated
