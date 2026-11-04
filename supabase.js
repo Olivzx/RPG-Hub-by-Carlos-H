@@ -3,6 +3,8 @@
 (() => {
   const SUPABASE_URL = 'https://yeuqfdbmcncilfrsxppm.supabase.co';
   const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_-yZFLpTLXX1QgdDMQ9n4-g_RuQa8wTr';
+  // Safe browser config: publishable key is designed for client-side use.
+  window.rpgSupabaseConfig = Object.freeze({ url: SUPABASE_URL, publishableKey: SUPABASE_PUBLISHABLE_KEY });
   if (!window.supabase?.createClient) {
     throw new Error('Supabase JS não carregou.');
   }
