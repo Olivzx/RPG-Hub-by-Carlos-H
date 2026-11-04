@@ -80,8 +80,10 @@
   function renderPresence() {
     const users = presenceUsers();
     const count = users.length;
+    const connected = mp.presenceStatus === 'SUBSCRIBED';
+    const connectionLabel = connected ? `${count} online` : (mp.presenceStatus === 'CONNECTING' || mp.presenceStatus === 'IDLE' ? 'Conectando…' : 'Reconectando…');
     const countEl = $('onlineCount');
-    if (countEl) countEl.textContent = `${count} online`;
+    if (countEl) countEl.textContent = connectionLabel;
     let wrap = document.querySelector('.rpgOnlineWrap');
     if (!wrap && countEl) {
       const host = countEl.closest('.sessionOnline');
@@ -99,9 +101,9 @@
         document.addEventListener('click',()=>list.classList.remove('open'));
       }
     }
-    const text=$('rpgOnlineCountText');if(text)text.textContent=`${count} online`;
+    const text=$('rpgOnlineCountText');if(text)text.textContent=connectionLabel;
     const list=$('rpgOnlineUsers');if(list){
-      list.innerHTML=users.length?users.map(u=>`<div class="rpgOnlineUser"><i class="rpgOnlineDot"></i><div><b>${esc(u.name)}</b><small>${esc(u.role)} · ${esc(u.view)}</small></div></div>`).join(''):mp.presenceStatus==='SUBSCRIBED'?'<div class="rpgOnlineUser"><i class="rpgOnlineDot"></i><div><b>Nenhum participante</b><small>Sem presença recebida</small></div></div>':'<div class="rpgOnlineUser"><i class="rpgOnlineDot"></i><div><b>Conectando…</b><small>Aguardando presença da campanha</small></div></div>';
+      list.innerHTML=users.length?users.map(u=>`<div class="rpgOnlineUser"><i class="rpgOnlineDot"></i><div><b>${esc(u.name)}</b><small>${esc(u.role)} · ${esc(u.view)}</small></div></div>`).join(''):mp.presenceStatus==='SUBSCRIBED'?'<div class="rpgOnlineUser"><i class="rpgOnlineDot"></i><div><b>Nenhum participante</b><small>Sem presença recebida</small></div></div>':'<div class="rpgOnlineUser"><i class="rpgOnlineDot"></i><div><b>'+(mp.presenceStatus==='CONNECTING'?'Conectando…':'Reconectando…')+'</b><small>A presença será restaurada automaticamente</small></div></div>';
     }
   }
 
@@ -335,7 +337,7 @@
     renderPresence();
     setInterval(async()=>{
       if(!state?.campaign)return;
-      await connectPresence();await connectActions();updatePresenceView();renderPresence();
+      await connectPresence();await connectActions();renderPresence();
       if(state.view==='combat')injectActionUI();
     },2500);
     document.addEventListener('click',e=>{if(e.target.closest('[data-view]')||e.target.closest('[data-mobile-view]'))setTimeout(updatePresenceView,50)});
