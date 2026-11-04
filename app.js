@@ -467,6 +467,7 @@ function receiveRealtimeBroadcast(message){
 
 let realtimeRecoveryTimer=null;
 let realtimeRecoveryRunning=false;
+let realtimeRecoveryGeneration=0;
 let realtimeSubscriptionGeneration=0;
 let campaignReconnectTimer=null;
 let campaignReconnectAttempt=0;
@@ -487,10 +488,12 @@ function scheduleCampaignRealtimeReconnect(campaignId,reason='reconnect'){
   },delay);
 }
 async function reconcileRealtimeState(reason='reconnect'){
-  if(realtimeRecoveryRunning||!state.campaign?.id)return;
+  const cid=state.campaign?.id;
+  if(!cid)return;
+  const generation=++realtimeRecoveryGeneration;
+  const isCurrent=()=>generation===realtimeRecoveryGeneration&&state.campaign?.id===cid;
   realtimeRecoveryRunning=true;
   try{
-    const cid=state.campaign.id;
     const [locations,entities,sessions,characters]=await Promise.all([
       sb.from('locations').select('*').eq('campaign_id',cid).order('sort_order'),
       sb.from('world_entities').select('*').eq('campaign_id',cid).order('created_at'),
@@ -501,21 +504,30 @@ async function reconcileRealtimeState(reason='reconnect'){
     if(entities.error)throw entities.error;
     if(sessions.error)throw sessions.error;
     if(characters.error)throw characters.error;
-    if(state.campaign?.id!==cid)return;
-    state.locations=locations.data||[];
-    if(state.locations.length){
-      const locIds=state.locations.map(l=>l.id);
+    if(!isCurrent())return;
+
+    const nextLocations=locations.data||[];
+    let nextFloors=[];
+    let nextRooms=[];
+    if(nextLocations.length){
+      const locIds=nextLocations.map(l=>l.id);
       const floors=await sb.from('floors').select('*').in('location_id',locIds).order('sort_order');
       if(floors.error)throw floors.error;
-      if(state.campaign?.id!==cid)return;
-      state.floors=floors.data||[];
-      if(state.floors.length){
-        const floorIds=state.floors.map(f=>f.id);
+      if(!isCurrent())return;
+      nextFloors=floors.data||[];
+      if(nextFloors.length){
+        const floorIds=nextFloors.map(f=>f.id);
         const rooms=await sb.from('rooms').select('*').in('floor_id',floorIds).order('sort_order');
         if(rooms.error)throw rooms.error;
-        state.rooms=rooms.data||[];
-      }else state.rooms=[];
-    }else{state.floors=[];state.rooms=[];}
+        if(!isCurrent())return;
+        nextRooms=rooms.data||[];
+      }
+    }
+    if(!isCurrent())return;
+
+    state.locations=nextLocations;
+    state.floors=nextFloors;
+    state.rooms=nextRooms;
     state.entities=entities.data||[];
     state.sessions=sessions.data||[];
     state.characters=characters.data||[];
@@ -538,7 +550,9 @@ async function reconcileRealtimeState(reason='reconnect'){
     window.rpgCombatReconnect?.();
   }catch(err){
     console.warn('RPG HUB state reconciliation:',reason,err);
-  }finally{realtimeRecoveryRunning=false;}
+  }finally{
+    if(generation===realtimeRecoveryGeneration)realtimeRecoveryRunning=false;
+  }
 }
 function scheduleRealtimeRecovery(reason='reconnect'){
   clearTimeout(realtimeRecoveryTimer);
