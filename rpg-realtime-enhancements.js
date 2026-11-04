@@ -86,6 +86,7 @@
           .in('floor_id', floorIds)
           .order('sort_order');
         if (roomsResult.error) throw roomsResult.error;
+        if (currentCampaignId() !== campaignId) return;
         state.rooms = roomsResult.data || [];
       } else {
         state.rooms = [];
@@ -571,6 +572,21 @@
       schedulePlayerAudioSync(0);
     });
   }
+
+  window.addEventListener('rpg:realtime-reconnect', function () {
+    if (roomChannelState.reconnectTimer) {
+      clearTimeout(roomChannelState.reconnectTimer);
+      roomChannelState.reconnectTimer = null;
+    }
+    roomChannelState.reconnectAttempt = 0;
+    if (roomChannelState.channel) {
+      const previous = roomChannelState.channel;
+      roomChannelState.channel = null;
+      roomChannelState.campaignId = null;
+      (window.rpgSupabase || window.sb)?.removeChannel(previous).catch(function () {});
+    }
+    subscribeTableRealtime();
+  });
 
   function init() {
     if (!window.rpgSupabase || typeof state === 'undefined') {
