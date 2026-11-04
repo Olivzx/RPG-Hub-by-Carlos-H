@@ -1,7 +1,7 @@
 /* RPG HUB — real token vision, line of sight, walls and combat/map sync */
 (() => {
   'use strict';
-  const V={initialized:false,campaignId:null,floorId:null,settings:null,walls:[],sources:[],fog:[],explored:[],combat:{encounter:null,combatants:[]},activeTool:'none',drag:null,channel:null,lastKey:null,queued:false,observer:null,resizeObserver:null,revealBusy:false};
+  const V={initialized:false,campaignId:null,floorId:null,settings:null,walls:[],sources:[],fog:[],explored:[],combat:{encounter:null,combatants:[]},activeTool:'none',drag:null,channel:null,reconnectTimer:null,reconnectAttempt:0,lastKey:null,queued:false,observer:null,resizeObserver:null,revealBusy:false};
   const $=id=>document.getElementById(id), sb=()=>window.rpgSupabase, cid=()=>window.state?.campaign?.id||null, fid=()=>window.state?.floor||null;
   const master=()=>typeof window.canEdit==='function'&&window.canEdit();
   const esc=v=>typeof window.escapeHtml==='function'?window.escapeHtml(v):String(v??'').replace(/[&<>\"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[m]));
@@ -289,8 +289,16 @@
   }
 
   async function realtime(){
-    const c=cid();if(!c||!sb())return;if(V.channel&&V.campaignId===c)return;if(V.channel)await sb().removeChannel(V.channel).catch(()=>{});
-    const ch=sb().channel('rpg-hub-real-vision-'+c,{config:{private:true}}),reload=()=>{load();queue()};
+    const c=cid(),api=sb();
+    if(!c||!api||V.reconnectTimer)return;
+    if(V.channel&&V.campaignId===c)return;
+    if(V.channel){
+      const previous=V.channel;
+      V.channel=null;
+      await api.removeChannel(previous).catch(()=>{});
+    }
+    const ch=api.channel('rpg-hub-real-vision-'+c,{config:{private:true}});
+    const reload=()=>{load();queue()};
     ch.on('postgres_changes',{event:'*',schema:'public',table:'map_walls',filter:'campaign_id=eq.'+c},reload);
     ch.on('postgres_changes',{event:'*',schema:'public',table:'vision_sources',filter:'campaign_id=eq.'+c},reload);
     ch.on('postgres_changes',{event:'*',schema:'public',table:'map_settings',filter:'campaign_id=eq.'+c},reload);
@@ -298,7 +306,32 @@
     ch.on('postgres_changes',{event:'*',schema:'public',table:'world_entities',filter:'campaign_id=eq.'+c},queue);
     ch.on('postgres_changes',{event:'*',schema:'public',table:'combat_encounters',filter:'campaign_id=eq.'+c},reload);
     ch.on('postgres_changes',{event:'*',schema:'public',table:'combatants'},reload);
-    ch.subscribe((status,error)=>{if(status==='CHANNEL_ERROR'||status==='TIMED_OUT')console.warn('RPG HUB vision realtime:',status,error)});V.channel=ch
+
+    V.channel=ch;
+    V.campaignId=c;
+    ch.subscribe((status,error)=>{
+      if(V.channel!==ch)return;
+      if(status==='SUBSCRIBED'){
+        V.reconnectAttempt=0;
+        if(V.reconnectTimer){clearTimeout(V.reconnectTimer);V.reconnectTimer=null;}
+        load().catch(err=>console.warn('RPG HUB vision resync:',err));
+        queue();
+        return;
+      }
+      if(status==='CHANNEL_ERROR'||status==='TIMED_OUT'||status==='CLOSED'){
+        console.warn('RPG HUB vision realtime:',status,error);
+        V.channel=null;
+        V.campaignId=null;
+        api.removeChannel(ch).catch(()=>{});
+        V.reconnectAttempt=Math.min(V.reconnectAttempt+1,6);
+        const delay=Math.min(20000,1000*Math.pow(2,V.reconnectAttempt-1));
+        if(V.reconnectTimer)clearTimeout(V.reconnectTimer);
+        V.reconnectTimer=setTimeout(()=>{
+          V.reconnectTimer=null;
+          if(cid()===c)realtime().catch(err=>console.warn('RPG HUB vision reconnect:',err));
+        },delay);
+      }
+    });
   }
 
   function observe(){
@@ -313,7 +346,19 @@
     else if(!master()&&V.settings?.fog_enabled&&V.settings?.vision_enabled)revealVisibleCells().catch(()=>{});
   }
 
-    window.addEventListener('rpg:realtime-reconnect',()=>{if(V.channel){sb()?.removeChannel(V.channel).catch(()=>{});V.channel=null;}realtime();load();queue();});
+  window.addEventListener('rpg:realtime-reconnect',()=>{
+    if(V.reconnectTimer){clearTimeout(V.reconnectTimer);V.reconnectTimer=null;}
+    V.reconnectAttempt=0;
+    if(V.channel){
+      const previous=V.channel;
+      V.channel=null;
+      V.campaignId=null;
+      sb()?.removeChannel(previous).catch(()=>{});
+    }
+    realtime().catch(err=>console.warn('RPG HUB vision reconnect:',err));
+    load().catch(err=>console.warn('RPG HUB vision reload:',err));
+    queue();
+  });
 function init(){
     if(V.initialized)return;inject();V.initialized=true;const b=$('board');
     if(b){b.addEventListener('pointerdown',down,true);b.addEventListener('pointermove',move,true);b.addEventListener('pointerup',up,true);b.addEventListener('pointercancel',up,true)}
