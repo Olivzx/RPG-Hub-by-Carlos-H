@@ -49,8 +49,8 @@
     @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;transition:none!important}}
   </style>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2"></script>
-  <script src="supabase.js"></script>
-  <script src="rpg-auth-hardening.js"></script>
+  <script src="supabase.js?v=20261104.4"></script>
+  <script src="rpg-auth-hardening.js?v=20261104.4"></script>
 </head>
 <body class="authBody">
   <main class="authShell">
@@ -75,6 +75,24 @@
       const sb = window.rpgSupabase;
       let mode = new URLSearchParams(location.search).get('mode') === 'register' ? 'register' : 'login';
       const $ = id => document.getElementById(id);
+      async function verifyAuthApi() {
+        const config = window.rpgSupabaseConfig;
+        if (!config?.url || !config?.publishableKey) throw new Error('Configuração pública do Supabase não carregou.');
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 10000);
+        try {
+          const response = await fetch(config.url + '/auth/v1/health', {
+            method: 'GET',
+            headers: { apikey: config.publishableKey },
+            cache: 'no-store',
+            signal: controller.signal
+          });
+          const details = await response.text();
+          if (!response.ok) throw new Error('Auth respondeu HTTP ' + response.status + (details ? ': ' + details.slice(0, 160) : '.'));
+        } finally {
+          clearTimeout(timeout);
+        }
+      }
       const render = () => {
         const isRegister = mode === 'register';
         $('loginTab').classList.toggle('active', !isRegister); $('registerTab').classList.toggle('active', isRegister);
@@ -90,6 +108,7 @@
         const email=$('email').value.trim(), password=$('password').value, display=$('displayName').value.trim(), accountType=$('accountType').value;
         $('submitBtn').disabled=true; $('authMessage').className='formMessage'; $('authMessage').textContent='Processando…';
         try {
+          await verifyAuthApi();
           if (mode==='register') {
             const {data,error}=await sb.auth.signUp({email,password,options:{data:{display_name:display,account_type:accountType}}});
             if(error) throw error;
@@ -100,7 +119,13 @@
             if(error) throw error;
             if(data.session) location.href='mesa.html';
           }
-        } catch(err) { $('authMessage').classList.add('error'); $('authMessage').textContent=err.message || 'Não foi possível concluir o acesso.'; }
+        } catch(err) {
+          console.error('[RPG HUB Auth] Falha no acesso:', err);
+          $('authMessage').classList.add('error');
+          $('authMessage').textContent = (err instanceof TypeError || err?.name === 'AbortError')
+            ? 'O navegador não conseguiu completar a conexão com o Supabase. Verifique bloqueadores, VPN, DNS ou a rede e tente novamente.'
+            : (err.message || 'Não foi possível concluir o acesso.');
+        }
         finally { $('submitBtn').disabled=false; }
       };
       $('forgotBtn').onclick=async()=>{
