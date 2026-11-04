@@ -1425,10 +1425,12 @@ function openRoomModal(id,floorId){
       $('roomW').value=Number(width).toFixed(2);
       $('roomH').value=Number(height).toFixed(2);
 
-      const payload={floor_id:selectedFloor,name,description:$('roomDesc').value.trim(),image_url:$('roomImage').value.trim()||null,notes:$('roomNotes').value.trim()||null,x,y,width,height,rotation};
+      const note=$('roomNotes').value.trim();
+      const payload={floor_id:selectedFloor,name,description:$('roomDesc').value.trim(),image_url:$('roomImage').value.trim()||null,x,y,width,height,rotation};
       const roomId=room?.id||uid();const result=room?await sb.from('rooms').update(payload).eq('id',room.id).select('*').maybeSingle():await sb.from('rooms').insert({...payload,id:roomId,sort_order:state.rooms.filter(x=>x.floor_id===selectedFloor).length}).select('*').maybeSingle();
       if(result.error)throw result.error;
       if(!result.data){const verify=await sb.from('rooms').select('*').eq('id',room?.id||roomId).maybeSingle();if(verify.error)throw verify.error;if(!verify.data)throw new Error('O cômodo foi salvo, mas não pôde ser lido de volta.');result.data=verify.data;}
+      await savePrivateCampaignNote('room_private_notes','room_id',result.data.id,state.campaign.id,note);result.data.notes=note;
       if(room)state.rooms=state.rooms.map(x=>x.id===room.id?result.data:x);else state.rooms.push(result.data);
       if(room && Number(room.rotation||0)!==Number(result.data.rotation||0))await broadcastRoomRotate({room_id:result.data.id,rotation:Number(result.data.rotation||0)});
       state.floor=result.data.floor_id;state.location=state.locations.find(l=>state.floors.find(f=>f.id===result.data.floor_id)?.location_id===l.id)||state.location;state.selected={type:'room',id:result.data.id};closeModal();renderAll();setSave('Cômodo salvo');toast(room?'Cômodo atualizado':'Cômodo criado');
