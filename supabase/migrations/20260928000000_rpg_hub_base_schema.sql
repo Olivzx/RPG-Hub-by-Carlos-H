@@ -1154,7 +1154,7 @@ returns trigger
 security definer
 set search_path = ''
 language plpgsql
-as $
+as $$
 declare
   v_name text;
   v_type text;
@@ -1166,7 +1166,7 @@ begin
   on conflict(id) do nothing;
   return new;
 end;
-$;
+$$;
 
 drop trigger if exists on_auth_user_created_rpg_profile on auth.users;
 create trigger on_auth_user_created_rpg_profile
@@ -1182,7 +1182,7 @@ returns trigger
 security definer
 set search_path = ''
 language plpgsql
-as $
+as $$
 declare
   v_root text;
   v_key text;
@@ -1243,7 +1243,7 @@ begin
   end if;
   return new;
 end;
-$;
+$$;
 
 drop trigger if exists character_field_visibility_sync on public.character_field_definitions;
 create trigger character_field_visibility_sync
