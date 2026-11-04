@@ -93,3 +93,15 @@ grant select,insert,update,delete on public.vision_sources to authenticated;
 
 do $$ begin alter publication supabase_realtime add table public.map_walls; exception when duplicate_object then null; end $$;
 do $$ begin alter publication supabase_realtime add table public.vision_sources; exception when duplicate_object then null; end $$;
+
+-- The two tables below are created after migration 20260929053000. Attach
+-- their campaign broadcast triggers here, after both relations exist.
+drop trigger if exists rpg_campaign_realtime_broadcast on public.map_walls;
+create trigger rpg_campaign_realtime_broadcast
+after insert or update or delete on public.map_walls
+for each row execute function private.rpg_broadcast_campaign_change();
+
+drop trigger if exists rpg_campaign_realtime_broadcast on public.vision_sources;
+create trigger rpg_campaign_realtime_broadcast
+after insert or update or delete on public.vision_sources
+for each row execute function private.rpg_broadcast_campaign_change();

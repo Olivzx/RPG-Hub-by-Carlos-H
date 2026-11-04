@@ -250,9 +250,42 @@ async function initializeWorld(){
   ensureFloor();
 }
 
+async function hydratePrivateCampaignData(){
+  if(!state.campaign?.id || !canEdit())return;
+  const campaignId=state.campaign.id;
+  const jobs=[
+    state.locations.length?sb.from('location_private_notes').select('location_id,notes').eq('campaign_id',campaignId):Promise.resolve({data:[],error:null}),
+    state.floors.length?sb.from('floor_private_notes').select('floor_id,notes').eq('campaign_id',campaignId):Promise.resolve({data:[],error:null}),
+    state.rooms.length?sb.from('room_private_notes').select('room_id,notes').eq('campaign_id',campaignId):Promise.resolve({data:[],error:null}),
+    state.npcs.length?sb.from('npc_private_notes').select('npc_id,notes').eq('campaign_id',campaignId):Promise.resolve({data:[],error:null}),
+    state.characters.length?sb.from('character_private_data').select('character_id,data').eq('campaign_id',campaignId):Promise.resolve({data:[],error:null})
+  ];
+  const results=await Promise.all(jobs);
+  const failure=results.find(x=>x.error);if(failure)throw failure.error;
+  const maps=results.map(x=>new Map((x.data||[]).map(row=>[
+    row.location_id||row.floor_id||row.room_id||row.npc_id||row.character_id,
+    row.notes??row.data??{}
+  ])));
+  state.locations=state.locations.map(x=>({...x,notes:maps[0].get(x.id)||''}));
+  state.floors=state.floors.map(x=>({...x,notes:maps[1].get(x.id)||''}));
+  state.rooms=state.rooms.map(x=>({...x,notes:maps[2].get(x.id)||''}));
+  state.npcs=state.npcs.map(x=>({...x,notes_private:maps[3].get(x.id)||''}));
+  state.characters=state.characters.map(x=>({...x,private_data:maps[4].get(x.id)||{}}));
+}
+async function savePrivateCampaignNote(table,identityColumn,identity,campaignId,notes){
+  const payload={campaign_id:campaignId,[identityColumn]:identity,notes:String(notes||''),updated_by:state.user.id,updated_at:new Date().toISOString()};
+  const {error}=await sb.from(table).upsert(payload,{onConflict:identityColumn});
+  if(error)throw error;
+}
+async function savePrivateCharacterData(characterId,campaignId,data){
+  const {error}=await sb.from('character_private_data').upsert({
+    character_id:characterId,campaign_id:campaignId,data:data||{},updated_by:state.user.id,updated_at:new Date().toISOString()
+  },{onConflict:'character_id'});
+  if(error)throw error;
+}
 async function loadFloors(){
   const ids=state.locations.map(l=>l.id);
-  if(!ids.length){state.floors=[];state.rooms=[];state.floor=null;state.location=null;return;}
+  if(!ids.length){state.floors=[];state.rooms=[];state.floor=null;state.location=null;await hydratePrivateCampaignData();return;}
   const {data,error}=await sb.from('floors').select('*').in('location_id',ids).order('sort_order');
   if(error)throw error;
   state.floors=data||[];
@@ -263,6 +296,7 @@ async function loadFloors(){
     state.rooms=rooms||[];
   }else state.rooms=[];
   state.location=state.locations[0]||null;
+  await hydratePrivateCampaignData();
 }
 function ensureFloor(){ if(!state.floor || !state.floors.some(f=>f.id===state.floor)) state.floor=state.floors[0]?.id||null; }
 
@@ -1230,10 +1264,12 @@ function openLocationCreateModal(){
   $('createLocation').onclick=async()=>{
     try{
       const name=$('locName').value.trim();if(!name){toast('Informe o nome do local.','error');$('locName').focus();return;}
-      const {data,error}=await sb.from('locations').insert({campaign_id:state.campaign.id,name,location_type:$('locType').value,description:$('locDesc').value.trim(),image_url:$('locImage').value.trim()||null,notes:$('locNotes').value.trim()||null,created_by:state.user.id,sort_order:state.locations.length}).select().maybeSingle();
+      const note=$('locNotes').value.trim();
+      const {data,error}=await sb.from('locations').insert({campaign_id:state.campaign.id,name,location_type:$('locType').value,description:$('locDesc').value.trim(),image_url:$('locImage').value.trim()||null,created_by:state.user.id,sort_order:state.locations.length}).select().maybeSingle();
       if(error)throw error;
       if(!data)throw new Error('O servidor não confirmou a criação do local.');
-      state.locations.push(data);state.location=data;closeModal();renderAll();toast('Local criado');
+      await savePrivateCampaignNote('location_private_notes','location_id',data.id,state.campaign.id,note);
+      data.notes=note;state.locations.push(data);state.location=data;closeModal();renderAll();toast('Local criado');
     }catch(e){toast(e.message||'Não foi possível criar o local.','error');}
   };
 }
@@ -1253,8 +1289,11 @@ function openLocationModal(id){
   $('saveLocation').onclick=async()=>{
     try{
       const name=$('locName').value.trim();if(!name){toast('Informe o nome do local.','error');return;}
-      const {data,error}=await sb.from('locations').update({name,location_type:$('locType').value,description:$('locDesc').value.trim(),image_url:$('locImage').value.trim()||null,notes:$('locNotes').value.trim()||null}).eq('id',id).select().maybeSingle();
-      if(error)throw error;if(!data)throw new Error('O servidor não confirmou a atualização do local.');state.locations=state.locations.map(x=>x.id===id?data:x);if(state.location?.id===id)state.location=data;closeModal();renderAll();toast('Local atualizado');
+      const note=$('locNotes').value.trim();
+      const {data,error}=await sb.from('locations').update({name,location_type:$('locType').value,description:$('locDesc').value.trim(),image_url:$('locImage').value.trim()||null}).eq('id',id).select().maybeSingle();
+      if(error)throw error;if(!data)throw new Error('O servidor não confirmou a atualização do local.');
+      await savePrivateCampaignNote('location_private_notes','location_id',id,state.campaign.id,note);data.notes=note;
+      state.locations=state.locations.map(x=>x.id===id?data:x);if(state.location?.id===id)state.location=data;closeModal();renderAll();toast('Local atualizado');
     }catch(e){toast(e.message||'Não foi possível atualizar o local.','error');}
   };
 }
@@ -1311,10 +1350,13 @@ function openFloorModal(id,locationId){
       const selectedLocation=$('floorLocation').value;
       if(!selectedLocation){toast('Selecione o local/cenário do andar.','error');$('floorLocation').focus();return;}
       const floorNumber=readWorldInteger('floorNum','Número do andar',-50,100);
-      const payload={location_id:selectedLocation,name,floor_number:floorNumber,description:$('floorDesc').value.trim(),notes:$('floorNotes').value.trim()||null,sort_order:floor?.sort_order??state.floors.filter(x=>x.location_id===selectedLocation).length};
+      const note=$('floorNotes').value.trim();
+      const payload={location_id:selectedLocation,name,floor_number:floorNumber,description:$('floorDesc').value.trim(),sort_order:floor?.sort_order??state.floors.filter(x=>x.location_id===selectedLocation).length};
       const result=f?await sb.from('floors').update(payload).eq('id',f.id).select().maybeSingle():await sb.from('floors').insert(payload).select().maybeSingle();
       if(result.error)throw result.error;
       if(!result.data)throw new Error('O servidor não confirmou o andar.');
+      await savePrivateCampaignNote('floor_private_notes','floor_id',result.data.id,state.campaign.id,note);
+      result.data.notes=note;
       if(f)state.floors=state.floors.map(x=>x.id===f.id?result.data:x);else state.floors.push(result.data);
       state.floor=result.data.id;state.location=state.locations.find(x=>x.id===selectedLocation)||state.location;closeModal();renderAll();toast(floor?'Andar atualizado':'Andar criado');
     }catch(e){toast(e.message||'Não foi possível salvar o andar.','error');}
@@ -1383,10 +1425,12 @@ function openRoomModal(id,floorId){
       $('roomW').value=Number(width).toFixed(2);
       $('roomH').value=Number(height).toFixed(2);
 
-      const payload={floor_id:selectedFloor,name,description:$('roomDesc').value.trim(),image_url:$('roomImage').value.trim()||null,notes:$('roomNotes').value.trim()||null,x,y,width,height,rotation};
+      const note=$('roomNotes').value.trim();
+      const payload={floor_id:selectedFloor,name,description:$('roomDesc').value.trim(),image_url:$('roomImage').value.trim()||null,x,y,width,height,rotation};
       const roomId=room?.id||uid();const result=room?await sb.from('rooms').update(payload).eq('id',room.id).select('*').maybeSingle():await sb.from('rooms').insert({...payload,id:roomId,sort_order:state.rooms.filter(x=>x.floor_id===selectedFloor).length}).select('*').maybeSingle();
       if(result.error)throw result.error;
       if(!result.data){const verify=await sb.from('rooms').select('*').eq('id',room?.id||roomId).maybeSingle();if(verify.error)throw verify.error;if(!verify.data)throw new Error('O cômodo foi salvo, mas não pôde ser lido de volta.');result.data=verify.data;}
+      await savePrivateCampaignNote('room_private_notes','room_id',result.data.id,state.campaign.id,note);result.data.notes=note;
       if(room)state.rooms=state.rooms.map(x=>x.id===room.id?result.data:x);else state.rooms.push(result.data);
       if(room && Number(room.rotation||0)!==Number(result.data.rotation||0))await broadcastRoomRotate({room_id:result.data.id,rotation:Number(result.data.rotation||0)});
       state.floor=result.data.floor_id;state.location=state.locations.find(l=>state.floors.find(f=>f.id===result.data.floor_id)?.location_id===l.id)||state.location;state.selected={type:'room',id:result.data.id};closeModal();renderAll();setSave('Cômodo salvo');toast(room?'Cômodo atualizado':'Cômodo criado');
@@ -1911,9 +1955,8 @@ async function ensureCharacterFields(){
 
 async function createCampaign(name,description){
   if(!canCreateCampaign())throw new Error('Somente contas Mestre podem criar campanhas.');
-  const inviteCode=Math.random().toString(36).slice(2,12).toUpperCase();
   const fields='id,owner_id,name,description,system_name,cover_url,discord_url,discord_guild_id,timezone,created_at,updated_at';
-  let {data,error}=await sb.from('campaigns').insert({owner_id:state.user.id,name,description,system_name:'Sistema próprio',invite_code:inviteCode}).select(fields).maybeSingle();
+  let {data,error}=await sb.from('campaigns').insert({owner_id:state.user.id,name,description,system_name:'Sistema próprio'}).select(fields).maybeSingle();
   if(error)throw error;
   if(!data){
     const fallback=await sb.from('campaigns').select(fields).eq('owner_id',state.user.id).eq('name',name).order('created_at',{ascending:false}).limit(1).maybeSingle();
@@ -1923,6 +1966,8 @@ async function createCampaign(name,description){
   if(!data)throw new Error('A campanha foi criada, mas não conseguimos recuperar os dados dela.');
   const membership=await sb.from('campaign_members').upsert({campaign_id:data.id,campaign_owner_id:state.user.id,user_id:state.user.id,role:'owner'},{onConflict:'campaign_id,user_id'});
   if(membership.error)throw membership.error;
+  const {error:inviteError}=await sb.rpc('regenerate_campaign_invite',{p_campaign_id:data.id});
+  if(inviteError)throw inviteError;
   await seedCharacterFieldsForCampaign(data.id);
   state.campaign=data;
   try{localStorage.setItem('rpg-hub-active-campaign',data.id)}catch(_){}
@@ -2122,11 +2167,21 @@ function normalizeFieldKey(label){
 }
 function fieldValueFromCharacter(character,field){
   const path=String(field.data_key||'').split('.');
+  if(field.player_visible===false){
+    const privateKey=path.length>1?path[path.length-1]:path[0];
+    return character?.private_data?.[privateKey];
+  }
   if(path.length===1)return character?.[path[0]];
   return character?.[path[0]]?.[path[1]];
 }
 function setFieldValue(payload,field,value){
   const path=String(field.data_key||'').split('.');
+  if(field.player_visible===false){
+    if(!payload.private_data||typeof payload.private_data!=='object')payload.private_data={};
+    const privateKey=path.length>1?path[path.length-1]:path[0];
+    payload.private_data[privateKey]=value;
+    return;
+  }
   if(path.length===1){payload[path[0]]=value;return;}
   if(!payload[path[0]]||typeof payload[path[0]]!=='object')payload[path[0]]={};
   payload[path[0]][path[1]]=value;
@@ -2162,8 +2217,8 @@ function fieldInputHtml(field,character,isMasterEditor){
 function getDynamicFieldDefinitions(isMasterEditor){
   return (state.characterFields||[]).filter(f=>f.enabled && (isMasterEditor || f.player_visible)).sort((a,b)=>Number(a.sort_order)-Number(b.sort_order));
 }
-function buildCharacterPayloadFromFields(formRoot){
-  const payload={campaign_id:state.campaign.id,attributes:{},sheet_data:{}};
+function buildCharacterPayloadFromFields(formRoot,existingCharacter=null){
+  const payload={campaign_id:state.campaign.id,attributes:{},sheet_data:{},private_data:{...(existingCharacter?.private_data||{})}};
   formRoot.querySelectorAll('[data-field-id]').forEach(el=>{
     const type=el.dataset.type;
     let value;
@@ -2192,7 +2247,7 @@ async function openCharacterModal(id){
     <div class="modalActions"><button class="softButton" data-close>Cancelar</button><button id="saveCharacter" class="primarySmall">Salvar ficha</button></div>`);
   $('saveCharacter').onclick=async()=>{
     try{
-      const payload=buildCharacterPayloadFromFields($('dynamicCharacterFields'));
+      const payload=buildCharacterPayloadFromFields($('dynamicCharacterFields'),existing);
       payload.id=undefined;
       payload.campaign_id=state.campaign.id;
       if(isMasterEditor){payload.player_id=$('charPlayer')?.value||null;}else{payload.player_id=state.user.id;}
@@ -2206,6 +2261,8 @@ async function openCharacterModal(id){
       }
       if(!payload.attributes)payload.attributes={};
       if(!payload.sheet_data)payload.sheet_data={};
+      const privateData=payload.private_data||{};delete payload.private_data;
+      let savedCharacterId=existing?.id||null;
       if(existing){
         const updatePayload={...payload};delete updatePayload.id;
         const result=await sb.from('characters').update(updatePayload).eq('id',existing.id).select('*').maybeSingle();
@@ -2217,7 +2274,7 @@ async function openCharacterModal(id){
           data=verify.data;
         }
         if(!data)throw new Error('A ficha foi alterada, mas não pôde ser lida de volta.');
-        state.characters=state.characters.map(x=>x.id===existing.id?data:x);
+        state.characters=state.characters.map(x=>x.id===existing.id?data:x);savedCharacterId=existing.id;
       }else{
         const characterId=uid();
         payload.id=characterId;
@@ -2230,7 +2287,11 @@ async function openCharacterModal(id){
           data=verify.data;
         }
         if(!data)throw new Error('A ficha foi criada, mas não pôde ser carregada de volta.');
-        state.characters.push(data);
+        state.characters.push(data);savedCharacterId=characterId;
+      }
+      if(isMasterEditor&&savedCharacterId){
+        await savePrivateCharacterData(savedCharacterId,state.campaign.id,privateData);
+        state.characters=state.characters.map(x=>x.id===savedCharacterId?{...x,private_data:privateData}:x);
       }
       const fileIds=visibleFields.filter(f=>f.data_key==='avatar_url').map(f=>f.id);
       for(const fieldId of fileIds){
@@ -2368,11 +2429,21 @@ function normalizeFieldKey(label){
 }
 function fieldValueFromCharacter(character,field){
   const path=String(field.data_key||'').split('.');
+  if(field.player_visible===false){
+    const privateKey=path.length>1?path[path.length-1]:path[0];
+    return character?.private_data?.[privateKey];
+  }
   if(path.length===1)return character?.[path[0]];
   return character?.[path[0]]?.[path[1]];
 }
 function setFieldValue(payload,field,value){
   const path=String(field.data_key||'').split('.');
+  if(field.player_visible===false){
+    if(!payload.private_data||typeof payload.private_data!=='object')payload.private_data={};
+    const privateKey=path.length>1?path[path.length-1]:path[0];
+    payload.private_data[privateKey]=value;
+    return;
+  }
   if(path.length===1){payload[path[0]]=value;return;}
   if(!payload[path[0]]||typeof payload[path[0]]!=='object')payload[path[0]]={};
   payload[path[0]][path[1]]=value;
@@ -2405,8 +2476,8 @@ function fieldInputHtml(field,character,isMasterEditor){
 function getDynamicFieldDefinitions(isMasterEditor){
   return (state.characterFields||[]).filter(f=>f.enabled && (isMasterEditor || f.player_visible)).sort((a,b)=>Number(a.sort_order)-Number(b.sort_order));
 }
-function buildCharacterPayloadFromFields(formRoot){
-  const payload={campaign_id:state.campaign.id,attributes:{},sheet_data:{}};
+function buildCharacterPayloadFromFields(formRoot,existingCharacter=null){
+  const payload={campaign_id:state.campaign.id,attributes:{},sheet_data:{},private_data:{...(existingCharacter?.private_data||{})}};
   formRoot.querySelectorAll('[data-field-id]').forEach(el=>{
     const type=el.dataset.type;
     let value;
@@ -2435,7 +2506,7 @@ async function openCharacterModal(id){
     <div class="modalActions"><button class="softButton" data-close>Cancelar</button><button id="saveCharacter" class="primarySmall">Salvar ficha</button></div>`);
   $('saveCharacter').onclick=async()=>{
     try{
-      const payload=buildCharacterPayloadFromFields($('dynamicCharacterFields'));
+      const payload=buildCharacterPayloadFromFields($('dynamicCharacterFields'),existing);
       payload.id=undefined;
       payload.campaign_id=state.campaign.id;
       if(isMasterEditor){payload.player_id=$('charPlayer')?.value||null;}else{payload.player_id=state.user.id;}
@@ -2449,6 +2520,8 @@ async function openCharacterModal(id){
       }
       if(!payload.attributes)payload.attributes={};
       if(!payload.sheet_data)payload.sheet_data={};
+      const privateData=payload.private_data||{};delete payload.private_data;
+      let savedCharacterId=existing?.id||null;
       if(existing){
         const updatePayload={...payload};delete updatePayload.id;
         const result=await sb.from('characters').update(updatePayload).eq('id',existing.id).select('*').maybeSingle();
@@ -2460,7 +2533,7 @@ async function openCharacterModal(id){
           data=verify.data;
         }
         if(!data)throw new Error('A ficha foi alterada, mas não pôde ser lida de volta.');
-        state.characters=state.characters.map(x=>x.id===existing.id?data:x);
+        state.characters=state.characters.map(x=>x.id===existing.id?data:x);savedCharacterId=existing.id;
       }else{
         const characterId=uid();
         payload.id=characterId;
@@ -2473,7 +2546,11 @@ async function openCharacterModal(id){
           data=verify.data;
         }
         if(!data)throw new Error('A ficha foi criada, mas não pôde ser carregada de volta.');
-        state.characters.push(data);
+        state.characters.push(data);savedCharacterId=characterId;
+      }
+      if(isMasterEditor&&savedCharacterId){
+        await savePrivateCharacterData(savedCharacterId,state.campaign.id,privateData);
+        state.characters=state.characters.map(x=>x.id===savedCharacterId?{...x,private_data:privateData}:x);
       }
       const fileIds=visibleFields.filter(f=>f.data_key==='avatar_url').map(f=>f.id);
       for(const fieldId of fileIds){
@@ -2490,7 +2567,8 @@ async function openCharacterModal(id){
             data=verify.data;
           }
           if(!data)throw new Error('A ficha recebeu a imagem, mas não pôde ser recarregada.');
-          state.characters=state.characters.map(x=>x.id===targetId?data:x);
+          const current=state.characters.find(x=>x.id===targetId);
+          state.characters=state.characters.map(x=>x.id===targetId?{...data,private_data:current?.private_data||{}}:x);
         }
       }
       closeModal();renderAll();toast('Ficha salva');
@@ -2530,7 +2608,7 @@ function openSessionModal(id){
 }
 async function activateSession(id){if(!id)return;const session=state.sessions.find(x=>x.id===id);if(!session)return;state.selectedSessionId=id;state.floor=session.active_floor_id||state.floor;state.selected=session.active_room_id?{type:'room',id:session.active_room_id}:null;state.tool='move';window.rpgVttSetTool?.('move');window.rpgVttContextChanged?.();const af=state.floors.find(f=>f.id===state.floor);if(af)state.location=state.locations.find(l=>l.id===af.location_id)||state.location;renderAll();await subscribeRealtime();toast(`Sessão #${session.session_number} aberta`);}
 
-function openNpcModal(id){if(!requireMaster())return;const n=id?state.npcs.find(x=>x.id===id):null;const v=n||{name:'',description:'',notes_private:'',avatar_url:'',data:{}};showModal(`<div class="modalHeader"><div><div class="eyebrow">BESTIÁRIO</div><h3>${n?'Editar entidade':'Novo NPC / monstro'}</h3></div><button class="closeButton" data-close>×</button></div><label>Nome<input id="npcName" value="${escapeHtml(v.name)}"></label><label>Descrição<textarea id="npcDesc" rows="4">${escapeHtml(v.description||'')}</textarea></label><label>Notas privadas do mestre<textarea id="npcNotes" rows="5">${escapeHtml(v.notes_private||'')}</textarea></label><label>Avatar URL<input id="npcAvatar" value="${escapeHtml(v.avatar_url||'')}" placeholder="https://..."></label><label>Avatar do NPC<input id="npcFile" type="file" accept="image/*"></label><label>Dados / ficha (JSON)<textarea id="npcData" rows="6">${escapeHtml(JSON.stringify(v.data||{},null,2))}</textarea></label><div class="modalActions"><button class="softButton" data-close>Cancelar</button><button id="saveNpc" class="primarySmall">Salvar</button></div>`);$('saveNpc').onclick=async()=>{try{const payload={campaign_id:state.campaign.id,name:$('npcName').value.trim(),description:$('npcDesc').value.trim(),notes_private:$('npcNotes').value.trim(),avatar_url:$('npcAvatar').value.trim()||null,data:JSON.parse($('npcData').value||'{}')};if(!payload.name)throw new Error('Informe o nome.');const file=$('npcFile').files[0];if(file)payload.avatar_url=await uploadMedia(file,`npcs/${uid()}`);const result=n?await sb.from('npcs').update(payload).eq('id',n.id).select().maybeSingle():await sb.from('npcs').insert(payload).select().maybeSingle();if(result.error)throw result.error;if(!result.data)throw new Error('O servidor não confirmou o NPC.');if(n)state.npcs=state.npcs.map(x=>x.id===n.id?result.data:x);else state.npcs.push(result.data);closeModal();renderAll();toast('NPC salvo');}catch(e){toast(e.message,'error');}};}
+function openNpcModal(id){if(!requireMaster())return;const n=id?state.npcs.find(x=>x.id===id):null;const v=n||{name:'',description:'',notes_private:'',avatar_url:'',data:{}};showModal(`<div class="modalHeader"><div><div class="eyebrow">BESTIÁRIO</div><h3>${n?'Editar entidade':'Novo NPC / monstro'}</h3></div><button class="closeButton" data-close>×</button></div><label>Nome<input id="npcName" value="${escapeHtml(v.name)}"></label><label>Descrição<textarea id="npcDesc" rows="4">${escapeHtml(v.description||'')}</textarea></label><label>Notas privadas do mestre<textarea id="npcNotes" rows="5">${escapeHtml(v.notes_private||'')}</textarea></label><label>Avatar URL<input id="npcAvatar" value="${escapeHtml(v.avatar_url||'')}" placeholder="https://..."></label><label>Avatar do NPC<input id="npcFile" type="file" accept="image/*"></label><label>Dados / ficha (JSON)<textarea id="npcData" rows="6">${escapeHtml(JSON.stringify(v.data||{},null,2))}</textarea></label><div class="modalActions"><button class="softButton" data-close>Cancelar</button><button id="saveNpc" class="primarySmall">Salvar</button></div>`);$('saveNpc').onclick=async()=>{try{const note=$('npcNotes').value.trim();const payload={campaign_id:state.campaign.id,name:$('npcName').value.trim(),description:$('npcDesc').value.trim(),avatar_url:$('npcAvatar').value.trim()||null,data:JSON.parse($('npcData').value||'{}')};if(!payload.name)throw new Error('Informe o nome.');const file=$('npcFile').files[0];if(file)payload.avatar_url=await uploadMedia(file,`npcs/${uid()}`);const result=n?await sb.from('npcs').update(payload).eq('id',n.id).select().maybeSingle():await sb.from('npcs').insert(payload).select().maybeSingle();if(result.error)throw result.error;if(!result.data)throw new Error('O servidor não confirmou o NPC.');await savePrivateCampaignNote('npc_private_notes','npc_id',result.data.id,state.campaign.id,note);result.data.notes_private=note;if(n)state.npcs=state.npcs.map(x=>x.id===n.id?result.data:x);else state.npcs.push(result.data);closeModal();renderAll();toast('NPC salvo');}catch(e){toast(e.message,'error');}};}
 
 async function addCharacterToBoard(id){
   if(!requireMaster())return;
@@ -2629,7 +2707,7 @@ async function uploadMedia(file,prefix){
   const ext=safeUploadExtension(file);const path=`${state.user.id}/${prefix}-${Date.now()}-${Math.random().toString(36).slice(2,8)}.${ext}`;uploadMedia.lastPath=path;
   const {data:{session}}=await sb.auth.getSession();if(!session?.access_token)throw new Error('Sua sessão expirou. Faça login novamente.');
   if(file.size<=6*1024*1024){const {error}=await sb.storage.from('rpg-media').upload(path,file,{cacheControl:'3600',upsert:false,contentType:file.type||'application/octet-stream'});if(error)throw error;uploadMedia.lastPath=path;return sb.storage.from('rpg-media').getPublicUrl(path).data.publicUrl;}
-  const projectRef='ymexyrqgqpktxzajgsdi';const endpoint=`https://${projectRef}.storage.supabase.co/storage/v1/upload/resumable`;
+  const configuredUrl=window.rpgSupabaseConfig?.url;if(!configuredUrl)throw new Error('A configuração do Supabase não carregou.');const configuredHost=new URL(configuredUrl).hostname;const projectMatch=configuredHost.match(/^([a-z0-9-]+)\.supabase\.co$/i);if(!projectMatch)throw new Error('A URL do Supabase não é válida para upload resumível.');const projectRef=projectMatch[1];const endpoint=`https://${projectRef}.storage.supabase.co/storage/v1/upload/resumable`;
   const encode=value=>btoa(unescape(encodeURIComponent(value)));const meta=[`bucketName ${encode('rpg-media')}`,`objectName ${encode(path)}`,`contentType ${encode(file.type||'application/octet-stream')}`,`cacheControl ${encode('3600')}`].join(',');
   const create=await fetch(endpoint,{method:'POST',headers:{Authorization:`Bearer ${session.access_token}`,'x-upsert':'false','Tus-Resumable':'1.0.0','Upload-Length':String(file.size),'Upload-Metadata':meta}});if(!create.ok)throw new Error((await create.text())||'Não foi possível iniciar o upload.');
   let uploadUrl=create.headers.get('Location');if(uploadUrl&&!uploadUrl.startsWith('http'))uploadUrl=new URL(uploadUrl,endpoint).toString();if(!uploadUrl)throw new Error('O Storage não retornou a URL de upload.');

@@ -77,7 +77,8 @@ end;
 $$;
 
 revoke execute on function public.resolve_combat_attack(uuid,uuid,uuid,text,text,integer,integer,integer,numeric,boolean,boolean,text,integer,integer,integer,text) from public,anon;
-grant execute on function public.resolve_combat_attack(uuid,uuid,uuid,text,text,integer,integer,integer,numeric,boolean,boolean,text) to authenticated;
+grant execute on function public.resolve_combat_attack(uuid,uuid,uuid,text,text,integer,integer,integer,numeric,boolean,boolean,text,integer,integer,integer,text) to authenticated;
+grant select,insert,delete on public.combat_actions to authenticated;
 
 drop trigger if exists rpg_campaign_realtime_broadcast on public.combat_actions;
 create trigger rpg_campaign_realtime_broadcast after insert or update or delete on public.combat_actions for each row execute function private.rpg_broadcast_campaign_change();
