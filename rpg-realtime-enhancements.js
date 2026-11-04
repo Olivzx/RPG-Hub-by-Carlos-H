@@ -5,7 +5,9 @@
     channel: null,
     campaignId: null,
     initialized: false,
-    poll: null
+    poll: null,
+    reconnectTimer: null,
+    reconnectAttempt: 0
   };
 
   function currentCampaignId() {
@@ -16,13 +18,33 @@
     return state?.floor || null;
   }
 
-  function roomBelongsToCurrentCampaign(row) {
-    return !!row?.floor_id && (state.floors || []).some(function (floor) {
-      return floor.id === row.floor_id;
+  function floorBelongsToCurrentCampaign(floorId) {
+    return !!floorId && (state.floors || []).some(function (floor) {
+      return floor.id === floorId;
     });
   }
 
-  let reconnectTimer = null;
+  function roomBelongsToCurrentCampaign(row) {
+    return floorBelongsToCurrentCampaign(row?.floor_id);
+  }
+
+  function scheduleSubscribeCheck() {
+    if (roomChannelState.poll) return;
+    roomChannelState.poll = setTimeout(function () {
+      roomChannelState.poll = null;
+      subscribeTableRealtime();
+    }, 250);
+  }
+
+  function scheduleRoomRealtimeReconnect(campaignId) {
+    if (roomChannelState.reconnectTimer) clearTimeout(roomChannelState.reconnectTimer);
+    roomChannelState.reconnectAttempt = Math.min(roomChannelState.reconnectAttempt + 1, 6);
+    const delay = Math.min(20000, 1000 * Math.pow(2, roomChannelState.reconnectAttempt - 1));
+    roomChannelState.reconnectTimer = setTimeout(function () {
+      roomChannelState.reconnectTimer = null;
+      if (currentCampaignId() === campaignId) subscribeTableRealtime();
+    }, delay);
+  }
 
   async function syncWorldSnapshot() {
     const campaignId = currentCampaignId();
@@ -34,6 +56,7 @@
         .eq('campaign_id', campaignId)
         .order('sort_order');
       if (locationsResult.error) throw locationsResult.error;
+      if (currentCampaignId() !== campaignId) return;
       const locations = locationsResult.data || [];
       state.locations = locations;
 
@@ -53,6 +76,7 @@
         .in('location_id', locationIds)
         .order('sort_order');
       if (floorsResult.error) throw floorsResult.error;
+      if (currentCampaignId() !== campaignId) return;
       state.floors = floorsResult.data || [];
 
       const floorIds = state.floors.map(function (floor) { return floor.id; });
@@ -72,6 +96,7 @@
         .eq('campaign_id', campaignId)
         .order('created_at');
       if (entitiesResult.error) throw entitiesResult.error;
+      if (currentCampaignId() !== campaignId) return;
       state.entities = entitiesResult.data || [];
 
       if (!state.floor || !state.floors.some(function (floor) { return floor.id === state.floor; })) {
@@ -90,52 +115,78 @@
 
   async function subscribeTableRealtime() {
     const campaignId = currentCampaignId();
-    if (!campaignId) {
-      roomChannelState.poll = setTimeout(subscribeTableRealtime, 250);
+    const api = window.rpgSupabase || window.sb;
+    if (!api) {
+      scheduleSubscribeCheck();
       return;
     }
-
+    if (!campaignId) {
+      scheduleSubscribeCheck();
+      return;
+    }
+    if (roomChannelState.reconnectTimer) return;
     if (roomChannelState.campaignId === campaignId && roomChannelState.channel) return;
 
     if (roomChannelState.channel) {
-      await sb.removeChannel(roomChannelState.channel).catch(function () {});
+      const previous = roomChannelState.channel;
+      roomChannelState.channel = null;
+      roomChannelState.campaignId = null;
+      await api.removeChannel(previous).catch(function () {});
+    }
+    if (currentCampaignId() !== campaignId) return;
+
+    const channel = api.channel('rpg-hub-world-realtime-' + campaignId, { config: { private: true } });
+
+    function removeRoom(id) {
+      state.rooms = (state.rooms || []).filter(function (item) { return item.id !== id; });
+      if (state.selected?.type === 'room' && state.selected.id === id) state.selected = null;
     }
 
-    roomChannelState.campaignId = campaignId;
-    const channel = sb.channel('rpg-hub-world-realtime-' + campaignId, { config: { private: true } });
+    function saveRoom(row) {
+      const index = (state.rooms || []).findIndex(function (item) { return item.id === row.id; });
+      if (index < 0) state.rooms = [...(state.rooms || []), row];
+      else state.rooms = state.rooms.map(function (item) { return item.id === row.id ? row : item; });
+    }
 
     channel.on('postgres_changes', {
       event: '*',
       schema: 'public',
       table: 'rooms'
     }, function (payload) {
-      const row = payload.new || payload.old;
-      if (!roomBelongsToCurrentCampaign(row)) return;
+      const newRow = payload.new || null;
+      const oldRow = payload.old || null;
+      const existing = (state.rooms || []).find(function (item) {
+        return item.id === (newRow?.id || oldRow?.id);
+      }) || null;
+      const oldFloorId = oldRow?.floor_id || existing?.floor_id || null;
+      const newFloorId = newRow?.floor_id || null;
+      const oldBelongs = floorBelongsToCurrentCampaign(oldFloorId);
+      const newBelongs = floorBelongsToCurrentCampaign(newFloorId);
+      const id = newRow?.id || oldRow?.id || existing?.id;
+      if (!id) return;
 
-      if (payload.eventType === 'INSERT' && payload.new) {
-        if (!state.rooms.some(function (item) { return item.id === row.id; })) {
-          state.rooms.push(row);
+      if (payload.eventType === 'DELETE') {
+        if (oldBelongs || existing) {
+          removeRoom(id);
+          renderAll();
         }
-        renderTable();
-        if (!canEdit()) toast('Novo cômodo disponível: ' + (row.name || 'Cômodo'));
         return;
       }
 
-      if (payload.eventType === 'UPDATE' && payload.new) {
-        state.rooms = state.rooms.map(function (item) {
-          return item.id === row.id ? payload.new : item;
-        });
-        if (state.selected?.type === 'room' && state.selected.id === row.id && row.floor_id !== currentFloorId()) {
-          state.selected = null;
+      if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+        if (newBelongs && newRow) {
+          saveRoom(newRow);
+          if (state.selected?.type === 'room' && state.selected.id === id && newFloorId !== currentFloorId()) {
+            state.selected = null;
+          }
+          renderTable();
+          if (payload.eventType === 'INSERT' && !canEdit()) {
+            toast('Novo cômodo disponível: ' + (newRow.name || 'Cômodo'));
+          }
+        } else if (oldBelongs || existing) {
+          removeRoom(id);
+          renderAll();
         }
-        renderTable();
-        return;
-      }
-
-      if (payload.eventType === 'DELETE' && payload.old) {
-        state.rooms = state.rooms.filter(function (item) { return item.id !== row.id; });
-        if (state.selected?.type === 'room' && state.selected.id === row.id) state.selected = null;
-        renderAll();
       }
     });
 
@@ -180,24 +231,27 @@
       }
     });
 
+    roomChannelState.channel = channel;
+    roomChannelState.campaignId = campaignId;
     channel.subscribe(function (status, error) {
+      if (roomChannelState.channel !== channel) return;
       if (status === 'SUBSCRIBED') {
+        roomChannelState.reconnectAttempt = 0;
+        if (roomChannelState.reconnectTimer) {
+          clearTimeout(roomChannelState.reconnectTimer);
+          roomChannelState.reconnectTimer = null;
+        }
         syncWorldSnapshot();
         return;
       }
       if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
         console.warn('RPG HUB world realtime:', status, error);
-        if (roomChannelState.channel === channel) {
-          roomChannelState.channel = null;
-          clearTimeout(reconnectTimer);
-          reconnectTimer = setTimeout(function () {
-            subscribeTableRealtime();
-          }, 1000);
-        }
+        roomChannelState.channel = null;
+        roomChannelState.campaignId = null;
+        api.removeChannel(channel).catch(function () {});
+        scheduleRoomRealtimeReconnect(campaignId);
       }
     });
-
-    roomChannelState.channel = channel;
   }
 
   async function rotateRoomDirectly(id, delta) {
@@ -531,6 +585,11 @@
     if (campaignSelect && !campaignSelect.dataset.worldRealtime) {
       campaignSelect.dataset.worldRealtime = '1';
       campaignSelect.addEventListener('change', function () {
+        if (roomChannelState.reconnectTimer) {
+          clearTimeout(roomChannelState.reconnectTimer);
+          roomChannelState.reconnectTimer = null;
+        }
+        roomChannelState.reconnectAttempt = 0;
         setTimeout(subscribeTableRealtime, 500);
         setTimeout(enhanceCharacterCards, 700);
         setTimeout(hookSessionAudioSync, 500);
