@@ -1,8 +1,8 @@
 /* RPG HUB — public browser client.
    The publishable key is intentionally client-safe. Never put a service_role/secret key here. */
 (() => {
-  const SUPABASE_URL = 'https://ymexyrqgqpktxzajgsdi.supabase.co';
-  const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_dUDAD55Y6jTIni-gk_z8DQ_e9AaCLPa';
+  const SUPABASE_URL = 'https://yeuqfdbmcncilfrsxppm.supabase.co';
+  const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_-yZFLpTLXX1QgdDMQ9n4-g_RuQa8wTr';
   if (!window.supabase?.createClient) {
     throw new Error('Supabase JS não carregou.');
   }
@@ -16,7 +16,7 @@
     if (window.__rpgMultiplayerLayerLoaded) return;
     window.__rpgMultiplayerLayerLoaded = true;
     const script = document.createElement('script');
-    script.src = 'rpg-multiplayer-combat.js?v=20260930.2';
+    script.src = 'rpg-multiplayer-combat.js?v=20261104.2';
     script.async = true;
     document.head.appendChild(script);
   };
