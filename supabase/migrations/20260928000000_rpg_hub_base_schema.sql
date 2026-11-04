@@ -255,7 +255,7 @@ create table if not exists public.audio_playlists (
   id uuid primary key default gen_random_uuid(),
   campaign_id uuid not null references public.campaigns(id) on delete cascade,
   name text not null,
-  description text not null default '',
+  description text,
   created_by uuid references auth.users(id) on delete set null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -1145,6 +1145,112 @@ revoke all on function public.join_campaign_by_code(text) from public, anon;
 grant execute on function public.join_campaign_by_code(text) to authenticated;
 revoke all on function public.delete_campaign(uuid) from public, anon;
 grant execute on function public.delete_campaign(uuid) to authenticated;
+
+
+-- Create a profile for every Auth user. The metadata is user-supplied and is
+-- used only for display/account mode; RLS never treats it as campaign ownership.
+create or replace function private.handle_new_auth_user()
+returns trigger
+security definer
+set search_path = ''
+language plpgsql
+as $
+declare
+  v_name text;
+  v_type text;
+begin
+  v_name := coalesce(nullif(btrim(new.raw_user_meta_data->>'display_name'),''),'Aventureiro');
+  v_type := case when lower(coalesce(new.raw_user_meta_data->>'account_type',''))='master' then 'master' else 'player' end;
+  insert into public.profiles(id,display_name,account_type)
+  values(new.id,v_name,v_type)
+  on conflict(id) do nothing;
+  return new;
+end;
+$;
+
+drop trigger if exists on_auth_user_created_rpg_profile on auth.users;
+create trigger on_auth_user_created_rpg_profile
+after insert on auth.users
+for each row execute function private.handle_new_auth_user();
+
+revoke all on function private.handle_new_auth_user() from public,anon,authenticated;
+
+-- When a custom field is switched from player-visible to GM-only, move its
+-- stored value out of the publicly-readable character JSON immediately.
+create or replace function private.sync_character_field_visibility()
+returns trigger
+security definer
+set search_path = ''
+language plpgsql
+as $
+declare
+  v_root text;
+  v_key text;
+  v_character record;
+  v_value jsonb;
+begin
+  if old.player_visible is not distinct from new.player_visible then
+    return new;
+  end if;
+
+  v_root := split_part(new.data_key,'.',1);
+  v_key := split_part(new.data_key,'.',2);
+  if split_part(new.data_key,'.',3) <> '' or v_root not in ('attributes','sheet_data') or v_key = '' then
+    return new;
+  end if;
+
+  if new.player_visible = false then
+    for v_character in
+      select id,
+        case when v_root='sheet_data' then sheet_data->v_key else attributes->v_key end as value
+      from public.characters
+      where campaign_id=new.campaign_id
+    loop
+      v_value := v_character.value;
+      if v_value is not null then
+        insert into public.character_private_data(character_id,campaign_id,data,updated_at)
+        values(v_character.id,new.campaign_id,jsonb_build_object(v_key,v_value),now())
+        on conflict(character_id) do update
+          set data=public.character_private_data.data || excluded.data,updated_at=now();
+        if v_root='sheet_data' then
+          update public.characters set sheet_data=coalesce(sheet_data,'{}'::jsonb)-v_key where id=v_character.id;
+        else
+          update public.characters set attributes=coalesce(attributes,'{}'::jsonb)-v_key where id=v_character.id;
+        end if;
+      end if;
+    end loop;
+  else
+    for v_character in
+      select c.id,p.data->v_key as value
+      from public.characters c
+      join public.character_private_data p on p.character_id=c.id
+      where c.campaign_id=new.campaign_id and p.data ? v_key
+    loop
+      v_value := v_character.value;
+      if v_value is not null then
+        if v_root='sheet_data' then
+          update public.characters set sheet_data=coalesce(sheet_data,'{}'::jsonb)||jsonb_build_object(v_key,v_value) where id=v_character.id;
+        else
+          update public.characters set attributes=coalesce(attributes,'{}'::jsonb)||jsonb_build_object(v_key,v_value) where id=v_character.id;
+        end if;
+        update public.character_private_data
+        set data=data-v_key,updated_at=now()
+        where character_id=v_character.id;
+      end if;
+    end loop;
+    delete from public.character_private_data
+    where campaign_id=new.campaign_id and data='{}'::jsonb;
+  end if;
+  return new;
+end;
+$;
+
+drop trigger if exists character_field_visibility_sync on public.character_field_definitions;
+create trigger character_field_visibility_sync
+after update of player_visible on public.character_field_definitions
+for each row execute function private.sync_character_field_visibility();
+
+revoke all on function private.sync_character_field_visibility() from public,anon,authenticated;
 
 create or replace function private.record_campaign_activity()
 returns trigger
