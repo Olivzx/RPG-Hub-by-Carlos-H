@@ -84,10 +84,8 @@ declare
     'campaign_chronicles',
     'campaign_activity',
     'map_settings',
-    'map_walls',
     'fog_regions',
     'aoe_effects',
-    'vision_sources',
     'combat_encounters',
     'combatants'
   ];
