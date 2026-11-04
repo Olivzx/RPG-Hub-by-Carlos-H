@@ -12,7 +12,11 @@
     boundMount: null,
     observer: null,
     poll: null,
-    presenceStatus: 'IDLE'
+    presenceStatus: 'IDLE',
+    presenceRetryTimer: null,
+    presenceRetryAttempt: 0,
+    actionRetryTimer: null,
+    actionRetryAttempt: 0
   };
 
   const $ = id => document.getElementById(id);
@@ -101,44 +105,110 @@
     }
   }
 
+  function retryDelay(attempt) {
+    return Math.min(20000, 1000 * Math.pow(2, Math.min(attempt, 5)));
+  }
+
+  function schedulePresenceRetry(campaign) {
+    if (mp.presenceRetryTimer) clearTimeout(mp.presenceRetryTimer);
+    const delay = retryDelay(mp.presenceRetryAttempt++);
+    mp.presenceRetryTimer = setTimeout(() => {
+      mp.presenceRetryTimer = null;
+      if (campaignId() === campaign) connectPresence().catch(e => console.warn('Presença reconnect:', e));
+    }, delay);
+  }
+
+  function scheduleActionRetry(campaign) {
+    if (mp.actionRetryTimer) clearTimeout(mp.actionRetryTimer);
+    const delay = retryDelay(mp.actionRetryAttempt++);
+    mp.actionRetryTimer = setTimeout(() => {
+      mp.actionRetryTimer = null;
+      if (campaignId() === campaign) connectActions().catch(e => console.warn('Combate reconnect:', e));
+    }, delay);
+  }
+
   async function connectPresence() {
-    const c=campaignId(); if(!c||!state?.user)return;
-    if(mp.presenceCampaign===c && mp.presence)return;
-    if(mp.presence){await sb.removeChannel(mp.presence).catch(()=>{});mp.presence=null;}
-    mp.presenceCampaign=null;
+    const c=campaignId();
+    if (!c || !state?.user || mp.presenceRetryTimer) return;
+    if (mp.presenceCampaign===c && mp.presence) return;
+
+    if (mp.presence) {
+      const previous=mp.presence;
+      mp.presence=null;
+      mp.presenceCampaign=null;
+      await sb.removeChannel(previous).catch(()=>{});
+    }
     mp.presenceStatus='CONNECTING';
     renderPresence();
+
     const ch=sb.channel(`rpg-hub-presence-v2-${c}`,{config:{private:true,presence:{key:state.user.id}}});
     ch.on('presence',{event:'sync'},renderPresence);
     ch.on('presence',{event:'join'},renderPresence);
     ch.on('presence',{event:'leave'},renderPresence);
+
+    const handleFailure = (status, error) => {
+      if (mp.presence !== ch) return;
+      console.warn('Presença realtime:',status,error||'');
+      mp.presence=null;
+      mp.presenceCampaign=null;
+      state.presenceChannel=null;
+      mp.presenceStatus=status;
+      sb.removeChannel(ch).catch(()=>{});
+      renderPresence();
+      schedulePresenceRetry(c);
+    };
+
+    mp.presence=ch;
+    mp.presenceCampaign=c;
+    state.presenceChannel=ch;
     ch.subscribe(async status=>{
+      if (mp.presence !== ch) return;
       mp.presenceStatus=status;
       if(status==='SUBSCRIBED'){
+        mp.presenceRetryAttempt=0;
+        if(mp.presenceRetryTimer){clearTimeout(mp.presenceRetryTimer);mp.presenceRetryTimer=null;}
         try {
-          await ch.track({user_id:state.user.id,display_name:state.profile?.display_name||'Aventureiro',account_type:state.profile?.account_type||'player',view:state.view||'table',joined_at:Date.now()});
+          await ch.track({
+            user_id:state.user.id,
+            display_name:state.profile?.display_name||'Aventureiro',
+            account_type:state.profile?.account_type||'player',
+            view:state.view||'table',
+            joined_at:Date.now()
+          });
         } catch(e) {
           console.warn('Presença: falha ao publicar estado',e);
         }
         renderPresence();
-      } else if(status==='CHANNEL_ERROR'||status==='TIMED_OUT'){
-        console.warn('Presença realtime:',status);
-        if(mp.presence===ch){mp.presence=null;mp.presenceCampaign=null;}
-        renderPresence();
-        setTimeout(()=>connectPresence(),1000);
+      } else if(status==='CHANNEL_ERROR'||status==='TIMED_OUT'||status==='CLOSED') {
+        handleFailure(status);
       }
     });
-    mp.presence=ch;mp.presenceCampaign=c;state.presenceChannel=ch;
   }
 
-  async function reconnectPresence(){
-    if(mp.presence){try{await sb.removeChannel(mp.presence)}catch(e){};mp.presence=null;mp.presenceCampaign=null;}
+  async function reconnectPresence() {
+    if(mp.presenceRetryTimer){clearTimeout(mp.presenceRetryTimer);mp.presenceRetryTimer=null;}
+    mp.presenceRetryAttempt=0;
+    if(mp.presence){
+      const previous=mp.presence;
+      mp.presence=null;
+      mp.presenceCampaign=null;
+      state.presenceChannel=null;
+      await sb.removeChannel(previous).catch(()=>{});
+    }
     await connectPresence();
   }
 
   async function updatePresenceView(){
-    if(!mp.presence)return;
-    try{await mp.presence.track({user_id:state.user.id,display_name:state.profile?.display_name||'Aventureiro',account_type:state.profile?.account_type||'player',view:state.view||'table',joined_at:Date.now()});}catch(e){}
+    if(!mp.presence || mp.presenceStatus!=='SUBSCRIBED')return;
+    try{
+      await mp.presence.track({
+        user_id:state.user.id,
+        display_name:state.profile?.display_name||'Aventureiro',
+        account_type:state.profile?.account_type||'player',
+        view:state.view||'table',
+        joined_at:Date.now()
+      });
+    }catch(e){console.warn('Presença: atualização falhou',e);}
   }
 
   function parseDice(notation) {
@@ -211,16 +281,41 @@
   }
 
   async function connectActions(){
-    const c=campaignId();if(!c)return;
+    const c=campaignId();
+    if(!c || mp.actionRetryTimer)return;
     if(mp.actionCampaign===c&&mp.actionChannel)return;
-    if(mp.actionChannel)await sb.removeChannel(mp.actionChannel).catch(()=>{});
+
+    if(mp.actionChannel){
+      const previous=mp.actionChannel;
+      mp.actionChannel=null;
+      mp.actionCampaign=null;
+      await sb.removeChannel(previous).catch(()=>{});
+    }
+
     const ch=sb.channel(`rpg-hub-combat-actions-${c}`,{config:{private:true}});
     ch.on('broadcast',{event:'combat_action'},async({payload})=>{
       if(payload?.action?.created_by===state.user?.id)return;
-      if(payload?.action?.encounter_id){renderActionLog();window.dispatchEvent(new CustomEvent('rpg:database-change',{detail:{table:'combat_actions',operation:'INSERT',record:payload.action}}));}
+      if(payload?.action?.encounter_id){
+        renderActionLog();
+        window.dispatchEvent(new CustomEvent('rpg:database-change',{detail:{table:'combat_actions',operation:'INSERT',record:payload.action}}));
+      }
     });
-    ch.subscribe(status=>{if(status==='CHANNEL_ERROR'||status==='TIMED_OUT')console.warn('Combate realtime:',status)});
-    mp.actionChannel=ch;mp.actionCampaign=c;
+
+    mp.actionChannel=ch;
+    mp.actionCampaign=c;
+    ch.subscribe(status=>{
+      if(mp.actionChannel!==ch)return;
+      if(status==='SUBSCRIBED'){
+        mp.actionRetryAttempt=0;
+        if(mp.actionRetryTimer){clearTimeout(mp.actionRetryTimer);mp.actionRetryTimer=null;}
+      }else if(status==='CHANNEL_ERROR'||status==='TIMED_OUT'||status==='CLOSED'){
+        console.warn('Combate realtime:',status);
+        mp.actionChannel=null;
+        mp.actionCampaign=null;
+        sb.removeChannel(ch).catch(()=>{});
+        scheduleActionRetry(c);
+      }
+    });
   }
 
   function injectActionUI(){
@@ -244,7 +339,20 @@
       if(state.view==='combat')injectActionUI();
     },2500);
     document.addEventListener('click',e=>{if(e.target.closest('[data-view]')||e.target.closest('[data-mobile-view]'))setTimeout(updatePresenceView,50)});
-    window.addEventListener('rpg:realtime-reconnect',()=>reconnectPresence().catch(e=>console.warn('Presença reconnect:',e)));
+    const reconnectAll=()=>{
+      reconnectPresence().catch(e=>console.warn('Presença reconnect:',e));
+      if(mp.actionRetryTimer){clearTimeout(mp.actionRetryTimer);mp.actionRetryTimer=null;}
+      mp.actionRetryAttempt=0;
+      if(mp.actionChannel){
+        const previous=mp.actionChannel;
+        mp.actionChannel=null;
+        mp.actionCampaign=null;
+        sb.removeChannel(previous).catch(()=>{});
+      }
+      connectActions().catch(e=>console.warn('Combate reconnect:',e));
+    };
+    window.addEventListener('rpg:realtime-reconnect',reconnectAll);
+    window.addEventListener('online',reconnectAll);
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
 })();
