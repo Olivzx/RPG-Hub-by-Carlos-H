@@ -576,9 +576,10 @@
       api.from('aoe_effects').select('*').eq('campaign_id',c).eq('floor_id',f).order('created_at')
     ]);
     if(cid()!==c||fid()!==f)return;
-    if(a.error)throw a.error;
-    if(g.error)throw g.error;
-    if(o.error)throw o.error;
+    if(a.error||g.error||o.error){
+      console.warn('RPG HUB VTT: snapshot incompleto; mantendo o último estado válido.',a.error||g.error||o.error);
+      return;
+    }
     vtt.settings=a.data||settingsDefault();vtt.fog=g.data||[];vtt.aoe=o.data||[];
     vtt.campaignId=c;vtt.floorId=f;vtt.conditionCache={key:null,rows:[],promise:null};
     renderGrid();renderFog();renderAoe();decorateTokens();refreshMapLayout();
